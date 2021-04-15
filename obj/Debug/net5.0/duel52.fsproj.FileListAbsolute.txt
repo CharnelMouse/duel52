@@ -1,0 +1,14 @@
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.exe
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.deps.json
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.runtimeconfig.json
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.runtimeconfig.dev.json
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.dll
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\duel52.pdb
+C:\Users\mark\Documents\Personal projects\duel52\bin\Debug\net5.0\FSharp.Core.dll
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.fsprojAssemblyReference.cache
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.AssemblyInfoInputs.cache
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.AssemblyInfo.fs
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.fsproj.CopyComplete
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.dll
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.pdb
+C:\Users\mark\Documents\Personal projects\duel52\obj\Debug\net5.0\duel52.genruntimeconfig.cache

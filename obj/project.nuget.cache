@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "0P2gi+rvZlWPQQYzjQqDu/q+D74e356Cg2rt+YQcFb2AxUwtCo9M5GLhchvIl7lIUBCX1vbJnX5c7FBgydpEEg==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\mark\\Documents\\Personal projects\\duel52\\duel52.fsproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\mark\\.nuget\\packages\\fsharp.core\\5.0.0\\fsharp.core.5.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}
