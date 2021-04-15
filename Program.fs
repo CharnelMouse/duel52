@@ -1,10 +1,12 @@
 open Domain
 
 let mainLoop (game: Game) =
-    game.Board |> string |> printfn "%s"
+    game |> string |> printfn "%s"
 
 [<EntryPoint>]
 let main argv =
-    let game = Game.create 2 3
-    mainLoop game
+    let maybeGame = Game.tryCreate 2 3
+    match maybeGame with
+    | Some game -> mainLoop game
+    | None -> printf "Failed to initialise game"
     0
