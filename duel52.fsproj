@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="Domain.fs" />
     <Compile Include="Implementation.fs" />
+    <Compile Include="ConsoleUI.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
