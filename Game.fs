@@ -19,6 +19,10 @@ let shuffle lst =
     let sampler = System.Random()
     shuffleRec lst [] sampler
 
+let addCardIDs shuffledDeck =
+    shuffledDeck
+    |> List.mapi (fun n p -> DrawCard (p, n))
+
 let createUnshuffledDeck () =
     [
         View
@@ -38,7 +42,6 @@ let createUnshuffledDeck () =
     ]
     |> List.filter (fun power -> power <> Vampiric)
     |> List.collect (List.replicate 4)
-    |> List.mapi (fun n p -> DrawCard (p, n))
 
 let prepareHead fn n lst =
     let h, t = List.splitAt n lst
@@ -71,6 +74,7 @@ let tryCreate nPlayers nLanes =
         let shuffledDeck =
             createUnshuffledDeck()
             |> shuffle
+            |> addCardIDs
         let board, notBaseCards =
             shuffledDeck
             |> prepareHead (prepareBoard nPlayers) (nPlayers*nLanes)

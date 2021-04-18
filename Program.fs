@@ -1,6 +1,6 @@
 open Domain
 
-let mainLoop (game: Game) =
+let mainLoop (game: GameState) =
     game |> string |> printfn "%s"
 
 [<EntryPoint>]

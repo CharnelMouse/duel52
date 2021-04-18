@@ -61,7 +61,7 @@ type Lane =
 
 type Hand = HandCard list
 
-type Game = {
+type GameState = {
     Board: Lane list
     DrawPile: DrawCard list
     CurrentPlayer: PlayerID
