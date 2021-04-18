@@ -32,16 +32,20 @@ type Face =
 
 type DrawCard = DrawCard of Power * CardID
 type HandCard = HandCard of Power * CardID
-type HiddenCard = HiddenCard of Power * CardID * Health * PlayerID
+type KnownHiddenCard = KnownHiddenCard of Power * CardID * Health * PlayerID
+type UnknownHiddenCard = HiddenCard of CardID * Health * PlayerID
 type Base = Base of Power * CardID * PlayerID
 type RevealedCard = RevealedCard of Power * CardID * Health * Readiness * PlayerID
-type DeadCard = DeadCard of Power * CardID * Face
+type DeadCard =
+| UnknownDeadCard of Power
+| KnownDeadCard of Power * Face
 type RemovedCard = RemovedCard of Power
 
 type Pair = Power * TroopID * (CardID * Health) * (CardID * Health) * Readiness * PlayerID
 
 type Troop =
-| HiddenCard of HiddenCard
+| UnknownHiddenCard of UnknownHiddenCard
+| KnownHiddenCard of KnownHiddenCard
 | RevealedCard of RevealedCard
 | Pair of Pair
 
@@ -61,14 +65,14 @@ type Lane =
 
 type Hand = HandCard list
 
-type GameState = {
-    Board: Lane list
-    DrawPile: DrawCard list
+type DisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
-    Hands: Hand list
+    RevealedBoard: Lane list
+    PlayerHand: Hand
+    OpponentHandSizes: int list
+    DrawPileSize: int
     Discard: DeadCard list
-    Removed: RemovedCard list
 }
 
 type Action =
@@ -76,3 +80,17 @@ type Action =
 | FlipCard of CardID
 | Attack of TroopID * CardID
 | CreatePair of CardID * CardID
+
+type ActionCapability = unit -> ActionResult
+and NextActionInfo = {
+    Action: Action
+    PlayerID: PlayerID
+    Capability: ActionCapability
+}
+and ActionResult =
+| InProgress of DisplayInfo * NextActionInfo list
+| Won of DisplayInfo * PlayerID
+
+type API = {
+    NewGame: unit -> ActionResult
+}

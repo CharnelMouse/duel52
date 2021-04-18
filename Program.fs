@@ -1,12 +1,15 @@
 open Domain
 
-let mainLoop (game: GameState) =
-    game |> string |> printfn "%s"
+let mainLoop (game: ActionResult) =
+    match game with
+    | InProgress (displayInfo, nextActions) ->
+        displayInfo |> string |> printfn "%s"
+    | Won (displayInfo, winnerID) ->
+        winnerID |> printfn "Player %i wins"
 
 [<EntryPoint>]
 let main argv =
-    let maybeGame = Game.tryCreate 2 3
-    match maybeGame with
-    | Some game -> mainLoop game
-    | None -> printf "Failed to initialise game"
+    let api = Implementation.api
+    let game = api.NewGame()
+    mainLoop game
     0
