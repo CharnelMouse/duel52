@@ -119,15 +119,15 @@ type DisplayInfo = {
     DiscardKnowledge: DeadCardKnowledge list
 }
 
-type Action =
-| Play of CardID * LaneID
-| FlipCard of CardID
+type ActionInfo =
+| Play of CardID * Power * LaneID
+| FlipCard of CardID * Power * LaneID * Health
 | Attack of TroopID * CardID
-| CreatePair of CardID * CardID
+| CreatePair of CardID * CardID * Power * LaneID * Health * Health
 
 type ActionCapability = unit -> ActionResult
 and NextActionInfo = {
-    Action: Action
+    Action: ActionInfo
     Capability: ActionCapability
 }
 and ActionResult =

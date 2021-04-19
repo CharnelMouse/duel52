@@ -145,9 +145,9 @@ let private createGame nPlayers nLanes =
     let nextActions =
         playerHand
         |> List.collect (fun (HandCard (power, cardID)) ->
-            [1..(List.length board + 1)]
+            [1..(List.length board)]
             |> List.map (fun laneID -> {
-                Action = Play (cardID, laneID)
+                Action = Play (cardID, power, laneID)
                 Capability = fun () -> InProgress (displayInfo, []) // dummy action
             }
             )

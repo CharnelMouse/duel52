@@ -122,11 +122,46 @@ let private displayOngoingGameInfo displayInfo =
     else
         displayDiscardKnowledge discardKnowledge
 
+let private actionString action =
+    match action with
+    | Play (cardID, power, laneID) ->
+        "play card " + string cardID
+        + " (" + string power + ")"
+        + " to lane " + string laneID
+    | FlipCard (cardID, power, laneID, health) ->
+        "flip card " + string cardID
+        + " ("
+        + string power
+        + ", "
+        + "lane " + string laneID
+        + ", "
+        + string health + " health"
+        + ")"
+    | Attack (attackerID, defenderID) ->
+        "troop " + string attackerID
+        + " attacks card " + string defenderID
+    | CreatePair (cardID1, cardID2, power, laneID, health1, health2) ->
+        "pair " + string power + " cards "
+        + string cardID1 + " (" + string health1 + " health)"
+        + " and "
+        + string cardID2 + " (" + string health2 + ")"
+        + " (lane " + string laneID + ")"
+
+let private displayNextActionsInfo nextActions =
+    printfn "Available actions\n0) Quit"
+    nextActions
+    |> List.indexed
+    |> List.iter (fun (n, {Action = action}) ->
+        printfn "%i) %s" (n + 1) (actionString action)
+    )
+
 let private mainLoop (game: ActionResult) =
     printfn "\n--------------------\n"
     match game with
     | InProgress (displayInfo, nextActions) ->
         displayOngoingGameInfo displayInfo
+        printfn ""
+        displayNextActionsInfo nextActions
     | WonGame (displayInfo, winnerID) ->
         winnerID |> printfn "Player %i wins"
 
