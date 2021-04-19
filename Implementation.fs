@@ -4,7 +4,8 @@ open Domain
 type private GameState = {
     Board: Lane list
     DrawPile: DrawCard list
-    CurrentPlayer: PlayerID
+    CurrentPlayer: PlayerID option
+    NextPlayer: PlayerID
     ActionsLeft: int
     Hands: (PlayerID * Hand) list
     Discard: DeadCard list
@@ -111,47 +112,113 @@ let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
         KnownDeadCard (KnownFaceUpDeadCard power)
 
 let private getDisplayInfo gameState =
-    let (playerHandInfo, opponentHandsInfo) =
-        gameState.Hands
-        |> List.partition (fun (n, _) -> n = gameState.CurrentPlayer)
-    let playerHand =
-        playerHandInfo
-        |> List.head
-        |> (fun (_, hand) -> hand)
-    let getBase = getBaseKnowledge gameState.CurrentPlayer
-    let getTroop = getTroopKnowledge gameState.CurrentPlayer
-    let getDeadCard = getDeadCardKnowledge gameState.CurrentPlayer
-    {
-        CurrentPlayer = gameState.CurrentPlayer
-        ActionsLeft = gameState.ActionsLeft
-        BoardKnowledge =
-            gameState.Board
-            |> List.map (function
-                | PreBaseFlipLane {Bases = bases; Troops = troops} ->
-                    {
-                        Bases = List.map getBase bases
-                        Troops = List.map getTroop troops
-                        }
-                    |> PreBaseFlipLaneKnowledge
-                | ContestedLane {Troops = troops} ->
-                    {Troops = List.map getTroop troops}
-                    |> ContestedLaneKnowledge
-                | WonLane {Controller = controller; Troops = troops} ->
-                    {
-                        Controller = controller
-                        Troops = List.map getTroop troops
-                        }
-                    |> WonLaneKnowledge
-                | TiedLane ->
-                    TiedLaneKnowledge
+    match gameState.CurrentPlayer with
+    | Some id ->
+        let (playerHandInfo, opponentHandsInfo) =
+            gameState.Hands
+            |> List.partition (fun (n, _) -> n = id)
+        let playerHand =
+            playerHandInfo
+            |> List.head
+            |> (fun (_, hand) -> hand)
+        let getBase = getBaseKnowledge id
+        let getTroop = getTroopKnowledge id
+        let getDeadCard = getDeadCardKnowledge id
+        TurnDisplayInfo {
+            CurrentPlayer = id
+            ActionsLeft = gameState.ActionsLeft
+            BoardKnowledge =
+                gameState.Board
+                |> List.map (function
+                    | PreBaseFlipLane {Bases = bases; Troops = troops} ->
+                        {
+                            Bases = List.map getBase bases
+                            Troops = List.map getTroop troops
+                            }
+                        |> PreBaseFlipLaneKnowledge
+                    | ContestedLane {Troops = troops} ->
+                        {Troops = List.map getTroop troops}
+                        |> ContestedLaneKnowledge
+                    | WonLane {Controller = controller; Troops = troops} ->
+                        {
+                            Controller = controller
+                            Troops = List.map getTroop troops
+                            }
+                        |> WonLaneKnowledge
+                    | TiedLane ->
+                        TiedLaneKnowledge
+                    )
+            PlayerHand = playerHand
+            OpponentHandSizes =
+                opponentHandsInfo
+                |> List.map (fun (n, hand) -> n, List.length hand)
+            DrawPileSize = List.length gameState.DrawPile
+            DiscardKnowledge = List.map getDeadCard gameState.Discard
+        }
+    | None ->
+        SwitchDisplayInfo gameState.NextPlayer
+
+let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
+    match displayInfo with
+    | TurnDisplayInfo turnDisplayInfo ->
+        if turnDisplayInfo.ActionsLeft = 0 then
+            EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
+        else
+            turnDisplayInfo.PlayerHand
+            |> List.collect (fun (HandCard (power, cardID)) ->
+                [1..(List.length turnDisplayInfo.BoardKnowledge)]
+                |> List.map (fun laneID ->
+                    Play (cardID, power, laneID) |> TurnActionInfo
+                    )
                 )
-        PlayerHand = playerHand
-        OpponentHandSizes =
-            opponentHandsInfo
-            |> List.map (fun (n, hand) -> n, List.length hand)
-        DrawPileSize = List.length gameState.DrawPile
-        DiscardKnowledge = List.map getDeadCard gameState.Discard
-    }
+    | SwitchDisplayInfo playerID ->
+        StartTurn playerID |> List.singleton
+
+let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
+    if gameState.ActionsLeft = 1 then
+        {gameState with
+            CurrentPlayer = None
+            ActionsLeft = gameState.ActionsLeft - 1
+            }
+    else
+        {gameState with ActionsLeft = gameState.ActionsLeft - 1}
+
+let rec private makeNextActionInfo gameState action =
+    let newGameState =
+        match action with
+        | TurnActionInfo tai ->
+            executeTurnAction tai gameState
+        | EndTurn _ ->
+            {gameState with CurrentPlayer = None}
+        | StartTurn id ->
+            let nPlayers = List.length gameState.Hands
+            if id = nPlayers then
+                {gameState with
+                    CurrentPlayer = Some id
+                    NextPlayer = 1
+                    ActionsLeft = 3
+                    }
+            else
+                {gameState with
+                    CurrentPlayer = Some id
+                    NextPlayer = id + 1
+                    ActionsLeft = 3
+                    }
+    let newDisplayInfo = getDisplayInfo newGameState
+    // Generation of next action's resulting capabilities is part of the
+    // generated capability's body, since assigning them here requires
+    // generating the entire game space, blowing the stack
+    let capability() =
+        InProgress (
+            newDisplayInfo,
+            newDisplayInfo
+            |> getPossibleActionsInfo
+            |> List.map (makeNextActionInfo newGameState)
+            )
+    {
+        Action = action
+        Capability = capability
+        }
 
 let private createGame nPlayers nLanes =
     let shuffledDeck =
@@ -170,7 +237,8 @@ let private createGame nPlayers nLanes =
     let gameState = {
         Board = board
         DrawPile = notRemoved
-        CurrentPlayer = 1
+        CurrentPlayer = Some 1
+        NextPlayer = 2
         ActionsLeft = 2
         Hands = hands
         Discard = []
@@ -178,15 +246,8 @@ let private createGame nPlayers nLanes =
     }
     let displayInfo = getDisplayInfo gameState
     let nextActions =
-        displayInfo.PlayerHand
-        |> List.collect (fun (HandCard (power, cardID)) ->
-            [1..(List.length board)]
-            |> List.map (fun laneID -> {
-                Action = Play (cardID, power, laneID)
-                Capability = fun () -> InProgress (displayInfo, []) // dummy action
-            }
-            )
-        )
+        getPossibleActionsInfo displayInfo
+        |> List.map (makeNextActionInfo gameState)
     InProgress (displayInfo, nextActions)
 
 let api = {

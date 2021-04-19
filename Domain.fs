@@ -111,7 +111,7 @@ type LaneKnowledge =
 
 type Hand = HandCard list
 
-type DisplayInfo = {
+type TurnDisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
     BoardKnowledge: LaneKnowledge list
@@ -121,11 +121,20 @@ type DisplayInfo = {
     DiscardKnowledge: DeadCardKnowledge list
 }
 
-type ActionInfo =
+type DisplayInfo =
+| TurnDisplayInfo of TurnDisplayInfo
+| SwitchDisplayInfo of PlayerID
+
+type TurnActionInfo =
 | Play of CardID * Power * LaneID
 | FlipCard of CardID * Power * LaneID * Health
 | Attack of TroopID * CardID
 | CreatePair of CardID * CardID * Power * LaneID * Health * Health
+
+type ActionInfo =
+| TurnActionInfo of TurnActionInfo
+| EndTurn of PlayerID
+| StartTurn of PlayerID
 
 type ActionCapability = unit -> ActionResult
 and NextActionInfo = {

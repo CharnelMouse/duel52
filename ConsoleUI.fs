@@ -90,46 +90,51 @@ let private displayDiscardKnowledge discardKnowledge =
         |> List.iter displayKnownDeadCard
 
 let private displayOngoingGameInfo displayInfo =
-    let {
-        CurrentPlayer = currentPlayer
-        ActionsLeft = actionsLeft
-        BoardKnowledge = boardKnowledge
-        PlayerHand = playerHand
-        OpponentHandSizes = opponentHandSizes
-        DrawPileSize = drawPileSize
-        DiscardKnowledge = discardKnowledge
-        } = displayInfo
-    displayLaneKnowledges boardKnowledge
-    printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
-    if List.isEmpty playerHand then
-        printfn "Hand is empty"
-    else
-        printfn "Hand"
-        List.iter displayHandCard playerHand
-    printfn ""
-    match opponentHandSizes with
-    | [] -> failwithf "opponents expected"
-    | [h] -> displayOpponentHandSize h
-    | _ ->
-        printfn "Opponent hand sizes"
-        List.iter displayOpponentHandSize opponentHandSizes
-    printfn ""
-    if drawPileSize = 0 then
-        printfn "Draw pile is empty"
-    else
-        printfn "Draw pile: %i" drawPileSize
-    if List.isEmpty discardKnowledge then
-        printfn "Discard pile is empty"
-    else
-        displayDiscardKnowledge discardKnowledge
+    match displayInfo with
+    | TurnDisplayInfo tdi ->
+        let {
+            CurrentPlayer = currentPlayer
+            ActionsLeft = actionsLeft
+            BoardKnowledge = boardKnowledge
+            PlayerHand = playerHand
+            OpponentHandSizes = opponentHandSizes
+            DrawPileSize = drawPileSize
+            DiscardKnowledge = discardKnowledge
+            } = tdi
+        displayLaneKnowledges boardKnowledge
+        printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
+        if List.isEmpty playerHand then
+            printfn "Hand is empty"
+        else
+            printfn "Hand"
+            List.iter displayHandCard playerHand
+        printfn ""
+        match opponentHandSizes with
+        | [] -> failwithf "opponents expected"
+        | [h] -> displayOpponentHandSize h
+        | _ ->
+            printfn "Opponent hand sizes"
+            List.iter displayOpponentHandSize opponentHandSizes
+        printfn ""
+        if drawPileSize = 0 then
+            printfn "Draw pile is empty"
+        else
+            printfn "Draw pile: %i" drawPileSize
+        if List.isEmpty discardKnowledge then
+            printfn "Discard pile is empty"
+        else
+            displayDiscardKnowledge discardKnowledge
+    | SwitchDisplayInfo playerID ->
+        Console.Clear()
+        printfn "Player %i's turn" playerID
 
 let private actionString action =
     match action with
-    | Play (cardID, power, laneID) ->
+    | TurnActionInfo (Play (cardID, power, laneID)) ->
         "play card " + string cardID
         + " (" + string power + ")"
         + " to lane " + string laneID
-    | FlipCard (cardID, power, laneID, health) ->
+    | TurnActionInfo (FlipCard (cardID, power, laneID, health)) ->
         "flip card " + string cardID
         + " ("
         + string power
@@ -138,15 +143,19 @@ let private actionString action =
         + ", "
         + string health + " health"
         + ")"
-    | Attack (attackerID, defenderID) ->
+    | TurnActionInfo (Attack (attackerID, defenderID)) ->
         "troop " + string attackerID
         + " attacks card " + string defenderID
-    | CreatePair (cardID1, cardID2, power, laneID, health1, health2) ->
+    | TurnActionInfo (CreatePair (cardID1, cardID2, power, laneID, health1, health2)) ->
         "pair " + string power + " cards "
         + string cardID1 + " (" + string health1 + " health)"
         + " and "
         + string cardID2 + " (" + string health2 + ")"
         + " (lane " + string laneID + ")"
+    | EndTurn _ ->
+        "End turn"
+    | StartTurn _ ->
+        "Start turn"
 
 let private displayNextActionsInfo nextActions =
     printfn "Available actions\n0) Quit"
