@@ -130,11 +130,11 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | TurnActionInfo (Play (cardID, power, laneID)) ->
+    | TurnActionInfo (Play (_, cardID, power, laneID)) ->
         "play card " + string cardID
         + " (" + string power + ")"
         + " to lane " + string laneID
-    | TurnActionInfo (FlipCard (cardID, power, laneID, health)) ->
+    | TurnActionInfo (Activate (_, cardID, power, laneID, health)) ->
         "flip card " + string cardID
         + " ("
         + string power
@@ -143,10 +143,10 @@ let private actionString action =
         + ", "
         + string health + " health"
         + ")"
-    | TurnActionInfo (Attack (attackerID, defenderID)) ->
+    | TurnActionInfo (Attack (_, attackerID, defenderID)) ->
         "troop " + string attackerID
         + " attacks card " + string defenderID
-    | TurnActionInfo (CreatePair (cardID1, cardID2, power, laneID, health1, health2)) ->
+    | TurnActionInfo (CreatePair (_, cardID1, cardID2, power, laneID, health1, health2)) ->
         "pair " + string power + " cards "
         + string cardID1 + " (" + string health1 + " health)"
         + " and "

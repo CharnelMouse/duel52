@@ -126,10 +126,10 @@ type DisplayInfo =
 | SwitchDisplayInfo of PlayerID
 
 type TurnActionInfo =
-| Play of CardID * Power * LaneID
-| FlipCard of CardID * Power * LaneID * Health
-| Attack of TroopID * CardID
-| CreatePair of CardID * CardID * Power * LaneID * Health * Health
+| Play of PlayerID * CardID * Power * LaneID
+| Activate of PlayerID * CardID * Power * LaneID * Health
+| Attack of PlayerID * TroopID * CardID
+| CreatePair of PlayerID * CardID * CardID * Power * LaneID * Health * Health
 
 type ActionInfo =
 | TurnActionInfo of TurnActionInfo

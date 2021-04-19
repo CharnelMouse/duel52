@@ -168,20 +168,62 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
             |> List.collect (fun (HandCard (power, cardID)) ->
                 [1..(List.length turnDisplayInfo.BoardKnowledge)]
                 |> List.map (fun laneID ->
-                    Play (cardID, power, laneID) |> TurnActionInfo
+                    Play (turnDisplayInfo.CurrentPlayer, cardID, power, laneID) |> TurnActionInfo
                     )
                 )
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
 
 let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
+    let newStateBeforeActionUpdate =
+        match action with
+        | Play (playerID, cardID, power, laneID) ->
+            let newCard = InactiveCard (power, cardID, 2, playerID, List.singleton playerID)
+            {gameState with
+                Hands =
+                    gameState.Hands
+                    |> List.map (fun (ownerID, cards) ->
+                        ownerID,
+                        cards
+                        |> List.filter (fun (HandCard (power, handCardID)) ->
+                            handCardID <> cardID
+                            )
+                        )
+                Board =
+                    gameState.Board
+                    |> List.mapi (fun n lane ->
+                        if n + 1 = laneID then
+                            match lane with
+                            | PreBaseFlipLane pbfl ->
+                                PreBaseFlipLane {
+                                    pbfl with Troops = newCard :: pbfl.Troops
+                                    }
+                            | ContestedLane cl ->
+                                ContestedLane {
+                                    cl with Troops = newCard :: cl.Troops
+                                    }
+                            | WonLane _
+                            | TiedLane _ ->
+                                lane
+                        else
+                            lane
+                        )
+                }
+        | Activate (playerID, cardID, power, laneID, health) ->
+            gameState
+        | Attack (playerID, attackingTroopID, targetCardID) ->
+            gameState
+        | CreatePair (playerID, cardID1, cardID2, power, laneID, health1, health2) ->
+            gameState
     if gameState.ActionsLeft = 1 then
-        {gameState with
+        {newStateBeforeActionUpdate with
             CurrentPlayer = None
             ActionsLeft = gameState.ActionsLeft - 1
             }
     else
-        {gameState with ActionsLeft = gameState.ActionsLeft - 1}
+        {newStateBeforeActionUpdate with
+            ActionsLeft = gameState.ActionsLeft - 1
+            }
 
 let rec private makeNextActionInfo gameState action =
     let newGameState =
