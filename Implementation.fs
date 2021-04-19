@@ -158,19 +158,65 @@ let private getDisplayInfo gameState =
     | None ->
         SwitchDisplayInfo gameState.NextPlayer
 
+let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
+    turnDisplayInfo.PlayerHand
+    |> List.collect (fun (HandCard (power, cardID)) ->
+        [1..(List.length turnDisplayInfo.BoardKnowledge)]
+        |> List.map (fun laneID ->
+            Play (turnDisplayInfo.CurrentPlayer, cardID, power, laneID) |> TurnActionInfo
+            )
+        )
+
+let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
+    let playerID = turnDisplayInfo.CurrentPlayer
+    turnDisplayInfo.BoardKnowledge
+    |> List.indexed
+    |> List.collect (fun (n, lane) ->
+        match lane with
+        | PreBaseFlipLaneKnowledge {Troops = troops}
+        | ContestedLaneKnowledge {Troops = troops} ->
+            troops
+            |> List.choose (fun troop ->
+                match troop with
+                | KnownInactiveCardKnowledge (power, cardID, health, ownerID) when
+                    ownerID = playerID ->
+                    Activate (playerID, cardID, power, n + 1, health)
+                    |> TurnActionInfo
+                    |> Some
+                | KnownInactiveCardKnowledge _
+                | UnknownInactiveCardKnowledge _
+                | ActiveCardKnowledge _
+                | PairKnowledge _ ->
+                    None
+                )
+        | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
+            troops
+            |> List.choose (fun troop ->
+                match troop with
+                | KnownInactiveCardKnowledge (power, cardID, health, ownerID) when
+                    ownerID = playerID ->
+                    Activate (playerID, cardID, power, n + 1, health)
+                    |> TurnActionInfo
+                    |> Some
+                | KnownInactiveCardKnowledge _
+                | UnknownInactiveCardKnowledge _
+                | ActiveCardKnowledge _
+                | PairKnowledge _ ->
+                    None
+                )
+        | WonLaneKnowledge _
+        | TiedLaneKnowledge ->
+            []
+        )
+
 let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
     match displayInfo with
     | TurnDisplayInfo turnDisplayInfo ->
         if turnDisplayInfo.ActionsLeft = 0 then
             EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
         else
-            turnDisplayInfo.PlayerHand
-            |> List.collect (fun (HandCard (power, cardID)) ->
-                [1..(List.length turnDisplayInfo.BoardKnowledge)]
-                |> List.map (fun laneID ->
-                    Play (turnDisplayInfo.CurrentPlayer, cardID, power, laneID) |> TurnActionInfo
-                    )
-                )
+            getPlayActionsInfo turnDisplayInfo
+            @ (getActivateActionsInfo turnDisplayInfo)
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
 
@@ -202,15 +248,82 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                                 ContestedLane {
                                     cl with Troops = newCard :: cl.Troops
                                     }
-                            | WonLane _
+                            | WonLane wl when wl.Controller = playerID ->
+                                WonLane {
+                                    wl with Troops = newCard :: wl.Troops
+                                    }
+                            | WonLane _ ->
+                                failwithf "can't play cards in a lost lane"
                             | TiedLane _ ->
-                                lane
+                                failwithf "can't play cards in a tied lane"                                
                         else
                             lane
                         )
                 }
         | Activate (playerID, cardID, power, laneID, health) ->
-            gameState
+            {gameState with
+                Board =
+                    gameState.Board
+                    |> List.mapi (fun n lane ->
+                        if n + 1 = laneID then
+                            match lane with
+                            | PreBaseFlipLane pbfl ->
+                                PreBaseFlipLane {
+                                    pbfl with
+                                        Troops =
+                                            pbfl.Troops
+                                            |> List.map (fun troop ->
+                                                match troop with
+                                                | InactiveCard (p, cid, h, pid, _) when
+                                                    p = power
+                                                    && cid = cardID
+                                                    && h = health
+                                                    && pid = playerID ->
+                                                    ActiveCard (p, cid, h, Ready, pid)
+                                                | _ ->
+                                                    troop
+                                            )
+                                }
+                            | ContestedLane cl ->
+                                ContestedLane {
+                                    cl with
+                                        Troops =
+                                            cl.Troops
+                                            |> List.map (fun troop ->
+                                                match troop with
+                                                | InactiveCard (p, cid, h, pid, _) when
+                                                    p = power
+                                                    && cid = cardID
+                                                    && h = health
+                                                    && pid = playerID ->
+                                                    ActiveCard (p, cid, h, Ready, pid)
+                                                | _ ->
+                                                    troop
+                                            )
+                                }
+                            | WonLane wl ->
+                                WonLane {
+                                    wl with
+                                        Troops =
+                                            wl.Troops
+                                            |> List.map (fun troop ->
+                                                match troop with
+                                                | InactiveCard (p, cid, h, pid, _) when
+                                                    p = power
+                                                    && cid = cardID
+                                                    && h = health
+                                                    && pid = playerID ->
+                                                    ActiveCard (p, cid, h, Ready, pid)
+                                                | _ ->
+                                                    troop
+                                            )
+                                }
+                            | TiedLane ->
+                                failwithf "Can't flip cards in a tied lane"
+                        else
+                            lane
+                    )
+                }
         | Attack (playerID, attackingTroopID, targetCardID) ->
             gameState
         | CreatePair (playerID, cardID1, cardID2, power, laneID, health1, health2) ->
