@@ -1,4 +1,5 @@
 module ConsoleUI
+open System
 open Domain
 
 let private displayBaseKnowledge baseKnowledge =
@@ -155,13 +156,40 @@ let private displayNextActionsInfo nextActions =
         printfn "%i) %s" (n + 1) (actionString action)
     )
 
-let private mainLoop (game: ActionResult) =
+type InputResult =
+| UseAction of int
+| Quit
+
+let rec private getValidInput nActions =
+    printf "Enter action number: "
+    Console.ReadLine()
+    |> Int32.TryParse
+    |> function
+    | true, n when n > nActions || n < 0 ->
+        printfn "Invalid action number"
+        getValidInput nActions
+    | true, 0 ->
+        Quit
+    | true, n ->
+        UseAction (n - 1)
+    | _ ->
+        printfn "Invalid action"
+        getValidInput nActions
+
+let rec private mainLoop (game: ActionResult) =
     printfn "\n--------------------\n"
     match game with
     | InProgress (displayInfo, nextActions) ->
         displayOngoingGameInfo displayInfo
         printfn ""
         displayNextActionsInfo nextActions
+        printfn ""
+        match getValidInput (List.length nextActions) with
+        | Quit ->
+            printfn "Goodbye."
+        | UseAction n ->
+            nextActions.[n].Capability()
+            |> mainLoop
     | WonGame (displayInfo, winnerID) ->
         winnerID |> printfn "Player %i wins"
 
