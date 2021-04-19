@@ -215,15 +215,9 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
             gameState
         | CreatePair (playerID, cardID1, cardID2, power, laneID, health1, health2) ->
             gameState
-    if gameState.ActionsLeft = 1 then
-        {newStateBeforeActionUpdate with
-            CurrentPlayer = None
-            ActionsLeft = gameState.ActionsLeft - 1
-            }
-    else
-        {newStateBeforeActionUpdate with
-            ActionsLeft = gameState.ActionsLeft - 1
-            }
+    {newStateBeforeActionUpdate with
+        ActionsLeft = gameState.ActionsLeft - 1
+        }
 
 let rec private makeNextActionInfo gameState action =
     let newGameState =
