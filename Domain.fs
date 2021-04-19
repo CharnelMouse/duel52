@@ -43,12 +43,14 @@ type BaseKnowledge =
 
 type InactiveCard = Power * CardID * Health * PlayerID * KnownBy
 type ActiveCard = Power * CardID * Health * Readiness * PlayerID
-type DeadCard = Power
 type FaceDownDeadCard = Power * KnownBy
 type FaceUpDeadCard = Power
+type DeadCard =
+| FaceDownDeadCard of FaceDownDeadCard
+| FaceUpDeadCard of FaceUpDeadCard
 type KnownDeadCard =
-| KnownFaceDownDeadCard of DeadCard
-| KnownFaceUpDeadCard of DeadCard
+| KnownFaceDownDeadCard of Power
+| KnownFaceUpDeadCard of Power
 type DeadCardKnowledge =
 | UnknownDeadCard
 | KnownDeadCard of KnownDeadCard

@@ -81,6 +81,78 @@ let private prepareRemoved lst =
     lst
     |> List.map (fun (DrawCard (power, _)) -> RemovedCard (power))
 
+let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
+    let (power, cardID, ownerID, knownBy) = baseCard
+    if List.contains playerID knownBy then
+        KnownBaseCard (power, cardID, ownerID)
+    else
+        UnknownBaseCard (cardID, ownerID)
+
+let private getTroopKnowledge (playerID: PlayerID) troop =
+    match troop with
+    | InactiveCard (power, cardID, health, ownerID, knownBy) ->
+        if List.contains playerID knownBy then
+            KnownInactiveCardKnowledge (power, cardID, health, ownerID)
+        else
+            UnknownInactiveCardKnowledge (cardID, health, ownerID)
+    | ActiveCard (power, cardID, health, readiness, ownerID) ->
+        ActiveCardKnowledge (power, cardID, health, readiness, ownerID)
+    | Pair (power, troopID, (cardID1, health1), (cardID2, health2), readiness, ownerID) ->
+        PairKnowledge (power, troopID, (cardID1, health1), (cardID2, health2), readiness, ownerID)
+
+let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
+    match deadCard with
+    | FaceDownDeadCard (power, knownBy) ->
+        if List.contains playerID knownBy then
+            KnownDeadCard (KnownFaceDownDeadCard power)
+        else
+            UnknownDeadCard
+    | FaceUpDeadCard power ->
+        KnownDeadCard (KnownFaceUpDeadCard power)
+
+let private getDisplayInfo gameState =
+    let (playerHandInfo, opponentHandsInfo) =
+        gameState.Hands
+        |> List.partition (fun (n, _) -> n = gameState.CurrentPlayer)
+    let playerHand =
+        playerHandInfo
+        |> List.head
+        |> (fun (_, hand) -> hand)
+    let getBase = getBaseKnowledge gameState.CurrentPlayer
+    let getTroop = getTroopKnowledge gameState.CurrentPlayer
+    let getDeadCard = getDeadCardKnowledge gameState.CurrentPlayer
+    {
+        CurrentPlayer = gameState.CurrentPlayer
+        ActionsLeft = gameState.ActionsLeft
+        BoardKnowledge =
+            gameState.Board
+            |> List.map (function
+                | PreBaseFlipLane {Bases = bases; Troops = troops} ->
+                    {
+                        Bases = List.map getBase bases
+                        Troops = List.map getTroop troops
+                        }
+                    |> PreBaseFlipLaneKnowledge
+                | ContestedLane {Troops = troops} ->
+                    {Troops = List.map getTroop troops}
+                    |> ContestedLaneKnowledge
+                | WonLane {Controller = controller; Troops = troops} ->
+                    {
+                        Controller = controller
+                        Troops = List.map getTroop troops
+                        }
+                    |> WonLaneKnowledge
+                | TiedLane ->
+                    TiedLaneKnowledge
+                )
+        PlayerHand = playerHand
+        OpponentHandSizes =
+            opponentHandsInfo
+            |> List.map (fun (n, hand) -> n, List.length hand)
+        DrawPileSize = List.length gameState.DrawPile
+        DiscardKnowledge = List.map getDeadCard gameState.Discard
+    }
+
 let private createGame nPlayers nLanes =
     let shuffledDeck =
         createUnshuffledDeck()
@@ -104,46 +176,9 @@ let private createGame nPlayers nLanes =
         Discard = []
         Removed = removed
     }
-    let playerHand =
-        gameState.Hands
-        |> List.find (fun (n, _) -> n = gameState.CurrentPlayer)
-        |> (fun (_, hand) -> hand)
-    let displayInfo = {
-        CurrentPlayer = 1
-        ActionsLeft = 2
-        BoardKnowledge =
-            board
-            |> List.choose (function
-                | PreBaseFlipLane {Bases = bases} ->
-                    {
-                        Bases =
-                            bases
-                            |> List.map (fun (_, cardID, playerID, _) ->
-                                UnknownBaseCard (cardID, playerID)
-                                )
-                        Troops = []
-                        }
-                    |> PreBaseFlipLaneKnowledge
-                    |> Some
-                | ContestedLane _
-                | WonLane _
-                | TiedLane ->
-                    None
-                )
-        PlayerHand = playerHand
-        OpponentHandSizes =
-            gameState.Hands
-            |> List.choose (fun (n, hand) ->
-                if n = gameState.CurrentPlayer then
-                    None
-                else
-                    Some (n, List.length hand)
-                )
-        DrawPileSize = List.length gameState.DrawPile
-        DiscardKnowledge = []
-    }
+    let displayInfo = getDisplayInfo gameState
     let nextActions =
-        playerHand
+        displayInfo.PlayerHand
         |> List.collect (fun (HandCard (power, cardID)) ->
             [1..(List.length board)]
             |> List.map (fun laneID -> {
