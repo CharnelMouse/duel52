@@ -66,12 +66,10 @@ let private displayOpponentHandSize (id, size) =
     else
         printfn "Player %i has %i cards" id size
 
-let private displayKnownDeadCard ((power, face): DeadCard) =
-    let faceText =
-        match face with
-        | Inactive -> "face-down"
-        | Active -> "face-up"
-    printfn "%A, %s" power faceText
+let private displayKnownDeadCard knownDeadCard =
+    match knownDeadCard with
+    | KnownFaceDownDeadCard power -> printfn "%A, face-down" power
+    | KnownFaceUpDeadCard power -> printfn "%A, face-up" power
 
 let private displayDiscardKnowledge discardKnowledge =
     let (unknown, known) = 
@@ -85,8 +83,8 @@ let private displayDiscardKnowledge discardKnowledge =
     if not (List.isEmpty known) then
         known
         |> List.choose (function
-            | (KnownDeadCard c) -> Some c
             | UnknownDeadCard -> None
+            | KnownDeadCard c -> Some c
             )
         |> List.iter displayKnownDeadCard
 

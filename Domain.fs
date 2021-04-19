@@ -34,17 +34,24 @@ type ActiveStatus =
 type DrawCard = DrawCard of Power * CardID
 type HandCard = HandCard of Power * CardID
 
-type Base = Power * CardID * PlayerID
+type KnownBy = int list
+
+type Base = Power * CardID * PlayerID * KnownBy
 type BaseKnowledge =
 | UnknownBaseCard of CardID * PlayerID
 | KnownBaseCard of Power * CardID * PlayerID
 
-type InactiveCard = Power * CardID * Health * PlayerID
+type InactiveCard = Power * CardID * Health * PlayerID * KnownBy
 type ActiveCard = Power * CardID * Health * Readiness * PlayerID
-type DeadCard = Power * ActiveStatus
+type DeadCard = Power
+type FaceDownDeadCard = Power * KnownBy
+type FaceUpDeadCard = Power
+type KnownDeadCard =
+| KnownFaceDownDeadCard of DeadCard
+| KnownFaceUpDeadCard of DeadCard
 type DeadCardKnowledge =
 | UnknownDeadCard
-| KnownDeadCard of DeadCard
+| KnownDeadCard of KnownDeadCard
 type RemovedCard = RemovedCard of Power
 
 type Pair = Power * TroopID * (CardID * Health) * (CardID * Health) * Readiness * PlayerID
@@ -56,7 +63,7 @@ type Troop =
 
 type TroopKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Health * PlayerID
-| KnownInactiveCardKnowledge of InactiveCard
+| KnownInactiveCardKnowledge of Power * CardID * Health * PlayerID
 | ActiveCardKnowledge of ActiveCard
 | PairKnowledge of Pair
 

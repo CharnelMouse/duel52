@@ -66,7 +66,7 @@ let private prepareBoard nLanes lst =
     lst
     |> List.splitInto nLanes
     |> List.map (fun lst ->
-        lst |> List.mapi (fun n (DrawCard (power, id)) -> Base (power, id, n + 1))
+        lst |> List.mapi (fun n (DrawCard (power, id)) -> Base (power, id, n + 1, []))
         )
     |> List.map createLane
 
@@ -118,7 +118,7 @@ let private createGame nPlayers nLanes =
                     {
                         Bases =
                             bases
-                            |> List.map (fun (_, cardID, playerID) ->
+                            |> List.map (fun (_, cardID, playerID, _) ->
                                 UnknownBaseCard (cardID, playerID)
                                 )
                         Troops = []
