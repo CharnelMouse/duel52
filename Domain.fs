@@ -19,6 +19,7 @@ type Power =
 type PlayerID = int
 type CardID = int
 type TroopID = int
+type LaneID = int
 
 type Health = int
 
@@ -26,32 +27,55 @@ type Readiness =
 | Ready
 | Exhausted
 
-type Face =
-| Up
-| Down
+type ActiveStatus =
+| Inactive // face-down
+| Active // face-up
 
 type DrawCard = DrawCard of Power * CardID
 type HandCard = HandCard of Power * CardID
-type KnownHiddenCard = KnownHiddenCard of Power * CardID * Health * PlayerID
-type UnknownHiddenCard = HiddenCard of CardID * Health * PlayerID
-type Base = Base of Power * CardID * PlayerID
-type RevealedCard = RevealedCard of Power * CardID * Health * Readiness * PlayerID
-type DeadCard =
-| UnknownDeadCard of Power
-| KnownDeadCard of Power * Face
+
+type Base = Power * CardID * PlayerID
+type BaseKnowledge =
+| UnknownBaseCard of CardID * PlayerID
+| KnownBaseCard of Power * CardID * PlayerID
+
+type InactiveCard = Power * CardID * Health * PlayerID
+type ActiveCard = Power * CardID * Health * Readiness * PlayerID
+type DeadCard = Power * ActiveStatus
+type DeadCardKnowledge =
+| UnknownDeadCard
+| KnownDeadCard of DeadCard
 type RemovedCard = RemovedCard of Power
 
 type Pair = Power * TroopID * (CardID * Health) * (CardID * Health) * Readiness * PlayerID
 
 type Troop =
-| UnknownHiddenCard of UnknownHiddenCard
-| KnownHiddenCard of KnownHiddenCard
-| RevealedCard of RevealedCard
+| InactiveCard of InactiveCard
+| ActiveCard of ActiveCard
 | Pair of Pair
 
-type ContestedLane = {
+type TroopKnowledge =
+| UnknownInactiveCardKnowledge of CardID * Health * PlayerID
+| KnownInactiveCardKnowledge of InactiveCard
+| ActiveCardKnowledge of ActiveCard
+| PairKnowledge of Pair
+
+type PreBaseFlipLane = {
     Bases: Base list
     Troops: Troop list
+}
+
+type PreBaseFlipLaneKnowledge = {
+    Bases: BaseKnowledge list
+    Troops: TroopKnowledge list
+}
+
+type ContestedLane = {
+    Troops: Troop list
+}
+
+type ContestedLaneKnowledge = {
+    Troops: TroopKnowledge list
 }
 
 type WonLane = {
@@ -59,24 +83,37 @@ type WonLane = {
     Troops: Troop list
 }
 
+type WonLaneKnowledge = {
+    Controller: PlayerID
+    Troops: TroopKnowledge list
+}
+
 type Lane =
-| Contested of ContestedLane
-| Won of WonLane
+| PreBaseFlipLane of PreBaseFlipLane
+| ContestedLane of ContestedLane
+| WonLane of WonLane
+| TiedLane
+
+type LaneKnowledge =
+| PreBaseFlipLaneKnowledge of PreBaseFlipLaneKnowledge
+| ContestedLaneKnowledge of ContestedLaneKnowledge
+| WonLaneKnowledge of WonLaneKnowledge
+| TiedLaneKnowledge
 
 type Hand = HandCard list
 
 type DisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
-    RevealedBoard: Lane list
+    BoardKnowledge: LaneKnowledge list
     PlayerHand: Hand
-    OpponentHandSizes: int list
+    OpponentHandSizes: (PlayerID * int) list
     DrawPileSize: int
-    Discard: DeadCard list
+    DiscardKnowledge: DeadCardKnowledge list
 }
 
 type Action =
-| Play of CardID
+| Play of CardID * LaneID
 | FlipCard of CardID
 | Attack of TroopID * CardID
 | CreatePair of CardID * CardID
@@ -84,12 +121,11 @@ type Action =
 type ActionCapability = unit -> ActionResult
 and NextActionInfo = {
     Action: Action
-    PlayerID: PlayerID
     Capability: ActionCapability
 }
 and ActionResult =
 | InProgress of DisplayInfo * NextActionInfo list
-| Won of DisplayInfo * PlayerID
+| WonGame of DisplayInfo * PlayerID
 
 type API = {
     NewGame: unit -> ActionResult
