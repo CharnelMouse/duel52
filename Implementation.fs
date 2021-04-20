@@ -1,6 +1,43 @@
 module Implementation
 open Domain
 
+type KnownBy = int list
+
+type DrawCard = DrawCard of Power * CardID
+type Base = Power * CardID * PlayerID * KnownBy
+type InactiveCard = Power * CardID * Health * PlayerID * KnownBy
+type FaceDownDeadCard = Power * KnownBy
+type FaceUpDeadCard = Power
+type DeadCard =
+| FaceDownDeadCard of FaceDownDeadCard
+| FaceUpDeadCard of FaceUpDeadCard
+type RemovedCard = RemovedCard of Power
+
+type Troop =
+| InactiveCard of InactiveCard
+| ActiveCard of ActiveCard
+| Pair of Pair
+
+type PreBaseFlipLane = {
+    Bases: Base list
+    Troops: Troop list
+}
+
+type ContestedLane = {
+    Troops: Troop list
+}
+
+type WonLane = {
+    Controller: PlayerID
+    Troops: Troop list
+}
+
+type Lane =
+| PreBaseFlipLane of PreBaseFlipLane
+| ContestedLane of ContestedLane
+| WonLane of WonLane
+| TiedLane
+
 type private GameState = {
     Board: Lane list
     DrawPile: DrawCard list
@@ -131,20 +168,17 @@ let private getDisplayInfo gameState =
                 gameState.Board
                 |> List.map (function
                     | PreBaseFlipLane {Bases = bases; Troops = troops} ->
-                        {
+                        PreBaseFlipLaneKnowledge {
                             Bases = List.map getBase bases
                             Troops = List.map getTroop troops
                             }
-                        |> PreBaseFlipLaneKnowledge
                     | ContestedLane {Troops = troops} ->
-                        {Troops = List.map getTroop troops}
-                        |> ContestedLaneKnowledge
+                        ContestedLaneKnowledge {Troops = List.map getTroop troops}
                     | WonLane {Controller = controller; Troops = troops} ->
-                        {
+                        WonLaneKnowledge {
                             Controller = controller
                             Troops = List.map getTroop troops
                             }
-                        |> WonLaneKnowledge
                     | TiedLane ->
                         TiedLaneKnowledge
                     )
