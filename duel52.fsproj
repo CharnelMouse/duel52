@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="CountMap.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="Implementation.fs" />
     <Compile Include="ConsoleUI.fs" />

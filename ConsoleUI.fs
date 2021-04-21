@@ -4,51 +4,48 @@ open Domain
 
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
-    | UnknownBaseCard (cardID, playerID) ->
-        printfn "Player %i: card %i, unknown power" playerID cardID 
-    | KnownBaseCard (power, cardID, playerID) ->
-        printfn "Player %i: card %i, %A" playerID cardID power
+    | UnknownBaseCard playerID ->
+        ()
+    | KnownBaseCard (power, playerID) ->
+        printfn "Player %i: %A" playerID power
 
-let private displayTroopKnowledge troopKnowledge =
+let private displayTroopKnowledge troopKnowledge n =
     match troopKnowledge with
-    | UnknownInactiveCardKnowledge (cardID, health, playerID) ->
-        printfn "Player %i, inactive card %i: unknown power, %i health" playerID cardID health
-    | KnownInactiveCardKnowledge (power, cardID, health, playerID) ->
-        printfn "Player %i, inactive card %i: %A, %i health" playerID cardID power health
-    | ActiveCardKnowledge (power, cardID, health, readiness, playerID) ->
-        printfn "Player %i, %A card %i: %A, %i health" playerID readiness cardID power health
-    | PairKnowledge (power, troopID, (cardID1, health1), (cardID2, health2), readiness, playerID) ->
-        printfn "Player %i, %A pair %i: %A, of card %i with %i health and card %i with %i health" playerID readiness troopID power cardID1 health1 cardID2 health2
+    | UnknownInactiveCardKnowledge (health, playerID, knownBy) ->
+        printfn "Player %i, (%i) Inactive, %i health" playerID n health
+    | KnownInactiveCardKnowledge (power, health, playerID, knownBy) ->
+        printfn "Player %i, (%i) Inactive %A, %i health" playerID n power health
+    | ActiveCardKnowledge (power, health, readiness, playerID) ->
+        printfn "Player %i, (%i) %A %A, %i health" playerID n readiness power health
+    | PairKnowledge (power, health1, health2, readiness, playerID) ->
+        printfn "Player %i, (%i) %A %A pair: health %i and %i" playerID n readiness power health1 health2
+
+let private displayTroopKnowledges =
+    CountMap.iter displayTroopKnowledge
 
 let private displayLaneKnowledge (n, lane) =
     match lane with
     | PreBaseFlipLaneKnowledge {Bases = baseKnowledges; Troops = troops} ->
         printfn "Lane %i" (n + 1)
-        printfn "Bases"
+        printfn "Bases present"
         List.iter displayBaseKnowledge baseKnowledges
-        if List.length troops = 0 then
+        if CountMap.isEmpty troops then
             printfn "No troops present"
         else
             printfn "Troops"
-            List.iter displayTroopKnowledge troops
+            displayTroopKnowledges troops
     | ContestedLaneKnowledge {Troops = troops} ->
         printfn "Lane %i" (n + 1)
         printfn "Troops"
-        List.iter displayTroopKnowledge troops
+        displayTroopKnowledges troops
     | WonLaneKnowledge {Controller = controller; Troops = troops} ->
         printfn "Lane %i (won by player %i)" (n + 1) controller
-        if List.isEmpty troops then
+        if CountMap.isEmpty troops then
             printfn "No troops present"
         else
             printfn "Troops"
             troops
-            |> List.sortBy (function
-                | UnknownInactiveCardKnowledge (_, _, playerID) -> playerID
-                | KnownInactiveCardKnowledge (_, _, _, playerID) -> playerID
-                | ActiveCardKnowledge (_, _, _, _, playerID) -> playerID
-                | PairKnowledge (_, _, _, _, _, playerID) -> playerID
-                )
-            |> List.iter displayTroopKnowledge
+            |> displayTroopKnowledges
     | TiedLaneKnowledge ->
         printfn "Lane %i (tied)" (n + 1)
     printfn ""
@@ -58,8 +55,8 @@ let private displayLaneKnowledges laneKnowledges =
     |> List.indexed
     |> List.iter displayLaneKnowledge
 
-let private displayHandCard (HandCard (power, cardID)) =
-    printfn "Card %i: %A" cardID power
+let private displayHandCard (HandCard power) n =
+    printfn "(%i) %A" n power
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -67,27 +64,27 @@ let private displayOpponentHandSize (id, size) =
     else
         printfn "Player %i has %i cards" id size
 
-let private displayKnownDeadCard knownDeadCard =
+let private displayKnownDeadCard knownDeadCard n =
     match knownDeadCard with
-    | KnownFaceDownDeadCard power -> printfn "%A, face-down" power
-    | KnownFaceUpDeadCard power -> printfn "%A, face-up" power
+    | KnownFaceDownDeadCard power -> printfn "(%i) %A, face-down" n power
+    | KnownFaceUpDeadCard power -> printfn "(%i) %A, face-up" n power
 
 let private displayDiscardKnowledge discardKnowledge =
     let (unknown, known) = 
         discardKnowledge
-        |> List.partition (function
+        |> CountMap.partition (function
             | UnknownDeadCard -> true
             | KnownDeadCard _ -> false
         )
-    if not (List.isEmpty unknown) then
-        printfn "%i unknown face-down cards" (List.length unknown)
-    if not (List.isEmpty known) then
+    if not (CountMap.isEmpty unknown) then
+        printfn "%i unknown face-down cards" (CountMap.count unknown)
+    if not (CountMap.isEmpty known) then
         known
-        |> List.choose (function
+        |> CountMap.choose (function
             | UnknownDeadCard -> None
             | KnownDeadCard c -> Some c
             )
-        |> List.iter displayKnownDeadCard
+        |> CountMap.iter displayKnownDeadCard
 
 let private displayOngoingGameInfo displayInfo =
     match displayInfo with
@@ -103,11 +100,11 @@ let private displayOngoingGameInfo displayInfo =
             } = tdi
         displayLaneKnowledges boardKnowledge
         printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
-        if List.isEmpty playerHand then
+        if Map.isEmpty playerHand then
             printfn "Hand is empty"
         else
             printfn "Hand"
-            List.iter displayHandCard playerHand
+            Map.iter displayHandCard playerHand
         printfn ""
         match opponentHandSizes with
         | [] -> failwithf "opponents expected"
@@ -120,7 +117,7 @@ let private displayOngoingGameInfo displayInfo =
             printfn "Draw pile is empty"
         else
             printfn "Draw pile: %i" drawPileSize
-        if List.isEmpty discardKnowledge then
+        if Map.isEmpty discardKnowledge then
             printfn "Discard pile is empty"
         else
             displayDiscardKnowledge discardKnowledge
@@ -130,28 +127,21 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | TurnActionInfo (Play (_, cardID, power, laneID)) ->
-        "play card " + string cardID
-        + " (" + string power + ")"
+    | TurnActionInfo (Play (_, power, laneID)) ->
+        "play " + string power
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, cardID, power, laneID, health)) ->
-        "flip card " + string cardID
-        + " ("
-        + string power
-        + ", "
-        + "lane " + string laneID
-        + ", "
-        + string health + " health"
-        + ")"
-    | TurnActionInfo (Attack (_, attackerID, defenderID)) ->
+    | TurnActionInfo (Activate (_, laneID, (power, health, knownBy))) ->
+        "flip " + string power
+        + " health " + string health
+        + " in lane " + string laneID
+    | TurnActionInfo (Attack (_, laneID, attackerID, (maybePower, health))) ->
         "troop " + string attackerID
-        + " attacks card " + string defenderID
-    | TurnActionInfo (CreatePair (_, cardID1, cardID2, power, laneID, health1, health2)) ->
-        "pair " + string power + " cards "
-        + string cardID1 + " (" + string health1 + " health)"
-        + " and "
-        + string cardID2 + " (" + string health2 + ")"
-        + " (lane " + string laneID + ")"
+        + " attacks card " + string maybePower
+        + " with " + string health + " health"
+    | TurnActionInfo (CreatePair (_, laneID, power, health1, health2)) ->
+        "make a " + string power + " pair"
+        + " in lane " + string laneID
+        + ", health " + string health1 + " and " + string health2
     | EndTurn _ ->
         "End turn"
     | StartTurn _ ->

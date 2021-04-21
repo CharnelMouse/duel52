@@ -16,15 +16,20 @@ type Power =
 | Empower
 | Action
 
-type PlayerID = int
-type CardID = int
-type TroopID = int
-type LaneID = int
+[<Measure>] type health
+[<Measure>] type PID
+[<Measure>] type TID
+[<Measure>] type LID
 
-type Health = int
+type PlayerID = int<PID>
+type TroopID = int<TID>
+type LaneID = int<LID>
+type Health = int<health>
+type KnownBy = int<PID> list
 
-type HandCard = HandCard of Power * CardID
-type Hand = HandCard list
+type HandCard = HandCard of Power
+
+type Hand = CountMap.CountMap<HandCard>
 
 type Readiness =
 | Ready
@@ -35,37 +40,39 @@ type ActiveStatus =
 | Active // face-up
 
 type BaseKnowledge =
-| UnknownBaseCard of CardID * PlayerID
-| KnownBaseCard of Power * CardID * PlayerID
+| UnknownBaseCard of PlayerID
+| KnownBaseCard of Power * PlayerID
 
-type ActiveCard = Power * CardID * Health * Readiness * PlayerID
+type ActiveCardKnowledge = Power * Health * Readiness * PlayerID
+
 type KnownDeadCard =
 | KnownFaceDownDeadCard of Power
 | KnownFaceUpDeadCard of Power
+
 type DeadCardKnowledge =
 | UnknownDeadCard
 | KnownDeadCard of KnownDeadCard
 
-type Pair = Power * TroopID * (CardID * Health) * (CardID * Health) * Readiness * PlayerID
+type Pair = Power * Health * Health * Readiness * PlayerID
 
 type TroopKnowledge =
-| UnknownInactiveCardKnowledge of CardID * Health * PlayerID
-| KnownInactiveCardKnowledge of Power * CardID * Health * PlayerID
-| ActiveCardKnowledge of ActiveCard
+| UnknownInactiveCardKnowledge of Health * PlayerID * KnownBy
+| KnownInactiveCardKnowledge of Power * Health * PlayerID * KnownBy
+| ActiveCardKnowledge of ActiveCardKnowledge
 | PairKnowledge of Pair
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list
-    Troops: TroopKnowledge list
+    Troops: CountMap.CountMap<TroopKnowledge>
 }
 
 type ContestedLaneKnowledge = {
-    Troops: TroopKnowledge list
+    Troops: CountMap.CountMap<TroopKnowledge>
 }
 
 type WonLaneKnowledge = {
     Controller: PlayerID
-    Troops: TroopKnowledge list
+    Troops: CountMap.CountMap<TroopKnowledge>
 }
 
 type LaneKnowledge =
@@ -81,7 +88,7 @@ type TurnDisplayInfo = {
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
     DrawPileSize: int
-    DiscardKnowledge: DeadCardKnowledge list
+    DiscardKnowledge: CountMap.CountMap<DeadCardKnowledge>
 }
 
 type DisplayInfo =
@@ -89,10 +96,10 @@ type DisplayInfo =
 | SwitchDisplayInfo of PlayerID
 
 type TurnActionInfo =
-| Play of PlayerID * CardID * Power * LaneID
-| Activate of PlayerID * CardID * Power * LaneID * Health
-| Attack of PlayerID * TroopID * CardID
-| CreatePair of PlayerID * CardID * CardID * Power * LaneID * Health * Health
+| Play of PlayerID * Power * LaneID
+| Activate of PlayerID * LaneID * (Power * Health * KnownBy)
+| Attack of PlayerID * LaneID * TroopID * (Power option * Health)
+| CreatePair of PlayerID * LaneID * Power * Health * Health
 
 type ActionInfo =
 | TurnActionInfo of TurnActionInfo
