@@ -274,19 +274,65 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
 
+let private incInLane card playerID lane =
+    let moveTo = CountMap.inc card
+    match lane with
+    | PreBaseFlipLane pbfl ->
+        PreBaseFlipLane {
+            pbfl with
+                Troops = moveTo pbfl.Troops
+            }
+    | ContestedLane cl ->
+        ContestedLane {
+            cl with
+                Troops = moveTo cl.Troops
+            }
+    | WonLane wl when wl.Controller = playerID ->
+        WonLane {
+            wl with
+                Troops = moveTo wl.Troops
+            }
+    | WonLane _ ->
+        failwithf "can't play cards in a lost lane"
+    | TiedLane _ ->
+        failwithf "can't play cards in a tied lane"                                
+
+let private changeInLane before after lane =
+    let f = (CountMap.dec before) >> (CountMap.inc after)
+    match lane with
+    | PreBaseFlipLane pbfl ->
+        PreBaseFlipLane {
+            pbfl with
+                Troops = f pbfl.Troops
+        }
+    | ContestedLane cl ->
+        ContestedLane {
+            cl with
+                Troops = f cl.Troops
+        }
+    | WonLane wl ->
+        WonLane {
+            wl with
+                Troops = f wl.Troops
+        }
+    | TiedLane ->
+        failwithf "Can't flip cards in a tied lane"
+
 let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
     let newStateBeforeActionUpdate =
         match action with
         | Play (playerID, power, laneID) ->
+            let oldCard = HandCard power
             let newCard = InactiveCard (power, 2<health>, playerID, List.singleton playerID)
+            let moveFrom = CountMap.dec oldCard
+            let moveTo = CountMap.inc newCard
             {gameState with
                 Hands =
                     gameState.Hands
                     |> List.map (fun (ownerID, cards) ->
                         ownerID,
                         if ownerID = playerID then
-                            cards
-                            |> CountMap.dec (HandCard power)
+                            moveFrom cards
                         else
                             cards
                         )
@@ -294,32 +340,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                     gameState.Board
                     |> List.mapi (fun n lane ->
                         if (n + 1)*1<LID> = laneID then
-                            match lane with
-                            | PreBaseFlipLane pbfl ->
-                                PreBaseFlipLane {
-                                    pbfl with
-                                        Troops =
-                                            pbfl.Troops
-                                            |> CountMap.inc newCard
-                                    }
-                            | ContestedLane cl ->
-                                ContestedLane {
-                                    cl with
-                                        Troops =
-                                            cl.Troops
-                                            |> CountMap.inc newCard
-                                    }
-                            | WonLane wl when wl.Controller = playerID ->
-                                WonLane {
-                                    wl with
-                                        Troops =
-                                            wl.Troops
-                                            |> CountMap.inc newCard
-                                    }
-                            | WonLane _ ->
-                                failwithf "can't play cards in a lost lane"
-                            | TiedLane _ ->
-                                failwithf "can't play cards in a tied lane"                                
+                            incInLane newCard playerID lane
                         else
                             lane
                         )
@@ -327,38 +348,13 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
         | Activate (playerID, laneID, (power, health, knownBy)) ->
             let oldCard = InactiveCard (power, health, playerID, knownBy)
             let newCard = ActiveCard (power, health, Ready, playerID)
+            let activateIn = changeInLane oldCard newCard
             {gameState with
                 Board =
                     gameState.Board
                     |> List.mapi (fun n lane ->
                         if (n + 1)*1<LID> = laneID then
-                            match lane with
-                            | PreBaseFlipLane pbfl ->
-                                PreBaseFlipLane {
-                                    pbfl with
-                                        Troops =
-                                            pbfl.Troops
-                                            |> CountMap.dec oldCard
-                                            |> CountMap.inc newCard
-                                }
-                            | ContestedLane cl ->
-                                ContestedLane {
-                                    cl with
-                                        Troops =
-                                            cl.Troops
-                                            |> CountMap.dec oldCard
-                                            |> CountMap.inc newCard
-                                }
-                            | WonLane wl ->
-                                WonLane {
-                                    wl with
-                                        Troops =
-                                            wl.Troops
-                                            |> CountMap.dec oldCard
-                                            |> CountMap.inc newCard
-                                }
-                            | TiedLane ->
-                                failwithf "Can't flip cards in a tied lane"
+                            activateIn lane
                         else
                             lane
                     )
