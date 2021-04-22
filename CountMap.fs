@@ -59,3 +59,7 @@ let keyList (cm: CountMap<'T>) =
     cm
     |> Map.toList
     |> List.map (fun (t, n) -> t)
+
+let filter predicate (cm: CountMap<'T>) =
+    cm
+    |> Map.filter predicate

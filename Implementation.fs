@@ -12,6 +12,8 @@ type DeadCard =
 | FaceUpDeadCard of FaceUpDeadCard
 type RemovedCard = RemovedCard of Power
 
+type Pair = Power * (Health * Readiness) * (Health * Readiness) * PlayerID
+
 type Troop =
 | InactiveCard of InactiveCard
 | ActiveCard of ActiveCard
@@ -144,7 +146,12 @@ let private getTroopKnowledge (playerID: PlayerID) troop =
             UnknownInactiveCardKnowledge (health, ownerID, List.filter (fun id -> id <> playerID) knownBy)
     | ActiveCard (power, health, readiness, ownerID) ->
         ActiveCardKnowledge (power, health, readiness, ownerID)
-    | Pair (power, health1, health2, readiness, ownerID) ->
+    | Pair (power, (health1, readiness1), (health2, readiness2), ownerID) ->
+        let readiness =
+            if readiness1 = Exhausted || readiness2 = Exhausted then
+                Exhausted
+            else
+                Ready
         PairKnowledge (power, health1, health2, readiness, ownerID)
 
 let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
@@ -263,6 +270,66 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
             []
         )
 
+let private getPairActionsInfoFromTroops playerID laneID troops =
+    let potentialSingles =
+        troops
+        |> CountMap.choose (fun troop ->
+            match troop with
+            | ActiveCardKnowledge (power, health, readiness, ownerID) ->
+                if ownerID = playerID then
+                    Some (power, health, readiness)
+                else
+                    None
+            | UnknownInactiveCardKnowledge _
+            | KnownInactiveCardKnowledge _
+            | PairKnowledge _ ->
+                None
+            )
+    let sameKeyPair =
+        potentialSingles
+        |> CountMap.filter (fun _ n -> n >= 2)
+        |> CountMap.keyList
+        |> List.map (fun troop ->
+            match troop with
+            | (power, health, readiness) ->
+                (playerID, laneID, power, (health, readiness), (health, readiness))
+                |> CreatePair
+                |> TurnActionInfo
+            )
+    let rec distPairs lst =
+        match lst with
+        | [] -> []
+        | [_] -> []
+        | h::t -> List.allPairs [h] t @ distPairs t
+    let differentKeyPair =
+        potentialSingles
+        |> CountMap.keyList
+        |> distPairs
+        |> List.filter (fun ((power1, _, _), (power2, _, _)) -> power1 = power2)
+        |> List.map (fun ((power, health1, readiness1), (_, health2, readiness2)) ->
+            (playerID, laneID, power, (health1, readiness1), (health2, readiness2))
+            |> CreatePair
+            |> TurnActionInfo
+            )
+    sameKeyPair @ differentKeyPair
+
+let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
+    let playerID = turnDisplayInfo.CurrentPlayer
+    turnDisplayInfo.BoardKnowledge
+    |> List.indexed
+    |> List.collect (fun (n, lane) ->
+        let laneID = (n + 1)*1<LID>
+        match lane with
+        | PreBaseFlipLaneKnowledge {Troops = troops}
+        | ContestedLaneKnowledge {Troops = troops} ->
+            getPairActionsInfoFromTroops playerID laneID troops
+        | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
+            getPairActionsInfoFromTroops playerID laneID troops
+        | WonLaneKnowledge _
+        | TiedLaneKnowledge ->
+            []
+        )
+
 let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
     match displayInfo with
     | TurnDisplayInfo turnDisplayInfo ->
@@ -271,6 +338,7 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
         else
             getPlayActionsInfo turnDisplayInfo
             @ (getActivateActionsInfo turnDisplayInfo)
+            @ (getPairActionsInfo turnDisplayInfo)
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
 
@@ -297,24 +365,38 @@ let private incInLane card playerID lane =
     | TiedLane _ ->
         failwithf "can't play cards in a tied lane"                                
 
-let private changeInLane before after lane =
-    let f = (CountMap.dec before) >> (CountMap.inc after)
+let private decInLane card playerID lane =
+    let dec = CountMap.dec card
     match lane with
     | PreBaseFlipLane pbfl ->
         PreBaseFlipLane {
             pbfl with
-                Troops = f pbfl.Troops
-        }
+                Troops = dec pbfl.Troops
+            }
     | ContestedLane cl ->
         ContestedLane {
             cl with
-                Troops = f cl.Troops
-        }
-    | WonLane wl ->
+                Troops = dec cl.Troops
+            }
+    | WonLane wl when wl.Controller = playerID ->
         WonLane {
             wl with
-                Troops = f wl.Troops
-        }
+                Troops = dec wl.Troops
+            }
+    | WonLane _ ->
+        failwithf "can't play cards in a lost lane"
+    | TiedLane _ ->
+        failwithf "can't play cards in a tied lane"                                
+
+let private changeInLane before after lane =
+    let f = (CountMap.dec before) >> (CountMap.inc after)
+    match lane with
+    | PreBaseFlipLane pbfl ->
+        PreBaseFlipLane {pbfl with Troops = f pbfl.Troops}
+    | ContestedLane cl ->
+        ContestedLane {cl with Troops = f cl.Troops}
+    | WonLane wl ->
+        WonLane {wl with Troops = f wl.Troops}
     | TiedLane ->
         failwithf "Can't flip cards in a tied lane"
 
@@ -361,8 +443,23 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                 }
         | Attack (playerID, laneID, attackingTroopID, (maybePower, health)) ->
             gameState
-        | CreatePair (playerID, laneID, power, health1, health2) ->
-            gameState
+        | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
+            let single1 = ActiveCard (power, health1, readiness1, playerID)
+            let single2 = ActiveCard (power, health2, readiness2, playerID)
+            let pair = Pair (power, (health1, readiness1), (health2, readiness2), playerID)
+            {gameState with
+                Board =
+                    gameState.Board
+                    |> List.mapi (fun n lane ->
+                        if (n + 1)*1<LID> = laneID then
+                            lane
+                            |> decInLane single1 playerID
+                            |> decInLane single2 playerID
+                            |> incInLane pair playerID
+                        else
+                            lane
+                        )
+                }
     {newStateBeforeActionUpdate with
         ActionsLeft = gameState.ActionsLeft - 1
         }
