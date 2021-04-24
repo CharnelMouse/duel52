@@ -41,9 +41,7 @@ type ActiveStatus =
 
 type BaseKnowledge =
 | UnknownBaseCard of PlayerID
-| KnownBaseCard of Power * PlayerID
-
-type ActiveCardKnowledge = Power * Health * Readiness * PlayerID
+| KnownBaseCard of PlayerID * Power
 
 type KnownDeadCard =
 | KnownFaceDownDeadCard of Power
@@ -53,16 +51,11 @@ type DeadCardKnowledge =
 | UnknownDeadCard
 | KnownDeadCard of KnownDeadCard
 
-type PairKnowledge = Power * Health * Health * Readiness * PlayerID
-
-// Here KnownBy currently excludes the owner's ID.
-// However, when bases become inactive cards, the owner can't freely look at them,
-// so I can't exclude this.
 type TroopKnowledge =
-| UnknownInactiveCardKnowledge of Health * PlayerID * KnownBy
-| KnownInactiveCardKnowledge of Power * Health * PlayerID * KnownBy
-| ActiveCardKnowledge of ActiveCardKnowledge
-| PairKnowledge of PairKnowledge
+| UnknownInactiveCardKnowledge of PlayerID * Health * KnownBy
+| KnownInactiveCardKnowledge of PlayerID * Power * Health * KnownBy
+| ActiveCardKnowledge of PlayerID * Power * Health * Readiness
+| PairKnowledge of PlayerID * Power * Health * Health * Readiness
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list

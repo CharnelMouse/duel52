@@ -133,7 +133,7 @@ let private prepareDrawPile lst =
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
     let (power, ownerID, knownBy) = baseCard
     if List.contains playerID knownBy then
-        KnownBaseCard (power, ownerID)
+        KnownBaseCard (ownerID, power)
     else
         UnknownBaseCard ownerID
 
@@ -141,18 +141,18 @@ let private getTroopKnowledge (playerID: PlayerID) troop =
     match troop with
     | InactiveCard (power, health, ownerID, knownBy) ->
         if List.contains playerID knownBy then
-            KnownInactiveCardKnowledge (power, health, ownerID, List.filter (fun id -> id <> playerID) knownBy)
+            KnownInactiveCardKnowledge (ownerID, power, health, List.filter (fun id -> id <> playerID) knownBy)
         else
-            UnknownInactiveCardKnowledge (health, ownerID, List.filter (fun id -> id <> playerID) knownBy)
+            UnknownInactiveCardKnowledge (ownerID, health, List.filter (fun id -> id <> playerID) knownBy)
     | ActiveCard (power, health, readiness, ownerID) ->
-        ActiveCardKnowledge (power, health, readiness, ownerID)
+        ActiveCardKnowledge (ownerID, power, health, readiness)
     | Pair (power, (health1, readiness1), (health2, readiness2), ownerID) ->
         let readiness =
             if readiness1 = Exhausted || readiness2 = Exhausted then
                 Exhausted
             else
                 Ready
-        PairKnowledge (power, health1, health2, readiness, ownerID)
+        PairKnowledge (ownerID, power, health1, health2, readiness)
 
 let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
     match deadCard with
@@ -235,7 +235,7 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
             troops
             |> CountMap.choose (fun troop ->
                 match troop with
-                | KnownInactiveCardKnowledge (power, health, ownerID, knownBy) when
+                | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
                     ownerID = playerID ->
                     let fullKnownBy = List.sortBy id (ownerID :: knownBy)
                     Activate (playerID, (n + 1)*1<LID>, (power, health, fullKnownBy))
@@ -252,7 +252,7 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
             troops
             |> CountMap.choose (fun troop ->
                 match troop with
-                | KnownInactiveCardKnowledge (power, health, ownerID, knownBy) when
+                | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
                     ownerID = playerID ->
                     let fullKnownBy = List.sortBy id (ownerID :: knownBy)
                     Activate (playerID, (n + 1)*1<LID>, (power, health, fullKnownBy))
@@ -275,7 +275,7 @@ let private getPairActionsInfoFromTroops playerID laneID troops =
         troops
         |> CountMap.choose (fun troop ->
             match troop with
-            | ActiveCardKnowledge (power, health, readiness, ownerID) ->
+            | ActiveCardKnowledge (ownerID, power, health, readiness) ->
                 if ownerID = playerID then
                     Some (power, health, readiness)
                 else

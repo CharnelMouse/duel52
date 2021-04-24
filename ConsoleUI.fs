@@ -6,18 +6,18 @@ let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard playerID ->
         ()
-    | KnownBaseCard (power, playerID) ->
+    | KnownBaseCard (playerID, power) ->
         printfn "Player %i: %A" playerID power
 
 let private displayTroopKnowledge troopKnowledge n =
     match troopKnowledge with
-    | UnknownInactiveCardKnowledge (health, playerID, knownBy) ->
+    | UnknownInactiveCardKnowledge (playerID, health, knownBy) ->
         printfn "Player %i, (%i) Inactive, %i health" playerID n health
-    | KnownInactiveCardKnowledge (power, health, playerID, knownBy) ->
+    | KnownInactiveCardKnowledge (playerID, power, health, knownBy) ->
         printfn "Player %i, (%i) Inactive %A, %i health" playerID n power health
-    | ActiveCardKnowledge (power, health, readiness, playerID) ->
+    | ActiveCardKnowledge (playerID, power, health, readiness) ->
         printfn "Player %i, (%i) %A %A, %i health" playerID n readiness power health
-    | PairKnowledge (power, health1, health2, readiness, playerID) ->
+    | PairKnowledge (playerID, power, health1, health2, readiness) ->
         printfn "Player %i, (%i) %A %A pair: health %i and %i" playerID n readiness power health1 health2
 
 let private displayTroopKnowledges =
