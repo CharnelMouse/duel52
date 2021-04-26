@@ -307,7 +307,12 @@ let private getPairActionsInfoFromTroops playerID laneID troops =
         |> distPairs
         |> List.filter (fun ((power1, _, _), (power2, _, _)) -> power1 = power2)
         |> List.map (fun ((power, health1, readiness1), (_, health2, readiness2)) ->
-            (playerID, laneID, power, (health1, readiness1), (health2, readiness2))
+            let vars =
+                if health1 >= health2 then
+                    (playerID, laneID, power, (health1, readiness1), (health2, readiness2))
+                else
+                    (playerID, laneID, power, (health2, readiness2), (health1, readiness1))
+            vars
             |> CreatePair
             |> TurnActionInfo
             )
