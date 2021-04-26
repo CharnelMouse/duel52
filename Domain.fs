@@ -91,10 +91,19 @@ type DisplayInfo =
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
 
+type AttackerInfo =
+| SingleAttacker of Power * Health
+| DoubleAttacker of Power * Health * Health
+
+type AttackTargetInfo =
+| InactiveTarget of PlayerID * Health
+| ActiveSingleTarget of PlayerID * Power * Health
+| ActivePairMemberTarget of PlayerID * Power * Health * Health
+
 type TurnActionInfo =
 | Play of PlayerID * Power * LaneID
 | Activate of PlayerID * LaneID * (Power * Health * KnownBy)
-| Attack of PlayerID * LaneID * TroopID * (Power option * Health)
+| Attack of PlayerID * LaneID * AttackerInfo * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
 
 type ActionInfo =

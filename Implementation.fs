@@ -441,7 +441,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                             lane
                     )
                 }
-        | Attack (playerID, laneID, attackingTroopID, (maybePower, health)) ->
+        | Attack (playerID, laneID, attackerInfo, targetInfo) ->
             gameState
         | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
             let single1 = ActiveCard (power, health1, readiness1, playerID)

@@ -134,10 +134,10 @@ let private actionString action =
         "flip " + string power
         + " health " + string health
         + " in lane " + string laneID
-    | TurnActionInfo (Attack (_, laneID, attackerID, (maybePower, health))) ->
-        "troop " + string attackerID
-        + " attacks card " + string maybePower
-        + " with " + string health + " health"
+    | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
+        "troop " + string attackerInfo
+        + " attacks card " + string targetInfo
+        + " in lane " + string laneID
     | TurnActionInfo (CreatePair (_, laneID, power, health1, health2)) ->
         "make a " + string power + " pair"
         + " in lane " + string laneID
