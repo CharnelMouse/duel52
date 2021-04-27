@@ -96,7 +96,8 @@ type AttackerInfo =
 | DoubleAttacker of Power * Health * Health
 
 type AttackTargetInfo =
-| InactiveTarget of PlayerID * Health
+| UnknownInactiveTarget of PlayerID * Health
+| KnownInactiveTarget of PlayerID * Power * Health
 | ActiveSingleTarget of PlayerID * Power * Health
 | ActivePairMemberTarget of PlayerID * Power * Health * Health
 
