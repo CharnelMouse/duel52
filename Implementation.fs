@@ -345,6 +345,7 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         else
                             None
                     )
+                |> List.distinct
             let possibleTargets =
                 troops
                 |> CountMap.keyList

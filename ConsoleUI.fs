@@ -120,6 +120,7 @@ let private displayOngoingGameInfo displayInfo =
         if Map.isEmpty discardKnowledge then
             printfn "Discard pile is empty"
         else
+            printfn "\nDiscard pile:"
             displayDiscardKnowledge discardKnowledge
     | SwitchDisplayInfo playerID ->
         Console.Clear()
@@ -128,20 +129,46 @@ let private displayOngoingGameInfo displayInfo =
 let private actionString action =
     match action with
     | TurnActionInfo (Play (_, power, laneID)) ->
-        "play " + string power
+        "Play " + string power
         + " to lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, (power, health, knownBy))) ->
-        "flip " + string power
-        + " health " + string health
+        "Activate " + string power
+        +  " (" + string health + " HP)"
         + " in lane " + string laneID
     | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
-        "troop " + string attackerInfo
-        + " attacks card " + string targetInfo
+        let attackerText =
+            match attackerInfo with
+            | SingleAttacker (power, health) ->
+                string power + " (" + string health + " HP)"
+            | DoubleAttacker (power, health1, health2) ->
+                string power + " (" + string health1 + ", " + string health2 + " HP)"
+        let targetText =
+            match targetInfo with
+            | UnknownInactiveTarget (pid, h) ->
+                "player " + string pid + "'s"
+                + " unknown inactive (" + string h + " HP)"
+                + " in lane " + string laneID
+            | KnownInactiveTarget (pid, p, h) ->
+                "player " + string pid + "'s"
+                + " inactive " + string p
+                + " (" + string h + " HP)"
+                + " in lane " + string laneID
+            | ActiveSingleTarget (pid, p, h) ->
+                "player " + string pid + "'s"
+                + " active " + string p
+                + " (" + string h + " HP)"
+                + " in lane " + string laneID
+            | ActivePairMemberTarget (pid, p, h1, h2) ->
+                "player " + string pid + "'s"
+                + " " + string p + " pair member"
+                + " (" + string h1 + " HP, partner " + string h2 + ")"
+                + " in lane " + string laneID
+        attackerText + " attacks " + targetText
+    | TurnActionInfo (CreatePair (_, laneID, power, (health1, readiness1), (health2, readiness2))) ->
+        "Create " + string power + " pair"
         + " in lane " + string laneID
-    | TurnActionInfo (CreatePair (_, laneID, power, health1, health2)) ->
-        "make a " + string power + " pair"
-        + " in lane " + string laneID
-        + ", health " + string health1 + " and " + string health2
+        + " from " + string readiness1 + " " + string health1 + " HP"
+        + " and " + string readiness2 + " " + string health2 + " HP"
     | EndTurn _ ->
         "End turn"
     | StartTurn _ ->
