@@ -19,7 +19,7 @@ type Troop =
 | ActiveCard of ActiveCard
 | Pair of Pair
 
-type DrawPile = CountMap.CountMap<DrawCard>
+type DrawPile = DrawCard list
 
 type PreBaseFlipLane = {
     Bases: Base list
@@ -128,7 +128,6 @@ let private prepareRemoved lst =
 let private prepareDrawPile lst =
     lst
     |> List.map (fun power -> DrawCard power)
-    |> CountMap.ofList
 
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
     let (power, ownerID, knownBy) = baseCard
@@ -206,7 +205,7 @@ let private getDisplayInfo gameState =
             OpponentHandSizes =
                 opponentHandsInfo
                 |> List.map (fun (n, hand) -> n, CountMap.count hand)
-            DrawPileSize = CountMap.count gameState.DrawPile
+            DrawPileSize = List.length gameState.DrawPile
             DiscardKnowledge = CountMap.map getDeadCard gameState.Discard
         }
     | None ->
