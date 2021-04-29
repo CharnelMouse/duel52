@@ -23,17 +23,20 @@ let private displayTroopKnowledge troopKnowledge n =
 let private displayTroopKnowledges =
     CountMap.iter displayTroopKnowledge
 
-let private displayLaneKnowledge (n, lane) =
+let private displayPreLaneKnowledge (n, (lane: PreBaseFlipLaneKnowledge)) =
+    let {Bases = baseKnowledges; Troops = troops} = lane
+    printfn "Lane %i" (n + 1)
+    printfn "Bases present"
+    List.iter displayBaseKnowledge baseKnowledges
+    if CountMap.isEmpty troops then
+        printfn "No troops present"
+    else
+        printfn "Troops"
+        displayTroopKnowledges troops
+    printfn ""
+
+let private displayPostLaneKnowledge (n, (lane: PostBaseFlipLaneKnowledge)) =
     match lane with
-    | PreBaseFlipLaneKnowledge {Bases = baseKnowledges; Troops = troops} ->
-        printfn "Lane %i" (n + 1)
-        printfn "Bases present"
-        List.iter displayBaseKnowledge baseKnowledges
-        if CountMap.isEmpty troops then
-            printfn "No troops present"
-        else
-            printfn "Troops"
-            displayTroopKnowledges troops
     | ContestedLaneKnowledge {Troops = troops} ->
         printfn "Lane %i" (n + 1)
         printfn "Troops"
@@ -50,10 +53,15 @@ let private displayLaneKnowledge (n, lane) =
         printfn "Lane %i (tied)" (n + 1)
     printfn ""
 
-let private displayLaneKnowledges laneKnowledges =
+let private displayPreLaneKnowledges laneKnowledges =
     laneKnowledges
     |> List.indexed
-    |> List.iter displayLaneKnowledge
+    |> List.iter displayPreLaneKnowledge
+
+let private displayPostLaneKnowledges laneKnowledges =
+    laneKnowledges
+    |> List.indexed
+    |> List.iter displayPostLaneKnowledge
 
 let private displayHandCard (HandCard power) n =
     printfn "(%i) %A" n power
@@ -95,10 +103,12 @@ let private displayOngoingGameInfo displayInfo =
             BoardKnowledge = boardKnowledge
             PlayerHand = playerHand
             OpponentHandSizes = opponentHandSizes
-            DrawPileSize = drawPileSize
-            DiscardKnowledge = discardKnowledge
             } = tdi
-        displayLaneKnowledges boardKnowledge
+        match boardKnowledge with
+        | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPreLaneKnowledges lanes
+        | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPostLaneKnowledges lanes
         printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
         if Map.isEmpty playerHand then
             printfn "Hand is empty"
@@ -113,15 +123,21 @@ let private displayOngoingGameInfo displayInfo =
             printfn "Opponent hand sizes"
             List.iter displayOpponentHandSize opponentHandSizes
         printfn ""
-        if drawPileSize = 0 then
+        match boardKnowledge with
+        | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
+            printfn "Draw pile: %i" dps
+            if Map.isEmpty dk then
+                printfn "Discard pile is empty"
+            else
+                printfn "\nDiscard pile:"
+                displayDiscardKnowledge dk
+        | PostBaseFlipBoardKnowledge {Discard = dk} ->
             printfn "Draw pile is empty"
-        else
-            printfn "Draw pile: %i" drawPileSize
-        if Map.isEmpty discardKnowledge then
-            printfn "Discard pile is empty"
-        else
-            printfn "\nDiscard pile:"
-            displayDiscardKnowledge discardKnowledge
+            if Map.isEmpty dk then
+                printfn "Discard pile is empty"
+            else
+                printfn "\nDiscard pile:"
+                displayDiscardKnowledge dk
     | SwitchDisplayInfo playerID ->
         Console.Clear()
         printfn "Player %i's turn" playerID

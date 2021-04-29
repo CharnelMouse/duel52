@@ -71,20 +71,34 @@ type WonLaneKnowledge = {
     Troops: CountMap.CountMap<TroopKnowledge>
 }
 
-type LaneKnowledge =
-| PreBaseFlipLaneKnowledge of PreBaseFlipLaneKnowledge
+type PostBaseFlipLaneKnowledge =
 | ContestedLaneKnowledge of ContestedLaneKnowledge
 | WonLaneKnowledge of WonLaneKnowledge
 | TiedLaneKnowledge
 
+type DiscardKnowledge = CountMap.CountMap<DeadCardKnowledge>
+
+type PreBaseFlipBoardKnowledge = {
+    Lanes: PreBaseFlipLaneKnowledge list
+    DrawPileSize: int
+    Discard: DiscardKnowledge
+}
+
+type PostBaseFlipBoardKnowledge = {
+    Lanes: PostBaseFlipLaneKnowledge list
+    Discard: DiscardKnowledge
+}
+
+type BoardKnowledge =
+| PreBaseFlipBoardKnowledge of PreBaseFlipBoardKnowledge
+| PostBaseFlipBoardKnowledge of PostBaseFlipBoardKnowledge
+
 type TurnDisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
-    BoardKnowledge: LaneKnowledge list
+    BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
-    DrawPileSize: int
-    DiscardKnowledge: CountMap.CountMap<DeadCardKnowledge>
 }
 
 type DisplayInfo =
