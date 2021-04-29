@@ -737,7 +737,21 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
         ActionsLeft = gameState.ActionsLeft - 1
         }
 
-let private drawCard playerID gameState =
+let private changeActivePlayer playerID gameState =
+    let nPlayers = List.length gameState.Hands
+    let newNextPlayer =
+        if playerID = nPlayers*1<PID> then
+            1<PID>
+        else
+            playerID + 1<PID>
+    {gameState with
+        CurrentPlayer = Some playerID
+        NextPlayer = newNextPlayer
+        ActionsLeft = gameState.NextActionCount
+        NextActionCount = 3
+        }
+
+let private tryDrawCard playerID gameState =
     if List.isEmpty gameState.DrawPile then
         gameState
     else
@@ -769,19 +783,9 @@ let rec private makeNextActionInfo gameState action =
         | EndTurn _ ->
             {gameState with CurrentPlayer = None}
         | StartTurn id ->
-            let nPlayers = List.length gameState.Hands
-            let newNextPlayer =
-                if id = nPlayers*1<PID> then
-                    1<PID>
-                else
-                    id + 1<PID>
-            {gameState with
-                CurrentPlayer = Some id
-                NextPlayer = newNextPlayer
-                ActionsLeft = gameState.NextActionCount
-                NextActionCount = 3
-                }
-            |> drawCard id
+            gameState
+            |> changeActivePlayer id
+            |> tryDrawCard id
     let newDisplayInfo = getDisplayInfo newGameState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
