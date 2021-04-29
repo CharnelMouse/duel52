@@ -47,6 +47,7 @@ type private GameState = {
     CurrentPlayer: PlayerID option
     NextPlayer: PlayerID
     ActionsLeft: int
+    NextActionCount: int
     Hands: (PlayerID * Hand) list
     Discard: CountMap.CountMap<DeadCard>
     Removed: CountMap.CountMap<RemovedCard>
@@ -736,6 +737,30 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
         ActionsLeft = gameState.ActionsLeft - 1
         }
 
+let private drawCard playerID gameState =
+    if List.isEmpty gameState.DrawPile then
+        gameState
+    else
+        let drawnCard, newDrawPile =
+            match gameState.DrawPile with
+            | [] -> failwithf "can't draw from empty draw pile" // change types to remve this case
+            | dc :: ndp -> dc, ndp
+        let newHandCard =
+            match drawnCard with
+            | DrawCard power -> HandCard power
+        let newHands =
+            gameState.Hands
+            |> List.map (fun (pid, h) ->
+                if pid = playerID then
+                    pid, CountMap.inc newHandCard h
+                else
+                    pid, h
+                )
+        {gameState with
+            Hands = newHands
+            DrawPile = newDrawPile
+            }
+
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match action with
@@ -745,18 +770,18 @@ let rec private makeNextActionInfo gameState action =
             {gameState with CurrentPlayer = None}
         | StartTurn id ->
             let nPlayers = List.length gameState.Hands
-            if id = nPlayers*1<PID> then
-                {gameState with
-                    CurrentPlayer = Some id
-                    NextPlayer = 1<PID>
-                    ActionsLeft = 3
-                    }
-            else
-                {gameState with
-                    CurrentPlayer = Some id
-                    NextPlayer = id + 1<PID>
-                    ActionsLeft = 3
-                    }
+            let newNextPlayer =
+                if id = nPlayers*1<PID> then
+                    1<PID>
+                else
+                    id + 1<PID>
+            {gameState with
+                CurrentPlayer = Some id
+                NextPlayer = newNextPlayer
+                ActionsLeft = gameState.NextActionCount
+                NextActionCount = 3
+                }
+            |> drawCard id
     let newDisplayInfo = getDisplayInfo newGameState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
@@ -789,9 +814,10 @@ let private createGame nPlayers nLanes =
     let gameState = {
         Board = board
         DrawPile = prepareDrawPile notRemoved
-        CurrentPlayer = Some 1<PID>
-        NextPlayer = 2<PID>
-        ActionsLeft = 2
+        CurrentPlayer = None
+        NextPlayer = 1<PID>
+        ActionsLeft = 0
+        NextActionCount = 3
         Hands = hands
         Discard = Map.empty
         Removed = removed
