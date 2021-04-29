@@ -19,7 +19,10 @@ type Troop =
 | ActiveCard of ActiveCard
 | Pair of Pair
 
-type DrawPile = DrawCard list
+type DrawPile = {
+    TopCard: DrawCard
+    Rest: DrawCard list
+    }
 
 type PreBaseFlipLane = {
     Bases: Base list
@@ -141,8 +144,10 @@ let private prepareRemoved lst =
     |> CountMap.ofList
 
 let private prepareDrawPile lst =
-    lst
-    |> List.map (fun power -> DrawCard power)
+    let drawCards =
+        lst
+        |> List.map (fun power -> DrawCard power)
+    {TopCard = List.head drawCards; Rest = List.tail drawCards}
 
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
     let (power, ownerID, knownBy) = baseCard
@@ -203,7 +208,7 @@ let private getDisplayInfo gameState =
                                     CountMap.map getTroop troops
                                 } : PreBaseFlipLaneKnowledge
                         )
-                let drawPileSize = List.length dp
+                let drawPileSize = 1 + List.length dp.Rest
                 let discardKnowledge = CountMap.map getDeadCard d
                 PreBaseFlipBoardKnowledge {
                     Lanes = lanesKnowledge
@@ -954,8 +959,7 @@ let private flipBasesOnLane lane =
         |> List.fold (fun cm troop -> CountMap.inc troop cm) lane.Troops
     ContestedLane {Troops = newTroops}
 
-let private flipBasesOnBoard preFlipBoard =
-    let {Lanes = lanes; DrawPile = _; Discard = discard} = preFlipBoard
+let private flipBasesOnBoard lanes discard =
     PostBaseFlipBoard {
         Lanes = List.map flipBasesOnLane lanes
         Discard = discard
@@ -966,13 +970,10 @@ let private tryDrawCard playerID gameState =
     | PreBaseFlipBoard pbfb ->
         let hands = gameState.Hands
         let drawPile = pbfb.DrawPile
-        match drawPile with
+        match drawPile.Rest with
         | [] ->
-            {gameState with Board = flipBasesOnBoard pbfb}
-        | [h] ->
-            let drawnCard, newDrawPile = h, []
             let newHandCard =
-                match drawnCard with
+                match drawPile.TopCard with
                 | DrawCard power -> HandCard power
             let newHands =
                 gameState.Hands
@@ -984,14 +985,12 @@ let private tryDrawCard playerID gameState =
                     )
             {gameState with
                 Hands = newHands
-                Board =
-                    {pbfb with DrawPile = newDrawPile}
-                    |> flipBasesOnBoard
+                Board = flipBasesOnBoard pbfb.Lanes pbfb.Discard
                 }
         | h :: t ->
-            let drawnCard, newDrawPile = h, t
+            let newTopCard, newRest = h, t
             let newHandCard =
-                match drawnCard with
+                match drawPile.TopCard with
                 | DrawCard power -> HandCard power
             let newHands =
                 hands
@@ -1003,7 +1002,10 @@ let private tryDrawCard playerID gameState =
                     )
             {gameState with
                 Hands = newHands
-                Board = PreBaseFlipBoard {pbfb with DrawPile = newDrawPile}
+                Board = PreBaseFlipBoard {
+                    pbfb with
+                        DrawPile = {TopCard = newTopCard; Rest = newRest}
+                    }
                 }
     | PostBaseFlipBoard _ ->
         gameState
