@@ -101,9 +101,15 @@ type TurnDisplayInfo = {
     OpponentHandSizes: (PlayerID * int) list
 }
 
+type FinishedGameDisplayInfo = {
+    Winner: PlayerID
+    LaneWins: (PlayerID * int) list
+}
+
 type DisplayInfo =
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
+| FinishedGameDisplayInfo of FinishedGameDisplayInfo
 
 type AttackerInfo =
 | SingleAttacker of Power * Health

@@ -90,9 +90,15 @@ type private GameStateDuringTurn = {
     TurnState: TurnInProgress
 }
 
+type private GameStateGameOver = {
+    Lanes: PostBaseFlipLane list
+    Winner: PlayerID
+}
+
 type private GameState =
 | GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateDuringTurn of GameStateDuringTurn
+| GameStateGameOver of GameStateGameOver
 
 let rec private shuffleRec unshuffled shuffled (sampler: System.Random) =
     match unshuffled with
@@ -274,6 +280,20 @@ let private getDisplayInfo gameState =
         }
     | GameStateBetweenTurns {TurnState = ts} ->
         SwitchDisplayInfo ts.Player
+    | GameStateGameOver {Lanes = lanes; Winner = winner} ->
+        let laneWins =
+            lanes
+            |> List.choose (function
+                | WonLane {Controller = id} ->
+                    Some id
+                | _ ->
+                    None
+                )
+            |> List.countBy id
+        FinishedGameDisplayInfo {
+            Winner = winner
+            LaneWins = laneWins
+        }
 
 let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     turnDisplayInfo.PlayerHand
@@ -595,6 +615,8 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
             @ (getPairActionsInfo turnDisplayInfo)
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
+    | FinishedGameDisplayInfo _ ->
+        List.empty
 
 let private incInPreLane card playerID (lane: PreBaseFlipLane) =
     let moveTo = CountMap.inc card
@@ -1070,7 +1092,7 @@ let private flipBasesOnBoard lanes discard =
         Discard = discard
         }
 
-let private tryDrawCard playerID gameState =
+let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     match cardsState.Board with
     | PreBaseFlipBoard pbfb ->

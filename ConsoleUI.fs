@@ -148,6 +148,9 @@ let private displayOngoingGameInfo displayInfo =
     | SwitchDisplayInfo playerID ->
         Console.Clear()
         printfn "Player %i's turn" playerID
+    | FinishedGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->
+        printfn "Player %i wins!" winner
+        printfn "Lane wins: %A" laneWins
 
 let private actionString action =
     match action with
