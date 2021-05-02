@@ -1120,6 +1120,47 @@ let private tryDrawCard playerID gameState =
     | PostBaseFlipBoard _ ->
         gameState
 
+let private readyTroop troop =
+    match troop with
+    | InactiveCard _ ->
+        troop
+    | ActiveCard (p, h, _, pid) ->
+        ActiveCard (p, h, Ready, pid)
+    | Pair (p, (h1, _), (h2, _), pid) ->
+        Pair (p, (h1, Ready), (h2, Ready), pid)
+
+let private readyTroops troops =
+    troops
+    |> CountMap.toList
+    |> List.map readyTroop
+    |> CountMap.ofList
+
+let private readyAllActiveCards cardsState =
+    let board = cardsState.Board
+    let newBoard =
+        match board with
+        | PreBaseFlipBoard pbfb ->
+            let newLanes =
+                pbfb.Lanes
+                |> List.map (fun pbfl -> {
+                    pbfl with Troops = readyTroops pbfl.Troops
+                    }
+                    )
+            PreBaseFlipBoard {pbfb with Lanes = newLanes}
+        | PostBaseFlipBoard pbfb ->
+            let newLanes =
+                pbfb.Lanes
+                |> List.map (function
+                    | ContestedLane {Troops = troops} ->
+                        ContestedLane {Troops = readyTroops troops}
+                    | WonLane {Controller = c; Troops = troops} ->
+                        WonLane {Controller = c; Troops = readyTroops troops}
+                    | TiedLane ->
+                        TiedLane
+                    )
+            PostBaseFlipBoard {pbfb with Lanes = newLanes}
+    {cardsState with Board = newBoard}
+
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match gameState, action with
@@ -1138,7 +1179,7 @@ let rec private makeNextActionInfo gameState action =
                 | [] -> 3, []
                 | h :: t -> h, t
             GameStateBetweenTurns {
-                CardsState = gs.CardsState
+                CardsState = readyAllActiveCards gs.CardsState
                 TurnState = {
                     Player = nextPlayer
                     NPlayers = tip.NPlayers

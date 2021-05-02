@@ -9,21 +9,28 @@ let private displayBaseKnowledge baseKnowledge =
     | KnownBaseCard (playerID, power) ->
         printfn "Player %i: %A" playerID power
 
-let private displayTroopKnowledge troopKnowledge n =
+let private displayTroopKnowledge currentPlayer troopKnowledge n =
     match troopKnowledge with
     | UnknownInactiveCardKnowledge (playerID, health, knownBy) ->
         printfn "Player %i, (%i) Inactive, %i health" playerID n health
     | KnownInactiveCardKnowledge (playerID, power, health, knownBy) ->
         printfn "Player %i, (%i) Inactive %A, %i health" playerID n power health
+    // later will need cases for active/pair when card is frozen
     | ActiveCardKnowledge (playerID, power, health, readiness) ->
-        printfn "Player %i, (%i) %A %A, %i health" playerID n readiness power health
+        if playerID = currentPlayer then
+            printfn "Player %i, (%i) %A %A, %i health" playerID n readiness power health
+        else
+            printfn "Player %i, (%i) %A, %i health" playerID n power health
     | PairKnowledge (playerID, power, health1, health2, readiness) ->
-        printfn "Player %i, (%i) %A %A pair: health %i and %i" playerID n readiness power health1 health2
+        if playerID = currentPlayer then
+            printfn "Player %i, (%i) %A %A pair: health %i and %i" playerID n readiness power health1 health2
+        else
+            printfn "Player %i, (%i) %A pair: health %i and %i" playerID n power health1 health2
 
-let private displayTroopKnowledges =
-    CountMap.iter displayTroopKnowledge
+let private displayTroopKnowledges currentPlayer =
+    CountMap.iter (displayTroopKnowledge currentPlayer)
 
-let private displayPreLaneKnowledge (n, (lane: PreBaseFlipLaneKnowledge)) =
+let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
     let {Bases = baseKnowledges; Troops = troops} = lane
     printfn "Lane %i" (n + 1)
     printfn "Bases present"
@@ -32,15 +39,15 @@ let private displayPreLaneKnowledge (n, (lane: PreBaseFlipLaneKnowledge)) =
         printfn "No troops present"
     else
         printfn "Troops"
-        displayTroopKnowledges troops
+        displayTroopKnowledges currentPlayer troops
     printfn ""
 
-let private displayPostLaneKnowledge (n, (lane: PostBaseFlipLaneKnowledge)) =
+let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKnowledge)) =
     match lane with
     | ContestedLaneKnowledge {Troops = troops} ->
         printfn "Lane %i" (n + 1)
         printfn "Troops"
-        displayTroopKnowledges troops
+        displayTroopKnowledges currentPlayer troops
     | WonLaneKnowledge {Controller = controller; Troops = troops} ->
         printfn "Lane %i (won by player %i)" (n + 1) controller
         if CountMap.isEmpty troops then
@@ -48,20 +55,20 @@ let private displayPostLaneKnowledge (n, (lane: PostBaseFlipLaneKnowledge)) =
         else
             printfn "Troops"
             troops
-            |> displayTroopKnowledges
+            |> (displayTroopKnowledges currentPlayer)
     | TiedLaneKnowledge ->
         printfn "Lane %i (tied)" (n + 1)
     printfn ""
 
-let private displayPreLaneKnowledges laneKnowledges =
+let private displayPreLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
     |> List.indexed
-    |> List.iter displayPreLaneKnowledge
+    |> List.iter (displayPreLaneKnowledge currentPlayer)
 
-let private displayPostLaneKnowledges laneKnowledges =
+let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
     |> List.indexed
-    |> List.iter displayPostLaneKnowledge
+    |> List.iter (displayPostLaneKnowledge currentPlayer)
 
 let private displayHandCard (HandCard power) n =
     printfn "(%i) %A" n power
@@ -106,9 +113,9 @@ let private displayOngoingGameInfo displayInfo =
             } = tdi
         match boardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPreLaneKnowledges lanes
+            displayPreLaneKnowledges currentPlayer lanes
         | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPostLaneKnowledges lanes
+            displayPostLaneKnowledges currentPlayer lanes
         printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
         if Map.isEmpty playerHand then
             printfn "Hand is empty"
