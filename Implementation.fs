@@ -162,7 +162,7 @@ let private getTroopKnowledge (playerID: PlayerID) troop =
         if List.contains playerID knownBy then
             KnownInactiveCardKnowledge (ownerID, power, health, List.filter (fun id -> id <> playerID) knownBy)
         else
-            UnknownInactiveCardKnowledge (ownerID, health, List.filter (fun id -> id <> playerID) knownBy)
+            UnknownInactiveCardKnowledge (ownerID, health, knownBy)
     | ActiveCard (power, health, readiness, ownerID) ->
         ActiveCardKnowledge (ownerID, power, health, readiness)
     | Pair (power, (health1, readiness1), (health2, readiness2), ownerID) ->
@@ -278,14 +278,18 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
             troops
             |> CountMap.choose (fun troop ->
                 match troop with
-                | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
+                | UnknownInactiveCardKnowledge (ownerID, health, knownBy) when
                     ownerID = playerID ->
-                    let fullKnownBy = List.sortBy id (ownerID :: knownBy)
-                    Activate (playerID, (n + 1)*1<LID>, (power, health, fullKnownBy))
+                    Activate (playerID, (n + 1)*1<LID>, UnknownActivationTarget (health, knownBy))
                     |> TurnActionInfo
                     |> Some
-                | KnownInactiveCardKnowledge _
+                | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
+                    ownerID = playerID ->
+                    Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health, knownBy))
+                    |> TurnActionInfo
+                    |> Some
                 | UnknownInactiveCardKnowledge _
+                | KnownInactiveCardKnowledge _
                 | ActiveCardKnowledge _
                 | PairKnowledge _ ->
                     None
@@ -301,10 +305,14 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 troops
                 |> CountMap.choose (fun troop ->
                     match troop with
+                    | UnknownInactiveCardKnowledge (ownerID, health, knownBy) when
+                        ownerID = playerID ->
+                        Activate (playerID, (n + 1)*1<LID>, UnknownActivationTarget (health, knownBy))
+                        |> TurnActionInfo
+                        |> Some
                     | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
                         ownerID = playerID ->
-                        let fullKnownBy = List.sortBy id (ownerID :: knownBy)
-                        Activate (playerID, (n + 1)*1<LID>, (power, health, fullKnownBy))
+                        Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health, knownBy))
                         |> TurnActionInfo
                         |> Some
                     | KnownInactiveCardKnowledge _
@@ -318,10 +326,14 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 troops
                 |> CountMap.choose (fun troop ->
                     match troop with
+                    | UnknownInactiveCardKnowledge (ownerID, health, knownBy) when
+                        ownerID = playerID ->
+                        Activate (playerID, (n + 1)*1<LID>, UnknownActivationTarget (health, knownBy))
+                        |> TurnActionInfo
+                        |> Some
                     | KnownInactiveCardKnowledge (ownerID, power, health, knownBy) when
                         ownerID = playerID ->
-                        let fullKnownBy = List.sortBy id (ownerID :: knownBy)
-                        Activate (playerID, (n + 1)*1<LID>, (power, health, fullKnownBy))
+                        Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health, knownBy))
                         |> TurnActionInfo
                         |> Some
                     | KnownInactiveCardKnowledge _
@@ -776,9 +788,63 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                                 )
                         PostBaseFlipBoard {pbfb with Lanes = newLanes}
                 }
-        | Activate (playerID, laneID, (power, health, knownBy)) ->
-            let oldCard = InactiveCard (power, health, playerID, knownBy)
-            let newCard = ActiveCard (power, health, Ready, playerID)
+        | Activate (playerID, laneID, activationTarget) ->
+            let troops =
+                match gameState.Board with
+                | PreBaseFlipBoard {Lanes = lanes} ->
+                    (List.item (int laneID - 1) lanes).Troops
+                | PostBaseFlipBoard {Lanes = lanes} ->
+                    let lane = List.item (int laneID - 1) lanes
+                    match lane with
+                    | ContestedLane {Troops = troops} ->
+                        troops
+                    | WonLane {Controller = c; Troops = troops} when playerID = c ->
+                        troops
+                    | WonLane _
+                    | TiedLane ->
+                        failwithf "Can't activate troops in a lost or tied lane"
+            let oldCard, newCard =
+                match activationTarget with
+                | UnknownActivationTarget (health, knownBy) ->
+                    let firstValidPower =
+                        troops
+                        |> CountMap.keyList
+                        |> List.choose (fun troop ->
+                            match troop with
+                            | InactiveCard (p, h, pid, kb)
+                                when h = health && pid = playerID && kb = knownBy ->
+                                Some p
+                            | InactiveCard _
+                            | ActiveCard _
+                            | Pair _ ->
+                                None
+                            )
+                        |> List.tryHead
+                    match firstValidPower with
+                    | Some p ->
+                        InactiveCard (p, health, playerID, knownBy),
+                        ActiveCard (p, health, Ready, playerID)
+                    | None ->
+                        let existingHealthValues =
+                            troops
+                            |> CountMap.keyList
+                            |> List.choose (function
+                                | InactiveCard (p, h, pid, kb) ->
+                                    if pid = playerID && kb = knownBy then
+                                        Some h
+                                    else
+                                        None
+                                | _ ->
+                                    None
+                                )
+                        failwithf "could not find unknown card with %i health. existing values: %A" health existingHealthValues
+                | KnownActivationTarget (power, health, knownBy) ->
+                    let fullKnownBy = List.sort (playerID :: knownBy)
+                    InactiveCard (power, health, playerID, fullKnownBy),
+                    ActiveCard (power, health, Ready, playerID)
+            let newTroops =
+                troops
+                |> changeTroop oldCard newCard
             let newBoard =
                 match gameState.Board with
                 | PreBaseFlipBoard pbfb ->
@@ -786,9 +852,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                         pbfb.Lanes
                         |> List.mapi (fun n lane ->
                             if (n + 1)*1<LID> = laneID then
-                                {lane with
-                                    Troops = changeTroop oldCard newCard lane.Troops
-                                    }
+                                {lane with Troops = newTroops}
                             else
                                 lane
                         )
@@ -799,14 +863,12 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                         |> List.mapi (fun n lane ->
                             if (n + 1)*1<LID> = laneID then
                                 match lane with
-                                | ContestedLane {Troops = troops} ->
-                                    ContestedLane {
-                                        Troops = changeTroop oldCard newCard troops
-                                        }
-                                | WonLane {Controller = c; Troops = troops} ->
+                                | ContestedLane _ ->
+                                    ContestedLane {Troops = newTroops}
+                                | WonLane {Controller = c} ->
                                     WonLane {
                                         Controller = c
-                                        Troops = changeTroop oldCard newCard troops
+                                        Troops = newTroops
                                         }
                                 | TiedLane ->
                                     failwithf "Can't change troops in a tied lane"

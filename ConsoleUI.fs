@@ -147,7 +147,11 @@ let private actionString action =
     | TurnActionInfo (Play (_, power, laneID)) ->
         "Play " + string power
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, (power, health, knownBy))) ->
+    | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget (health, knownBy))) ->
+        "Activate " + "unknown card"
+        +  " (" + string health + " HP)"
+        + " in lane " + string laneID
+    | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health, knownBy))) ->
         "Activate " + string power
         +  " (" + string health + " HP)"
         + " in lane " + string laneID

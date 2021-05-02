@@ -115,9 +115,13 @@ type AttackTargetInfo =
 | ActiveSingleTarget of PlayerID * Power * Health
 | ActivePairMemberTarget of PlayerID * Power * Health * Health
 
+type ActivationTarget =
+| KnownActivationTarget of Power * Health * KnownBy
+| UnknownActivationTarget of Health * KnownBy
+
 type TurnActionInfo =
 | Play of PlayerID * Power * LaneID
-| Activate of PlayerID * LaneID * (Power * Health * KnownBy)
+| Activate of PlayerID * LaneID * ActivationTarget
 | Attack of PlayerID * LaneID * AttackerInfo * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
 
