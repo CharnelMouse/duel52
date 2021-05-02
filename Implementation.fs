@@ -66,17 +66,33 @@ type private CardsState = {
     Removed: CountMap.CountMap<RemovedCard>
 }
 
-type private TurnState = {
-    CurrentPlayer: PlayerID option
-    NextPlayer: PlayerID
-    ActionsLeft: int
-    NextActionCount: int
+type private PlayerReady = {
+    Player: PlayerID
+    NPlayers: int
+    Actions: int
+    FutureActionCounts: int list
 }
 
-type private GameState = {
-    CardsState: CardsState
-    TurnState: TurnState
+type private TurnInProgress = {
+    CurrentPlayer: PlayerID
+    NPlayers: int
+    ActionsLeft: int
+    FutureActionCounts: int list
 }
+
+type private GameStateBetweenTurns = {
+    CardsState: CardsState
+    TurnState: PlayerReady
+}
+
+type private GameStateDuringTurn = {
+    CardsState: CardsState
+    TurnState: TurnInProgress
+}
+
+type private GameState =
+| GameStateBetweenTurns of GameStateBetweenTurns
+| GameStateDuringTurn of GameStateDuringTurn
 
 let rec private shuffleRec unshuffled shuffled (sampler: System.Random) =
     match unshuffled with
@@ -192,10 +208,11 @@ let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
         KnownDeadCard (KnownFaceUpDeadCard power)
 
 let private getDisplayInfo gameState =
-    match gameState.TurnState.CurrentPlayer with
-    | Some id ->
+    match gameState with
+    | GameStateDuringTurn gs ->
+        let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandsInfo) =
-            gameState.CardsState.Hands
+            gs.CardsState.Hands
             |> List.partition (fun (n, _) -> n = id)
         let playerHand =
             playerHandInfo
@@ -205,7 +222,7 @@ let private getDisplayInfo gameState =
         let getTroop = getTroopKnowledge id
         let getDeadCard = getDeadCardKnowledge id
         let boardKnowledge =
-            match gameState.CardsState.Board with
+            match gs.CardsState.Board with
             | PreBaseFlipBoard {Lanes = l; DrawPile = dp; Discard = d} ->
                 let lanesKnowledge =
                     l
@@ -248,15 +265,15 @@ let private getDisplayInfo gameState =
                     }
         TurnDisplayInfo {
             CurrentPlayer = id
-            ActionsLeft = gameState.TurnState.ActionsLeft
+            ActionsLeft = gs.TurnState.ActionsLeft
             BoardKnowledge = boardKnowledge
             PlayerHand = playerHand
             OpponentHandSizes =
                 opponentHandsInfo
                 |> List.map (fun (n, hand) -> n, CountMap.count hand)
         }
-    | None ->
-        SwitchDisplayInfo gameState.TurnState.NextPlayer
+    | GameStateBetweenTurns {TurnState = ts} ->
+        SwitchDisplayInfo ts.Player
 
 let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     turnDisplayInfo.PlayerHand
@@ -753,7 +770,7 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             |> List.head
     attacker, attackerAfter, target, targetAfter, deadCard
 
-let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
+let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuringTurn) =
     let newStateBeforeActionUpdate =
         match action with
         | Play (playerID, power, laneID) ->
@@ -1011,20 +1028,15 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
             }
         }
 
-let private changeActivePlayer playerID gameState =
-    let nPlayers = List.length gameState.CardsState.Hands
-    let newNextPlayer =
-        if playerID = nPlayers*1<PID> then
-            1<PID>
-        else
-            playerID + 1<PID>
-    {gameState with
+let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameStateDuringTurn =
+    let ts = gameState.TurnState
+    {
+        CardsState = gameState.CardsState
         TurnState = {
-            gameState.TurnState with
-                CurrentPlayer = Some playerID
-                NextPlayer = newNextPlayer
-                ActionsLeft = gameState.TurnState.NextActionCount
-                NextActionCount = 3
+            CurrentPlayer = playerID
+            NPlayers = ts.NPlayers
+            ActionsLeft = ts.Actions
+            FutureActionCounts = ts.FutureActionCounts
             }
         }
 
@@ -1095,15 +1107,37 @@ let private tryDrawCard playerID gameState =
 
 let rec private makeNextActionInfo gameState action =
     let newGameState =
-        match action with
-        | TurnActionInfo tai ->
-            executeTurnAction tai gameState
-        | EndTurn _ ->
-            {gameState with TurnState = {gameState.TurnState with CurrentPlayer = None}}
-        | StartTurn id ->
-            gameState
-            |> changeActivePlayer id
+        match gameState, action with
+        | GameStateDuringTurn gs, TurnActionInfo tai ->
+            executeTurnAction tai gs
+            |> GameStateDuringTurn
+        | GameStateDuringTurn gs, EndTurn _ ->
+            let tip = gs.TurnState
+            let nextPlayer =
+                if int tip.CurrentPlayer = tip.NPlayers then
+                    1<PID>
+                else
+                    tip.CurrentPlayer + 1<PID>
+            let actions, nextFutureActionCounts =
+                match tip.FutureActionCounts with
+                | [] -> 3, []
+                | h :: t -> h, t
+            GameStateBetweenTurns {
+                CardsState = gs.CardsState
+                TurnState = {
+                    Player = nextPlayer
+                    NPlayers = tip.NPlayers
+                    Actions = actions
+                    FutureActionCounts = nextFutureActionCounts
+                    }
+                }
+        | GameStateBetweenTurns gs, StartTurn id ->
+            gs
+            |> startPlayerTurn id
             |> tryDrawCard id
+            |> GameStateDuringTurn
+        | _ ->
+            failwithf "action incompatible with game state"
     let newDisplayInfo = getDisplayInfo newGameState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
@@ -1134,7 +1168,7 @@ let private createGame nPlayers nLanes =
         notDeckCards
         |> prepareHead prepareRemoved 10
     let drawPile = prepareDrawPile notRemoved
-    let gameState = {
+    let gameState = GameStateBetweenTurns {
         CardsState = {
             Board = PreBaseFlipBoard {
                 Lanes = lanes
@@ -1145,10 +1179,10 @@ let private createGame nPlayers nLanes =
             Removed = removed
             }
         TurnState = {
-            CurrentPlayer = None
-            NextPlayer = 1<PID>
-            ActionsLeft = 0
-            NextActionCount = 2
+            Player = 1<PID>
+            NPlayers = nPlayers
+            Actions = 2
+            FutureActionCounts = List.empty
             }
         }
     let displayInfo = getDisplayInfo gameState
