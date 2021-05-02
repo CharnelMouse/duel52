@@ -66,12 +66,16 @@ type private CardsState = {
     Removed: CountMap.CountMap<RemovedCard>
 }
 
-type private GameState = {
-    CardsState: CardsState
+type private TurnState = {
     CurrentPlayer: PlayerID option
     NextPlayer: PlayerID
     ActionsLeft: int
     NextActionCount: int
+}
+
+type private GameState = {
+    CardsState: CardsState
+    TurnState: TurnState
 }
 
 let rec private shuffleRec unshuffled shuffled (sampler: System.Random) =
@@ -188,7 +192,7 @@ let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
         KnownDeadCard (KnownFaceUpDeadCard power)
 
 let private getDisplayInfo gameState =
-    match gameState.CurrentPlayer with
+    match gameState.TurnState.CurrentPlayer with
     | Some id ->
         let (playerHandInfo, opponentHandsInfo) =
             gameState.CardsState.Hands
@@ -244,7 +248,7 @@ let private getDisplayInfo gameState =
                     }
         TurnDisplayInfo {
             CurrentPlayer = id
-            ActionsLeft = gameState.ActionsLeft
+            ActionsLeft = gameState.TurnState.ActionsLeft
             BoardKnowledge = boardKnowledge
             PlayerHand = playerHand
             OpponentHandSizes =
@@ -252,7 +256,7 @@ let private getDisplayInfo gameState =
                 |> List.map (fun (n, hand) -> n, CountMap.count hand)
         }
     | None ->
-        SwitchDisplayInfo gameState.NextPlayer
+        SwitchDisplayInfo gameState.TurnState.NextPlayer
 
 let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     turnDisplayInfo.PlayerHand
@@ -1001,7 +1005,10 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                     PostBaseFlipBoard {pbfb with Lanes = newLanes}
             {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
     {newStateBeforeActionUpdate with
-        ActionsLeft = gameState.ActionsLeft - 1
+        TurnState = {
+            newStateBeforeActionUpdate.TurnState with
+                ActionsLeft = newStateBeforeActionUpdate.TurnState.ActionsLeft - 1
+            }
         }
 
 let private changeActivePlayer playerID gameState =
@@ -1012,10 +1019,13 @@ let private changeActivePlayer playerID gameState =
         else
             playerID + 1<PID>
     {gameState with
-        CurrentPlayer = Some playerID
-        NextPlayer = newNextPlayer
-        ActionsLeft = gameState.NextActionCount
-        NextActionCount = 3
+        TurnState = {
+            gameState.TurnState with
+                CurrentPlayer = Some playerID
+                NextPlayer = newNextPlayer
+                ActionsLeft = gameState.TurnState.NextActionCount
+                NextActionCount = 3
+            }
         }
 
 let private flipBasesOnLane lane =
@@ -1089,7 +1099,7 @@ let rec private makeNextActionInfo gameState action =
         | TurnActionInfo tai ->
             executeTurnAction tai gameState
         | EndTurn _ ->
-            {gameState with CurrentPlayer = None}
+            {gameState with TurnState = {gameState.TurnState with CurrentPlayer = None}}
         | StartTurn id ->
             gameState
             |> changeActivePlayer id
@@ -1134,10 +1144,12 @@ let private createGame nPlayers nLanes =
             Hands = hands
             Removed = removed
             }
-        CurrentPlayer = None
-        NextPlayer = 1<PID>
-        ActionsLeft = 0
-        NextActionCount = 2
+        TurnState = {
+            CurrentPlayer = None
+            NextPlayer = 1<PID>
+            ActionsLeft = 0
+            NextActionCount = 2
+            }
         }
     let displayInfo = getDisplayInfo gameState
     let nextActions =
