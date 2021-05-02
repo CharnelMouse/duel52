@@ -202,7 +202,7 @@ let private displayNextActionsInfo nextActions =
         printfn "%i) %s" (n + 1) (actionString action)
     )
 
-type InputResult =
+type private InputResult =
 | UseAction of int
 | Quit
 

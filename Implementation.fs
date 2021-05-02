@@ -1,57 +1,57 @@
 module Implementation
 open Domain
 
-type DrawCard = DrawCard of Power
-type Base = Power * PlayerID * KnownBy
-type InactiveCard = Power * Health * PlayerID * KnownBy
-type ActiveCard = Power * Health * Readiness * PlayerID
-type FaceDownDeadCard = Power * KnownBy
-type FaceUpDeadCard = Power
-type DeadCard =
+type private DrawCard = DrawCard of Power
+type private Base = Power * PlayerID * KnownBy
+type private InactiveCard = Power * Health * PlayerID * KnownBy
+type private ActiveCard = Power * Health * Readiness * PlayerID
+type private FaceDownDeadCard = Power * KnownBy
+type private FaceUpDeadCard = Power
+type private DeadCard =
 | FaceDownDeadCard of FaceDownDeadCard
 | FaceUpDeadCard of FaceUpDeadCard
-type RemovedCard = RemovedCard of Power
+type private RemovedCard = RemovedCard of Power
 
-type Pair = Power * (Health * Readiness) * (Health * Readiness) * PlayerID
+type private Pair = Power * (Health * Readiness) * (Health * Readiness) * PlayerID
 
-type Troop =
+type private Troop =
 | InactiveCard of InactiveCard
 | ActiveCard of ActiveCard
 | Pair of Pair
 
-type DrawPile = {
+type private DrawPile = {
     TopCard: DrawCard
     Rest: DrawCard list
     }
 
-type PreBaseFlipLane = {
+type private PreBaseFlipLane = {
     Bases: Base list
     Troops: CountMap.CountMap<Troop>
 }
 
-type ContestedLane = {
+type private ContestedLane = {
     Troops: CountMap.CountMap<Troop>
 }
 
-type WonLane = {
+type private WonLane = {
     Controller: PlayerID
     Troops: CountMap.CountMap<Troop>
 }
 
-type PostBaseFlipLane =
+type private PostBaseFlipLane =
 | ContestedLane of ContestedLane
 | WonLane of WonLane
 | TiedLane
 
-type Discard = CountMap.CountMap<DeadCard>
+type private Discard = CountMap.CountMap<DeadCard>
 
-type PreBaseFlipBoard = {
+type private PreBaseFlipBoard = {
     Lanes: PreBaseFlipLane list
     DrawPile: DrawPile
     Discard: Discard
 }
 
-type PostBaseFlipBoard = {
+type private PostBaseFlipBoard = {
     Lanes: PostBaseFlipLane list
     Discard: Discard
 }
