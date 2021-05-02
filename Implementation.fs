@@ -1122,7 +1122,7 @@ let private createGame nPlayers nLanes =
         CurrentPlayer = None
         NextPlayer = 1<PID>
         ActionsLeft = 0
-        NextActionCount = 3
+        NextActionCount = 2
         Hands = hands
         Removed = removed
     }
