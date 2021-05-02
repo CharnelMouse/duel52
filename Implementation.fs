@@ -770,6 +770,21 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             |> List.head
     attacker, attackerAfter, target, targetAfter, deadCard
 
+let private checkContestedLaneForWin troops =
+    let playerCounts =
+        troops
+        |> CountMap.keyList
+        |> List.countBy (function
+            | InactiveCard (_, _, playerID, _)
+            | ActiveCard (_, _, _, playerID)
+            | Pair (_, _, _, playerID) ->
+                playerID
+            )
+    match playerCounts with
+    | [] -> TiedLane
+    | [(controller, _)] -> WonLane {Controller = controller; Troops = troops}
+    | _ -> ContestedLane {Troops = troops}
+
 let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuringTurn) =
     let newStateBeforeActionUpdate =
         match action with
@@ -969,7 +984,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                                 |> CountMap.dec attacker
                                 |> CountMap.inc attackerAfter
                                 |> CountMap.dec target
-                        let newLane = ContestedLane {cl with Troops = newTroops}
+                        let newLane = checkContestedLaneForWin newTroops
                         let newDiscard =
                             match deadCard with
                             | Some dc ->
