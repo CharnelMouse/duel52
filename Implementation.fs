@@ -2,9 +2,9 @@ module Implementation
 open Domain
 
 type private DrawCard = DrawCard of Power
-type private Base = Power * PlayerID * KnownBy
-type private InactiveCard = Power * Health * PlayerID * KnownBy
-type private ActiveCard = Power * Health * Readiness * PlayerID
+type private Base = PlayerID * Power * KnownBy
+type private InactiveCard = PlayerID * Power * Health * KnownBy
+type private ActiveCard = PlayerID * Power * Health * Readiness
 type private FaceDownDeadCard = Power * KnownBy
 type private FaceUpDeadCard = Power
 type private DeadCard =
@@ -12,7 +12,7 @@ type private DeadCard =
 | FaceUpDeadCard of FaceUpDeadCard
 type private RemovedCard = RemovedCard of Power
 
-type private Pair = Power * (Health * Readiness) * (Health * Readiness) * PlayerID
+type private Pair = PlayerID * Power * (Health * Readiness) * (Health * Readiness)
 
 type private Troop =
 | InactiveCard of InactiveCard
@@ -147,7 +147,7 @@ let private prepareLanes nLanes lst =
     |> List.map (fun lst ->
         lst
         |> List.mapi (fun playerIndex power ->
-            Base (power, (playerIndex + 1)*1<PID>, [])
+            Base ((playerIndex + 1)*1<PID>, power, [])
             )
         )
     |> List.map createLane
@@ -174,7 +174,7 @@ let private prepareDrawPile lst =
     {TopCard = List.head drawCards; Rest = List.tail drawCards}
 
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
-    let (power, ownerID, knownBy) = baseCard
+    let (ownerID, power, knownBy) = baseCard
     if List.contains playerID knownBy then
         KnownBaseCard (ownerID, power)
     else
@@ -182,14 +182,14 @@ let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
 
 let private getTroopKnowledge (playerID: PlayerID) troop =
     match troop with
-    | InactiveCard (power, health, ownerID, knownBy) ->
+    | InactiveCard (ownerID, power, health, knownBy) ->
         if List.contains playerID knownBy then
             KnownInactiveCardKnowledge (ownerID, power, health, List.filter (fun id -> id <> playerID) knownBy)
         else
             UnknownInactiveCardKnowledge (ownerID, health, knownBy)
-    | ActiveCard (power, health, readiness, ownerID) ->
+    | ActiveCard (ownerID, power, health, readiness) ->
         ActiveCardKnowledge (ownerID, power, health, readiness)
-    | Pair (power, (health1, readiness1), (health2, readiness2), ownerID) ->
+    | Pair (ownerID, power, (health1, readiness1), (health2, readiness2)) ->
         let readiness =
             if readiness1 = Exhausted || readiness2 = Exhausted then
                 Exhausted
@@ -653,12 +653,12 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
     let attacker, attackerAfter, attackDamage =
         match attackerInfo with
         | SingleAttacker (power, health) ->
-            ActiveCard (power, health, Ready, playerID),
-            ActiveCard (power, health, Exhausted, playerID),
+            ActiveCard (playerID, power, health, Ready),
+            ActiveCard (playerID, power, health, Exhausted),
             1<health>
         | DoubleAttacker (power, health1, health2) ->
-            Pair (power, (health1, Ready), (health2, Ready), playerID),
-            Pair (power, (health1, Exhausted), (health2, Exhausted), playerID),
+            Pair (playerID, power, (health1, Ready), (health2, Ready)),
+            Pair (playerID, power, (health1, Exhausted), (health2, Exhausted)),
             2<health>
     let target, targetAfter, deadCard =
         match targetInfo with
@@ -666,18 +666,18 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             troops
             |> CountMap.keyList
             |> List.choose (function
-                | InactiveCard (p, h, pid, kb) when
+                | InactiveCard (pid, p, h, kb) when
                     pid = ownerID
                     && h = health
                     && not(List.contains playerID kb) ->
                     Some (
                         if h <= attackDamage then
-                            InactiveCard (p, h, pid, kb),
+                            InactiveCard (pid, p, h, kb),
                             None,
                             Some (FaceDownDeadCard (p, kb))
                         else
-                            InactiveCard (p, h, pid, kb),
-                            Some (InactiveCard (p, h - attackDamage, pid, kb)),
+                            InactiveCard (pid, p, h, kb),
+                            Some (InactiveCard (pid, p, h - attackDamage, kb)),
                             None
                     )
                 | InactiveCard _
@@ -689,19 +689,19 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             troops
             |> CountMap.keyList
             |> List.choose (function
-                | InactiveCard (p, h, pid, kb) when
+                | InactiveCard (pid, p, h, kb) when
                     pid = ownerID
                     && p = power
                     && h = health
                     && List.contains playerID kb ->
                     Some (
                         if h <= attackDamage then
-                            InactiveCard (p, h, pid, kb),
+                            InactiveCard (pid, p, h, kb),
                             None,
                             Some (FaceDownDeadCard (p, kb))
                         else
-                            InactiveCard (p, h, pid, kb),
-                            Some (InactiveCard (p, h - attackDamage, pid, kb)),
+                            InactiveCard (pid, p, h, kb),
+                            Some (InactiveCard (pid, p, h - attackDamage, kb)),
                             None
                     )
                 | InactiveCard _
@@ -713,18 +713,18 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             troops
             |> CountMap.keyList
             |> List.choose (function
-                | ActiveCard (p, h, r, pid) when
+                | ActiveCard (pid, p, h, r) when
                     pid = ownerID
                     && p = power
                     && h = health ->
                     Some (
                         if h <= attackDamage then
-                            ActiveCard (p, h, r, pid),
+                            ActiveCard (pid, p, h, r),
                             None,
                             Some (FaceUpDeadCard p)
                         else
-                            ActiveCard (p, h, r, pid),
-                            Some (ActiveCard (p, h - attackDamage, r, pid)),
+                            ActiveCard (pid, p, h, r),
+                            Some (ActiveCard (pid, p, h - attackDamage, r)),
                             None
                     )
                 | ActiveCard _
@@ -736,7 +736,7 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
             troops
             |> CountMap.keyList
             |> List.choose (function
-                | Pair (p, (h1, r1), (h2, r2), pid) when
+                | Pair (pid, p, (h1, r1), (h2, r2)) when
                     pid = ownerID
                     && p = power
                     && (
@@ -746,21 +746,21 @@ let private getAttackTroops troops playerID attackerInfo targetInfo =
                     Some (
                         if health = attackDamage then
                             if h1 = health then
-                                Pair (p, (h1, r1), (h2, r2), pid),
-                                Some (ActiveCard (p, h2, r2, pid)),
+                                Pair (pid, p, (h1, r1), (h2, r2)),
+                                Some (ActiveCard (pid, p, h2, r2)),
                                 Some (FaceUpDeadCard p)
                             else
-                                Pair (p, (h1, r1), (h2, r2), pid),
-                                Some (ActiveCard (p, h1, r1, pid)),
+                                Pair (pid, p, (h1, r1), (h2, r2)),
+                                Some (ActiveCard (pid, p, h1, r1)),
                                 Some (FaceUpDeadCard p)
                         else
                             if h1 = health then
-                                Pair (p, (h1, r1), (h2, r2), pid),
-                                Some (Pair (p, (h1 - attackDamage, r1), (h2, r2), pid)),
+                                Pair (pid, p, (h1, r1), (h2, r2)),
+                                Some (Pair (pid, p, (h1 - attackDamage, r1), (h2, r2))),
                                 None
                             else
-                                Pair (p, (h1, r1), (h2, r2), pid),
-                                Some (Pair (p, (h1, r1), (h2 - attackDamage, r2), pid)),
+                                Pair (pid, p, (h1, r1), (h2, r2)),
+                                Some (Pair (pid, p, (h1, r1), (h2 - attackDamage, r2))),
                                 None
                         )
                 | Pair _
@@ -775,9 +775,9 @@ let private checkContestedLaneForWin troops =
         troops
         |> CountMap.keyList
         |> List.countBy (function
-            | InactiveCard (_, _, playerID, _)
-            | ActiveCard (_, _, _, playerID)
-            | Pair (_, _, _, playerID) ->
+            | InactiveCard (playerID, _, _, _)
+            | ActiveCard (playerID, _, _, _)
+            | Pair (playerID, _, _, _) ->
                 playerID
             )
     match playerCounts with
@@ -790,7 +790,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
         match action with
         | Play (playerID, power, laneID) ->
             let oldCard = HandCard power
-            let newCard = InactiveCard (power, 2<health>, playerID, List.singleton playerID)
+            let newCard = InactiveCard (playerID, power, 2<health>, List.singleton playerID)
             let moveFrom = CountMap.dec oldCard
             let moveTo = CountMap.inc newCard
             let newCards = {
@@ -853,7 +853,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                         |> CountMap.keyList
                         |> List.choose (fun troop ->
                             match troop with
-                            | InactiveCard (p, h, pid, kb)
+                            | InactiveCard (pid, p, h, kb)
                                 when h = health && pid = playerID && kb = knownBy ->
                                 Some p
                             | InactiveCard _
@@ -864,14 +864,14 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                         |> List.tryHead
                     match firstValidPower with
                     | Some p ->
-                        InactiveCard (p, health, playerID, knownBy),
-                        ActiveCard (p, health, Ready, playerID)
+                        InactiveCard (playerID, p, health, knownBy),
+                        ActiveCard (playerID, p, health, Ready)
                     | None ->
                         let existingHealthValues =
                             troops
                             |> CountMap.keyList
                             |> List.choose (function
-                                | InactiveCard (p, h, pid, kb) ->
+                                | InactiveCard (pid, p, h, kb) ->
                                     if pid = playerID && kb = knownBy then
                                         Some h
                                     else
@@ -882,8 +882,8 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                         failwithf "could not find unknown card with %i health. existing values: %A" health existingHealthValues
                 | KnownActivationTarget (power, health, knownBy) ->
                     let fullKnownBy = List.sort (playerID :: knownBy)
-                    InactiveCard (power, health, playerID, fullKnownBy),
-                    ActiveCard (power, health, Ready, playerID)
+                    InactiveCard (playerID, power, health, fullKnownBy),
+                    ActiveCard (playerID, power, health, Ready)
             let newTroops =
                 troops
                 |> changeTroop oldCard newCard
@@ -1004,9 +1004,9 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                                 }
                         {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
         | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
-            let single1 = ActiveCard (power, health1, readiness1, playerID)
-            let single2 = ActiveCard (power, health2, readiness2, playerID)
-            let pair = Pair (power, (health1, readiness1), (health2, readiness2), playerID)
+            let single1 = ActiveCard (playerID, power, health1, readiness1)
+            let single2 = ActiveCard (playerID, power, health2, readiness2)
+            let pair = Pair (playerID, power, (health1, readiness1), (health2, readiness2))
             let newBoard =
                 match gameState.CardsState.Board with
                 | PreBaseFlipBoard pbfb ->
@@ -1058,7 +1058,7 @@ let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameSt
 let private flipBasesOnLane lane =
     let baseTroops =
         lane.Bases
-        |> List.map (fun (p, pid, kb) -> InactiveCard (p, 2<health>, pid, kb))
+        |> List.map (fun (pid, p, kb) -> InactiveCard (pid, p, 2<health>, kb))
     let newTroops =
         baseTroops
         |> List.fold (fun cm troop -> CountMap.inc troop cm) lane.Troops
@@ -1124,10 +1124,10 @@ let private readyTroop troop =
     match troop with
     | InactiveCard _ ->
         troop
-    | ActiveCard (p, h, _, pid) ->
-        ActiveCard (p, h, Ready, pid)
-    | Pair (p, (h1, _), (h2, _), pid) ->
-        Pair (p, (h1, Ready), (h2, Ready), pid)
+    | ActiveCard (pid, p, h, _) ->
+        ActiveCard (pid, p, h, Ready)
+    | Pair (pid, p, (h1, _), (h2, _)) ->
+        Pair (pid, p, (h1, Ready), (h2, Ready))
 
 let private readyTroops troops =
     troops
