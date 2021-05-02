@@ -787,7 +787,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                         |> List.mapi (fun n lane ->
                             if (n + 1)*1<LID> = laneID then
                                 {lane with
-                                    Troops = changeTroop oldCard oldCard lane.Troops
+                                    Troops = changeTroop oldCard newCard lane.Troops
                                     }
                             else
                                 lane
@@ -801,12 +801,12 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameState) =
                                 match lane with
                                 | ContestedLane {Troops = troops} ->
                                     ContestedLane {
-                                        Troops = changeTroop oldCard oldCard troops
+                                        Troops = changeTroop oldCard newCard troops
                                         }
                                 | WonLane {Controller = c; Troops = troops} ->
                                     WonLane {
                                         Controller = c
-                                        Troops = changeTroop oldCard oldCard troops
+                                        Troops = changeTroop oldCard newCard troops
                                         }
                                 | TiedLane ->
                                     failwithf "Can't change troops in a tied lane"
