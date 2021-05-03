@@ -1193,12 +1193,44 @@ let private readyAllActiveCards cardsState =
             PostBaseFlipBoard {pbfb with Lanes = newLanes}
     {cardsState with Board = newBoard}
 
+let private checkForGameWin gameState =
+    match gameState with
+    | GameStateDuringTurn {CardsState = cs} ->
+        match cs.Board with
+        | PreBaseFlipBoard _ ->
+            gameState
+        | PostBaseFlipBoard {Lanes = lanes} ->
+            let wonLanes =
+                lanes
+                |> List.choose (function
+                    | WonLane {Controller = c} ->
+                        Some c
+                    | ContestedLane _
+                    | TiedLane ->
+                        None
+                    )
+                |> List.countBy id
+            match wonLanes with
+            | [] -> gameState
+            | lst ->
+                let (leadingPlayer, leadingWins) =
+                    lst
+                    |> List.maxBy (fun (_, n) -> n)
+                if leadingWins >= 2 then
+                    GameStateGameOver {Winner = leadingPlayer; Lanes = lanes}
+                else
+                    gameState
+    | GameStateBetweenTurns _
+    | GameStateGameOver _ ->
+        gameState
+
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match gameState, action with
         | GameStateDuringTurn gs, TurnActionInfo tai ->
             executeTurnAction tai gs
             |> GameStateDuringTurn
+            |> checkForGameWin
         | GameStateDuringTurn gs, EndTurn _ ->
             let tip = gs.TurnState
             let nextPlayer =
