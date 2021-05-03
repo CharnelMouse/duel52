@@ -296,22 +296,32 @@ let private getDisplayInfo gameState =
         }
 
 let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
+    let validPlayLanes =
+        match turnDisplayInfo.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {Lanes = l} ->
+            [1..List.length l]
+        | PostBaseFlipBoardKnowledge {Lanes = l} ->
+            l
+            |> List.indexed
+            |> List.choose (fun (n, lane) ->
+                match lane with
+                | ContestedLaneKnowledge _ ->
+                    Some (n + 1)
+                | WonLaneKnowledge {Controller = c} ->
+                    if c = turnDisplayInfo.CurrentPlayer then
+                        Some (n + 1)
+                    else
+                        None
+                | TiedLaneKnowledge ->
+                    None
+                )
     turnDisplayInfo.PlayerHand
     |> CountMap.toList
-    |> List.collect (fun (HandCard power) ->
-        let nLanes =
-            match turnDisplayInfo.BoardKnowledge with
-            | PreBaseFlipBoardKnowledge {Lanes = l} ->
-                List.length l
-            | PostBaseFlipBoardKnowledge {Lanes = l} ->
-                List.length l
-        [1..nLanes]
-        |> List.map (fun laneID ->
-            Play (turnDisplayInfo.CurrentPlayer, power, laneID*1<LID>)
-            |> TurnActionInfo
-            )
+    |> List.allPairs validPlayLanes
+    |> List.map (fun (lane, HandCard power) ->
+        Play (turnDisplayInfo.CurrentPlayer, power, lane*1<LID>)
+        |> TurnActionInfo
         )
-    |> List.distinct
 
 let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     let playerID = turnDisplayInfo.CurrentPlayer
