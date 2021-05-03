@@ -103,7 +103,7 @@ type TurnDisplayInfo = {
 
 type FinishedGameDisplayInfo = {
     Winner: PlayerID
-    LaneWins: (PlayerID * int) list
+    LaneWins: (PlayerID * LaneID list) list
 }
 
 type DisplayInfo =

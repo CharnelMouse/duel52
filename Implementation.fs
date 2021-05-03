@@ -283,13 +283,20 @@ let private getDisplayInfo gameState =
     | GameStateGameOver {Lanes = lanes; Winner = winner} ->
         let laneWins =
             lanes
-            |> List.choose (function
+            |> List.indexed
+            |> List.choose (fun (n, lane) ->
+                match lane with
                 | WonLane {Controller = id} ->
-                    Some id
+                    Some (id, (n + 1)*1<LID>)
                 | _ ->
                     None
                 )
-            |> List.countBy id
+            |> List.groupBy (fun (pid, lid) -> pid)
+            |> List.map (fun (key, pairs) ->
+                key,
+                pairs
+                |> List.map (fun (pid, lid) -> lid)
+                )
         FinishedGameDisplayInfo {
             Winner = winner
             LaneWins = laneWins
@@ -1200,7 +1207,7 @@ let private checkForGameWin gameState =
         | PreBaseFlipBoard _ ->
             gameState
         | PostBaseFlipBoard {Lanes = lanes} ->
-            let wonLanes =
+            let wonLaneCounts =
                 lanes
                 |> List.choose (function
                     | WonLane {Controller = c} ->
@@ -1210,7 +1217,7 @@ let private checkForGameWin gameState =
                         None
                     )
                 |> List.countBy id
-            match wonLanes with
+            match wonLaneCounts with
             | [] -> gameState
             | lst ->
                 let (leadingPlayer, leadingWins) =

@@ -150,7 +150,14 @@ let private displayOngoingGameInfo displayInfo =
         printfn "Player %i's turn" playerID
     | FinishedGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->
         printfn "Player %i wins!" winner
-        printfn "Lane wins: %A" laneWins
+        printfn "Lane wins:"
+        laneWins
+        |> List.iter (fun (pid, lanes) ->
+            lanes
+            |> List.map string
+            |> String.concat ", "
+            |> printfn "Player %i: %s" pid
+            )
 
 let private actionString action =
     match action with
