@@ -101,15 +101,20 @@ type TurnDisplayInfo = {
     OpponentHandSizes: (PlayerID * int) list
 }
 
-type FinishedGameDisplayInfo = {
+type WonGameDisplayInfo = {
     Winner: PlayerID
+    LaneWins: (PlayerID * LaneID list) list
+}
+
+type TiedGameDisplayInfo = {
     LaneWins: (PlayerID * LaneID list) list
 }
 
 type DisplayInfo =
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
-| FinishedGameDisplayInfo of FinishedGameDisplayInfo
+| WonGameDisplayInfo of WonGameDisplayInfo
+| TiedGameDisplayInfo of TiedGameDisplayInfo
 
 type AttackerInfo =
 | SingleAttacker of Power * Health
@@ -144,6 +149,7 @@ and NextActionInfo = {
 and ActionResult =
 | InProgress of DisplayInfo * NextActionInfo list
 | WonGame of DisplayInfo * PlayerID
+| TiedGame of DisplayInfo
 
 type API = {
     NewGame: unit -> ActionResult

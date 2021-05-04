@@ -148,8 +148,18 @@ let private displayOngoingGameInfo displayInfo =
     | SwitchDisplayInfo playerID ->
         Console.Clear()
         printfn "Player %i's turn" playerID
-    | FinishedGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->
+    | WonGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->
         printfn "Player %i wins!" winner
+        printfn "Lane wins:"
+        laneWins
+        |> List.iter (fun (pid, lanes) ->
+            lanes
+            |> List.map string
+            |> String.concat ", "
+            |> printfn "Player %i: %s" pid
+            )
+    | TiedGameDisplayInfo {LaneWins = laneWins} ->
+        printfn "Game tie!"
         printfn "Lane wins:"
         laneWins
         |> List.iter (fun (pid, lanes) ->
@@ -255,5 +265,7 @@ let rec private mainLoop (game: ActionResult) =
             |> mainLoop
     | WonGame (displayInfo, winnerID) ->
         winnerID |> printfn "Player %i wins"
+    | TiedGame _ ->
+        printfn "Game tie!"
 
 let startGame api = mainLoop (api.NewGame())

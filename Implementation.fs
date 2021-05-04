@@ -90,15 +90,20 @@ type private GameStateDuringTurn = {
     TurnState: TurnInProgress
 }
 
-type private GameStateGameOver = {
+type private GameStateWon = {
     Lanes: PostBaseFlipLane list
     Winner: PlayerID
+}
+
+type private GameStateTied = {
+    Lanes: PostBaseFlipLane list
 }
 
 type private GameState =
 | GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateDuringTurn of GameStateDuringTurn
-| GameStateGameOver of GameStateGameOver
+| GameStateWon of GameStateWon
+| GameStateTied of GameStateTied
 
 let rec private shuffleRec unshuffled shuffled (sampler: System.Random) =
     match unshuffled with
@@ -280,7 +285,7 @@ let private getDisplayInfo gameState =
         }
     | GameStateBetweenTurns {TurnState = ts} ->
         SwitchDisplayInfo ts.Player
-    | GameStateGameOver {Lanes = lanes; Winner = winner} ->
+    | GameStateWon {Lanes = lanes; Winner = winner} ->
         let laneWins =
             lanes
             |> List.indexed
@@ -297,8 +302,28 @@ let private getDisplayInfo gameState =
                 pairs
                 |> List.map (fun (pid, lid) -> lid)
                 )
-        FinishedGameDisplayInfo {
+        WonGameDisplayInfo {
             Winner = winner
+            LaneWins = laneWins
+        }
+    | GameStateTied {Lanes = lanes} ->
+        let laneWins =
+            lanes
+            |> List.indexed
+            |> List.choose (fun (n, lane) ->
+                match lane with
+                | WonLane {Controller = id} ->
+                    Some (id, (n + 1)*1<LID>)
+                | _ ->
+                    None
+                )
+            |> List.groupBy (fun (pid, lid) -> pid)
+            |> List.map (fun (key, pairs) ->
+                key,
+                pairs
+                |> List.map (fun (pid, lid) -> lid)
+                )
+        TiedGameDisplayInfo {
             LaneWins = laneWins
         }
 
@@ -632,7 +657,8 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
             @ (getPairActionsInfo turnDisplayInfo)
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
-    | FinishedGameDisplayInfo _ ->
+    | WonGameDisplayInfo _
+    | TiedGameDisplayInfo _ ->
         List.empty
 
 let private incInPreLane card playerID (lane: PreBaseFlipLane) =
@@ -1200,7 +1226,7 @@ let private readyAllActiveCards cardsState =
             PostBaseFlipBoard {pbfb with Lanes = newLanes}
     {cardsState with Board = newBoard}
 
-let private checkForGameWin gameState =
+let private checkForGameEnd gameState =
     match gameState with
     | GameStateDuringTurn {CardsState = cs} ->
         match cs.Board with
@@ -1224,11 +1250,24 @@ let private checkForGameWin gameState =
                     lst
                     |> List.maxBy (fun (_, n) -> n)
                 if leadingWins >= 2 then
-                    GameStateGameOver {Winner = leadingPlayer; Lanes = lanes}
+                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
                 else
-                    gameState
+                    let contestedLanes =
+                        lanes
+                        |> List.filter (function
+                            | ContestedLane _ ->
+                                true
+                            | WonLane _
+                            | TiedLane ->
+                                false
+                            )
+                    if List.isEmpty contestedLanes then
+                        GameStateTied {Lanes = lanes}
+                    else
+                        gameState
     | GameStateBetweenTurns _
-    | GameStateGameOver _ ->
+    | GameStateWon _
+    | GameStateTied _ ->
         gameState
 
 let rec private makeNextActionInfo gameState action =
@@ -1237,7 +1276,7 @@ let rec private makeNextActionInfo gameState action =
         | GameStateDuringTurn gs, TurnActionInfo tai ->
             executeTurnAction tai gs
             |> GameStateDuringTurn
-            |> checkForGameWin
+            |> checkForGameEnd
         | GameStateDuringTurn gs, EndTurn _ ->
             let tip = gs.TurnState
             let nextPlayer =
