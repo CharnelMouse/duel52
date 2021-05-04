@@ -250,9 +250,9 @@ let rec private getValidInput nActions =
         getValidInput nActions
 
 let rec private mainLoop (game: ActionResult) =
-    printfn "\n--------------------\n"
     match game with
     | InProgress (displayInfo, nextActions) ->
+        printfn "\n--------------------\n"
         displayOngoingGameInfo displayInfo
         printfn ""
         displayNextActionsInfo nextActions
@@ -263,9 +263,7 @@ let rec private mainLoop (game: ActionResult) =
         | UseAction n ->
             nextActions.[n].Capability()
             |> mainLoop
-    | WonGame (displayInfo, winnerID) ->
-        winnerID |> printfn "Player %i wins"
-    | TiedGame _ ->
-        printfn "Game tie!"
+    | Exit ->
+        ()
 
 let startGame api = mainLoop (api.NewGame())

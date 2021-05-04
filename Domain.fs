@@ -148,8 +148,7 @@ and NextActionInfo = {
 }
 and ActionResult =
 | InProgress of DisplayInfo * NextActionInfo list
-| WonGame of DisplayInfo * PlayerID
-| TiedGame of DisplayInfo
+| Exit
 
 type API = {
     NewGame: unit -> ActionResult
