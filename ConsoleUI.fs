@@ -102,6 +102,7 @@ let private displayDiscardKnowledge discardKnowledge =
         |> CountMap.iter displayKnownDeadCard
 
 let private displayOngoingGameInfo displayInfo =
+    Console.Clear()
     match displayInfo with
     | TurnDisplayInfo tdi ->
         let {
@@ -146,7 +147,6 @@ let private displayOngoingGameInfo displayInfo =
                 printfn "\nDiscard pile:"
                 displayDiscardKnowledge dk
     | SwitchDisplayInfo playerID ->
-        Console.Clear()
         printfn "Player %i's turn" playerID
     | WonGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->
         printfn "Player %i wins!" winner
@@ -252,7 +252,6 @@ let rec private getValidInput nActions =
 let rec private mainLoop (game: ActionResult) =
     match game with
     | InProgress (displayInfo, nextActions) ->
-        printfn "\n--------------------\n"
         displayOngoingGameInfo displayInfo
         printfn ""
         displayNextActionsInfo nextActions
