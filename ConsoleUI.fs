@@ -2,30 +2,37 @@ module ConsoleUI
 open System
 open Domain
 
+let private deparsePower power =
+    match power with
+    | ActivationPower p ->
+        string p
+    | PassivePower p ->
+        string p
+
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard playerID ->
         ()
     | KnownBaseCard (playerID, power) ->
-        printfn "Player %i: %A" playerID power
+        printfn "Player %i: %s" playerID (deparsePower power)
 
 let private displayTroopKnowledge currentPlayer troopKnowledge n =
     match troopKnowledge with
     | UnknownInactiveCardKnowledge (playerID, health, knownBy) ->
         printfn "Player %i, (%i) Inactive, %i health" playerID n health
     | KnownInactiveCardKnowledge (playerID, power, health, knownBy) ->
-        printfn "Player %i, (%i) Inactive %A, %i health" playerID n power health
+        printfn "Player %i, (%i) Inactive %s, %i health" playerID n (deparsePower power) health
     // later will need cases for active/pair when card is frozen
     | ActiveCardKnowledge (playerID, power, health, readiness) ->
         if playerID = currentPlayer then
-            printfn "Player %i, (%i) %A %A, %i health" playerID n readiness power health
+            printfn "Player %i, (%i) %A %s, %i health" playerID n readiness (deparsePower power) health
         else
-            printfn "Player %i, (%i) %A, %i health" playerID n power health
+            printfn "Player %i, (%i) %s, %i health" playerID n (deparsePower power) health
     | PairKnowledge (playerID, power, health1, health2, readiness) ->
         if playerID = currentPlayer then
-            printfn "Player %i, (%i) %A %A pair: health %i and %i" playerID n readiness power health1 health2
+            printfn "Player %i, (%i) %A %s pair: health %i and %i" playerID n readiness (deparsePower power) health1 health2
         else
-            printfn "Player %i, (%i) %A pair: health %i and %i" playerID n power health1 health2
+            printfn "Player %i, (%i) %s pair: health %i and %i" playerID n (deparsePower power) health1 health2
 
 let private displayTroopKnowledges currentPlayer =
     CountMap.iter (displayTroopKnowledge currentPlayer)
@@ -71,7 +78,7 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     |> List.iter (displayPostLaneKnowledge currentPlayer)
 
 let private displayHandCard (HandCard power) n =
-    printfn "(%i) %A" n power
+    printfn "(%i) %s" n (deparsePower power)
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -81,8 +88,8 @@ let private displayOpponentHandSize (id, size) =
 
 let private displayKnownDeadCard knownDeadCard n =
     match knownDeadCard with
-    | KnownFaceDownDeadCard power -> printfn "(%i) %A, face-down" n power
-    | KnownFaceUpDeadCard power -> printfn "(%i) %A, face-up" n power
+    | KnownFaceDownDeadCard power -> printfn "(%i) %s, face-down" n (deparsePower power)
+    | KnownFaceUpDeadCard power -> printfn "(%i) %s, face-up" n (deparsePower power)
 
 let private displayDiscardKnowledge discardKnowledge =
     let (unknown, known) = 
@@ -172,23 +179,23 @@ let private displayOngoingGameInfo displayInfo =
 let private actionString action =
     match action with
     | TurnActionInfo (Play (_, power, laneID)) ->
-        "Play " + string power
+        "Play " + deparsePower power
         + " to lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget (health, knownBy))) ->
         "Activate " + "unknown card"
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health, knownBy))) ->
-        "Activate " + string power
+        "Activate " + deparsePower power
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
     | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
         let attackerText =
             match attackerInfo with
             | SingleAttacker (power, health) ->
-                string power + " (" + string health + " HP)"
+                deparsePower power + " (" + string health + " HP)"
             | DoubleAttacker (power, health1, health2) ->
-                string power + " (" + string health1 + ", " + string health2 + " HP)"
+                deparsePower power + " (" + string health1 + ", " + string health2 + " HP)"
         let targetText =
             match targetInfo with
             | UnknownInactiveTarget (pid, h) ->
@@ -197,22 +204,22 @@ let private actionString action =
                 + " in lane " + string laneID
             | KnownInactiveTarget (pid, p, h) ->
                 "player " + string pid + "'s"
-                + " inactive " + string p
+                + " inactive " + deparsePower p
                 + " (" + string h + " HP)"
                 + " in lane " + string laneID
             | ActiveSingleTarget (pid, p, h) ->
                 "player " + string pid + "'s"
-                + " active " + string p
+                + " active " + deparsePower p
                 + " (" + string h + " HP)"
                 + " in lane " + string laneID
             | ActivePairMemberTarget (pid, p, h1, h2) ->
                 "player " + string pid + "'s"
-                + " " + string p + " pair member"
+                + " " + deparsePower p + " pair member"
                 + " (" + string h1 + " HP, partner " + string h2 + ")"
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
     | TurnActionInfo (CreatePair (_, laneID, power, (health1, readiness1), (health2, readiness2))) ->
-        "Create " + string power + " pair"
+        "Create " + deparsePower power + " pair"
         + " in lane " + string laneID
         + " from " + string readiness1 + " " + string health1 + " HP"
         + " and " + string readiness2 + " " + string health2 + " HP"

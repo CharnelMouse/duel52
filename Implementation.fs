@@ -125,22 +125,22 @@ let private shuffle lst =
 
 let private createUnshuffledDeck () =
     [
-        View
-        Trap
-        Foresight
-        Flip
-        Freeze
-        Heal
-        Retaliate
-        Nimble
-        TwinStrike
-        Taunt
-        Vampiric
-        Move
-        Empower
-        Action
+        ActivationPower View
+        ActivationPower Trap
+        ActivationPower Foresight
+        ActivationPower Flip
+        ActivationPower Freeze
+        ActivationPower Heal
+        PassivePower Retaliate
+        PassivePower Nimble
+        PassivePower TwinStrike
+        PassivePower Taunt
+        PassivePower Vampiric
+        ActivationPower Move
+        ActivationPower Empower
+        ActivationPower Action
     ]
-    |> List.filter (fun power -> power <> Vampiric)
+    |> List.filter (fun power -> power <> PassivePower Vampiric)
     |> List.collect (List.replicate 4)
 
 let private prepareHead fn n lst =

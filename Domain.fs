@@ -1,20 +1,26 @@
 namespace Domain
 
-type Power =
+type ActivationPower =
 | View
 | Trap
 | Foresight
 | Flip
 | Freeze
 | Heal
+| Move
+| Empower
+| Action
+
+type PassivePower =
 | Retaliate
 | Nimble
 | TwinStrike
 | Taunt
 | Vampiric // replaces Trap and Foresight in solo mode
-| Move
-| Empower
-| Action
+
+type Power =
+| ActivationPower of ActivationPower
+| PassivePower of PassivePower
 
 [<Measure>] type health
 [<Measure>] type PID
