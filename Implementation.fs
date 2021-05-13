@@ -332,20 +332,7 @@ let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
         | PreBaseFlipBoardKnowledge {Lanes = l} ->
             [1..List.length l]
         | PostBaseFlipBoardKnowledge {Lanes = l} ->
-            l
-            |> List.indexed
-            |> List.choose (fun (n, lane) ->
-                match lane with
-                | ContestedLaneKnowledge _ ->
-                    Some (n + 1)
-                | WonLaneKnowledge {Controller = c} ->
-                    if c = turnDisplayInfo.CurrentPlayer then
-                        Some (n + 1)
-                    else
-                        None
-                | TiedLaneKnowledge ->
-                    None
-                )
+            [1..List.length l]
     turnDisplayInfo.PlayerHand
     |> CountMap.toList
     |> List.allPairs validPlayLanes
@@ -676,10 +663,17 @@ let private incInPostLane card playerID lane =
             wl with
                 Troops = moveTo wl.Troops
             }
-    | WonLane _ ->
-        failwithf "can't play cards in a lost lane"
+    | WonLane {Troops = troops} ->
+        ContestedLane {
+                Troops = moveTo troops
+            }
     | TiedLane ->
-        failwithf "can't play cards in a tied lane"                                
+        ContestedLane {
+            Troops =
+                List.empty
+                |> CountMap.ofList
+                |> moveTo
+            }
 
 let private decInPreLane card playerID (lane: PreBaseFlipLane) =
     let dec = CountMap.dec card
@@ -699,9 +693,9 @@ let private decInPostLane card playerID (lane: PostBaseFlipLane) =
                 Troops = dec wl.Troops
             }
     | WonLane _ ->
-        failwithf "can't play cards in a lost lane"
+        failwithf "can't remove non-existant cards"
     | TiedLane ->
-        failwithf "can't play cards in a tied lane"                                
+        failwithf "can't remove non-existant cards"
 
 let private changeInPreLane before after (lane: PreBaseFlipLane) =
     let f = (CountMap.dec before) >> (CountMap.inc after)
@@ -1028,7 +1022,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                 match lane with
                     | WonLane _
                     | TiedLane ->
-                        failwithf "can't resolve attack in completed lane"
+                        failwithf "can't resolve attack in completed or tied lane"
                     | ContestedLane cl ->
                         let troops = cl.Troops
                         let attacker, attackerAfter, target, targetAfter, deadCard =
