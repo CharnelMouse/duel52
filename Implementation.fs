@@ -155,9 +155,8 @@ let private createLane bases = {
 let private prepareLanes nLanes lst =
     lst
     |> List.splitInto nLanes
-    |> List.map (fun lst ->
-        lst
-        |> List.mapi (fun playerIndex power ->
+    |> List.map (
+        List.mapi (fun playerIndex power ->
             Base ((playerIndex + 1)*1<PID>, power, [])
             )
         )
@@ -169,19 +168,19 @@ let private prepareHands nPlayers lst =
     |> List.mapi (fun playerIndex lst ->
         (playerIndex + 1)*1<PID>,
         lst
-        |> List.map (fun power -> HandCard power)
+        |> List.map HandCard
         |> CountMap.ofList
         )
 
 let private prepareRemoved lst =
     lst
-    |> List.map (fun power -> RemovedCard power)
+    |> List.map RemovedCard
     |> CountMap.ofList
 
 let private prepareDrawPile lst =
     let drawCards =
         lst
-        |> List.map (fun power -> DrawCard power)
+        |> List.map DrawCard
     {TopCard = List.head drawCards; Rest = List.tail drawCards}
 
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
@@ -238,11 +237,11 @@ let private getDisplayInfo gameState =
                 let lanesKnowledge =
                     l
                     |> List.map (fun {Bases = bases; Troops = troops} ->
-                            {
-                                Bases = List.map getBase bases
-                                Troops =
-                                    CountMap.map getTroop troops
-                                } : PreBaseFlipLaneKnowledge
+                        {
+                            Bases = List.map getBase bases
+                            Troops =
+                                CountMap.map getTroop troops
+                            } : PreBaseFlipLaneKnowledge
                         )
                 let drawPileSize = 1 + List.length dp.Rest
                 let discardKnowledge = CountMap.map getDeadCard d
@@ -513,8 +512,7 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
             let possibleTargets =
                 troops
                 |> CountMap.keyList
-                |> List.collect (fun troop ->
-                    match troop with
+                |> List.collect (function
                     | UnknownInactiveCardKnowledge (pid, h, _) ->
                         if pid = playerID then
                             []
@@ -665,7 +663,7 @@ let private incInPreLane card playerID (lane: PreBaseFlipLane) =
     let moveTo = CountMap.inc card
     {lane with Troops = moveTo lane.Troops}
 
-let private incInPostLane card playerID (lane: PostBaseFlipLane) =
+let private incInPostLane card playerID lane =
     let moveTo = CountMap.inc card
     match lane with
     | ContestedLane cl ->
@@ -916,8 +914,7 @@ let private executeTurnAction (action: TurnActionInfo) (gameState: GameStateDuri
                     let firstValidPower =
                         troops
                         |> CountMap.keyList
-                        |> List.choose (fun troop ->
-                            match troop with
+                        |> List.choose (function
                             | InactiveCard (pid, p, h, kb)
                                 when h = health && pid = playerID && kb = knownBy ->
                                 Some p
