@@ -1252,7 +1252,10 @@ let private checkForGameEnd gameState =
                             | TiedLane ->
                                 false
                             )
-                    if List.isEmpty contestedLanes then
+                    let nCardsInHands =
+                        cs.Hands
+                        |> List.fold (fun n (pid, hand) -> n + CountMap.count hand) 0
+                    if List.isEmpty contestedLanes && nCardsInHands = 0 then
                         GameStateTied {Lanes = lanes}
                     else
                         gameState
