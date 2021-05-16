@@ -651,10 +651,16 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
         if turnDisplayInfo.ActionsLeft = 0 then
             EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
         else
-            getPlayActionsInfo turnDisplayInfo
-            @ (getActivateActionsInfo turnDisplayInfo)
-            @ (getAttackActionsInfo turnDisplayInfo)
-            @ (getPairActionsInfo turnDisplayInfo)
+            let actions =
+                getPlayActionsInfo turnDisplayInfo
+                @ (getActivateActionsInfo turnDisplayInfo)
+                @ (getAttackActionsInfo turnDisplayInfo)
+                @ (getPairActionsInfo turnDisplayInfo)
+            if List.isEmpty actions then
+                EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
+            else
+                actions
+
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
     | WonGameDisplayInfo _
