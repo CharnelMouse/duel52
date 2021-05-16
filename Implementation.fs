@@ -660,7 +660,6 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
                 EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
             else
                 actions
-
     | SwitchDisplayInfo playerID ->
         StartTurn playerID |> List.singleton
     | WonGameDisplayInfo _
