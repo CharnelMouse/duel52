@@ -7,6 +7,8 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Bases become activatable when the draw pile empties.
 - Lanes and lanes can be won, or tied.
   - Lost/tied lanes can still be played into if a player has cards in their hands, making them contested again.
+  - "As long as you have cards in your hand, the lanes are still 'alive', and you can play cards into them."
+  - I'm not sure what the implication is if you win a lane, everyone (except you) has an empty hand, and you move your last card out of the lane.
 - Card abilities remaining to implement:
   - View
   - Trap
