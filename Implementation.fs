@@ -29,21 +29,11 @@ type private PreBaseFlipLane = {
     Troops: CountMap.CountMap<Troop>
 }
 
-type private ContestedLane = {
+type private PostBaseFlipLane = {
     Troops: CountMap.CountMap<Troop>
 }
 
-type private WonLane = {
-    Controller: PlayerID
-    Troops: CountMap.CountMap<Troop>
-}
-
-type private PostBaseFlipLane =
-| ContestedLane of ContestedLane
-| WonLane of WonLane
-| TiedLane
-
-let private postBaseFlipLane troops =
+let private laneControl troops =
     let playerCounts =
         troops
         |> CountMap.keyList
@@ -54,9 +44,9 @@ let private postBaseFlipLane troops =
                 playerID
             )
     match playerCounts with
-    | [] -> TiedLane
-    | [(controller, _)] -> WonLane {Controller = controller; Troops = troops}
-    | _ -> ContestedLane {Troops = troops}
+    | [] -> None
+    | [(controller, _)] -> Some controller
+    | _ -> None
 
 type private Discard = CountMap.CountMap<DeadCard>
 
@@ -268,20 +258,19 @@ let private getDisplayInfo gameState =
             | PostBaseFlipBoard {Lanes = l; Discard = d} ->
                 let lanesKnowledge =
                     l
-                    |> List.map (function
-                        | ContestedLane {Troops = troops} ->
+                    |> List.map (fun {Troops = troops} ->
+                        match (laneControl troops) with
+                        | None ->
                             ContestedLaneKnowledge {
                                 Troops =
                                     CountMap.map getTroop troops
                                 }
-                        | WonLane {Controller = c; Troops = troops} ->
+                        | Some c ->
                             WonLaneKnowledge {
                                 Controller = c
                                 Troops =
                                     CountMap.map getTroop troops
                                 }
-                        | TiedLane ->
-                            TiedLaneKnowledge
                         )
                 let discardKnowledge = CountMap.map getDeadCard d
                 PostBaseFlipBoardKnowledge {
@@ -304,8 +293,8 @@ let private getDisplayInfo gameState =
             lanes
             |> List.indexed
             |> List.choose (fun (n, lane) ->
-                match lane with
-                | WonLane {Controller = id} ->
+                match laneControl lane.Troops with
+                | Some id ->
                     Some (id, (n + 1)*1<LID>)
                 | _ ->
                     None
@@ -325,10 +314,10 @@ let private getDisplayInfo gameState =
             lanes
             |> List.indexed
             |> List.choose (fun (n, lane) ->
-                match lane with
-                | WonLane {Controller = id} ->
+                match laneControl lane.Troops with
+                | Some id ->
                     Some (id, (n + 1)*1<LID>)
-                | _ ->
+                | None ->
                     None
                 )
             |> List.groupBy (fun (pid, lid) -> pid)
@@ -431,8 +420,7 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         None
                     )
                 |> CountMap.keyList
-            | WonLaneKnowledge _
-            | TiedLaneKnowledge ->
+            | WonLaneKnowledge _ ->
                 []
             )
 
@@ -615,8 +603,7 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     Attack (playerID, laneID, attacker, target)
                     |> TurnActionInfo
                     )
-            | WonLaneKnowledge _
-            | TiedLaneKnowledge _ ->
+            | WonLaneKnowledge _ ->
                 []
             )
 
@@ -640,8 +627,7 @@ let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 getPairActionsInfoFromTroops playerID laneID troops
             | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
                 getPairActionsInfoFromTroops playerID laneID troops
-            | WonLaneKnowledge _
-            | TiedLaneKnowledge ->
+            | WonLaneKnowledge _ ->
                 []
             )
 
@@ -672,50 +658,13 @@ let private incInPreLane card playerID (lane: PreBaseFlipLane) =
 
 let private incInPostLane card playerID lane =
     let moveTo = CountMap.inc card
-    match lane with
-    | ContestedLane cl ->
-        ContestedLane {
-            cl with
-                Troops = moveTo cl.Troops
-            }
-    | WonLane wl when wl.Controller = playerID ->
-        WonLane {
-            wl with
-                Troops = moveTo wl.Troops
-            }
-    | WonLane {Troops = troops} ->
-        ContestedLane {
-                Troops = moveTo troops
-            }
-    | TiedLane ->
-        ContestedLane {
-            Troops =
-                List.empty
-                |> CountMap.ofList
-                |> moveTo
-            }
+    {Troops = moveTo lane.Troops}
 
 let private decInPreLane card playerID (lane: PreBaseFlipLane) =
-    let dec = CountMap.dec card
-    {lane with Troops = dec lane.Troops}
+    {lane with Troops = CountMap.dec card lane.Troops}
 
 let private decInPostLane card playerID (lane: PostBaseFlipLane) =
-    let dec = CountMap.dec card
-    match lane with
-    | ContestedLane cl ->
-        ContestedLane {
-            cl with
-                Troops = dec cl.Troops
-            }
-    | WonLane wl when wl.Controller = playerID ->
-        WonLane {
-            wl with
-                Troops = dec wl.Troops
-            }
-    | WonLane _ ->
-        failwithf "can't remove non-existant cards"
-    | TiedLane ->
-        failwithf "can't remove non-existant cards"
+    {lane with Troops = CountMap.dec card lane.Troops}
 
 let private changeInPreLane before after (lane: PreBaseFlipLane) =
     let f = (CountMap.dec before) >> (CountMap.inc after)
@@ -897,14 +846,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
             (List.item (int laneID - 1) lanes).Troops
         | PostBaseFlipBoard {Lanes = lanes} ->
             let lane = List.item (int laneID - 1) lanes
-            match lane with
-            | ContestedLane {Troops = troops} ->
-                troops
-            | WonLane {Controller = c; Troops = troops} when playerID = c ->
-                troops
-            | WonLane _
-            | TiedLane ->
-                failwithf "Can't activate troops in a lost or tied lane"
+            lane.Troops
     let oldCard, newCard =
         match activationTarget with
         | UnknownActivationTarget (health, knownBy) ->
@@ -963,16 +905,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                 pbfb.Lanes
                 |> List.mapi (fun n lane ->
                     if (n + 1)*1<LID> = laneID then
-                        match lane with
-                        | ContestedLane _ ->
-                            ContestedLane {Troops = newTroops}
-                        | WonLane {Controller = c} ->
-                            WonLane {
-                                Controller = c
-                                Troops = newTroops
-                                }
-                        | TiedLane ->
-                            failwithf "Can't change troops in a tied lane"
+                        {Troops = newTroops}
                     else
                         lane
                 )
@@ -1023,45 +956,41 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
         {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
     | PostBaseFlipBoard {Lanes = lanes; Discard = discard} ->
         let lane = List.item (int laneID - 1) lanes
-        match lane with
-            | WonLane _
-            | TiedLane ->
-                failwithf "can't resolve attack in completed or tied lane"
-            | ContestedLane {Troops = troops} ->
-                let attacker, attackerAfter, target, targetAfter, deadCard =
-                    getAttackTroops troops playerID attackerInfo targetInfo
-                let newTroops =
-                    match targetAfter with
-                    | Some ta ->
-                        troops
-                        |> CountMap.dec attacker
-                        |> CountMap.inc attackerAfter
-                        |> CountMap.dec target
-                        |> CountMap.inc ta
-                    | None ->
-                        troops
-                        |> CountMap.dec attacker
-                        |> CountMap.inc attackerAfter
-                        |> CountMap.dec target
-                let newLane = postBaseFlipLane newTroops
-                let newDiscard =
-                    match deadCard with
-                    | Some dc ->
-                        discard
-                        |> CountMap.inc dc
-                    | None -> discard
-                let newBoard = PostBaseFlipBoard {
-                        Lanes =
-                            lanes
-                            |> List.mapi (fun n ln ->
-                                if n = int laneID - 1 then
-                                    newLane
-                                else
-                                    ln
-                                )
-                        Discard = newDiscard
-                        }
-                {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
+        let troops = lane.Troops
+        let attacker, attackerAfter, target, targetAfter, deadCard =
+            getAttackTroops troops playerID attackerInfo targetInfo
+        let newTroops =
+            match targetAfter with
+            | Some ta ->
+                troops
+                |> CountMap.dec attacker
+                |> CountMap.inc attackerAfter
+                |> CountMap.dec target
+                |> CountMap.inc ta
+            | None ->
+                troops
+                |> CountMap.dec attacker
+                |> CountMap.inc attackerAfter
+                |> CountMap.dec target
+        let newLane = {Troops = newTroops}
+        let newDiscard =
+            match deadCard with
+            | Some dc ->
+                discard
+                |> CountMap.inc dc
+            | None -> discard
+        let newBoard = PostBaseFlipBoard {
+                Lanes =
+                    lanes
+                    |> List.mapi (fun n ln ->
+                        if n = int laneID - 1 then
+                            newLane
+                        else
+                            ln
+                        )
+                Discard = newDiscard
+                }
+        {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
 
 let private executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState =
     let single1 = ActiveCard (playerID, power, health1, readiness1)
@@ -1134,7 +1063,7 @@ let private flipBasesOnLane lane =
     let newTroops =
         baseTroops
         |> List.fold (fun cm troop -> CountMap.inc troop cm) lane.Troops
-    postBaseFlipLane newTroops
+    {Troops = newTroops}
 
 let private flipBasesOnBoard lanes discard =
     PostBaseFlipBoard {
@@ -1222,13 +1151,8 @@ let private readyAllActiveCards cardsState =
         | PostBaseFlipBoard pbfb ->
             let newLanes =
                 pbfb.Lanes
-                |> List.map (function
-                    | ContestedLane {Troops = troops} ->
-                        ContestedLane {Troops = readyTroops troops}
-                    | WonLane {Controller = c; Troops = troops} ->
-                        WonLane {Controller = c; Troops = readyTroops troops}
-                    | TiedLane ->
-                        TiedLane
+                |> List.map (fun {Troops = troops} ->
+                        {Troops = readyTroops troops}
                     )
             PostBaseFlipBoard {pbfb with Lanes = newLanes}
     {cardsState with Board = newBoard}
@@ -1242,12 +1166,8 @@ let private checkForGameEnd gameState =
         | PostBaseFlipBoard {Lanes = lanes} ->
             let wonLaneCounts =
                 lanes
-                |> List.choose (function
-                    | WonLane {Controller = c} ->
-                        Some c
-                    | ContestedLane _
-                    | TiedLane ->
-                        None
+                |> List.choose (fun {Troops = troops} ->
+                    laneControl troops
                     )
                 |> List.countBy id
             match wonLaneCounts with
@@ -1261,11 +1181,13 @@ let private checkForGameEnd gameState =
                 else
                     let contestedLanes =
                         lanes
-                        |> List.filter (function
-                            | ContestedLane _ ->
+                        |> List.filter (fun {Troops = troops} ->
+                            match laneControl troops, CountMap.isEmpty troops with
+                            | None, false ->
                                 true
-                            | WonLane _
-                            | TiedLane ->
+                            | None, true
+                            | Some _, false // shouldn't happen?
+                            | Some _, true ->
                                 false
                             )
                     let nCardsInHands =

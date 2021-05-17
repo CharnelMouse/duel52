@@ -80,7 +80,6 @@ type WonLaneKnowledge = {
 type PostBaseFlipLaneKnowledge =
 | ContestedLaneKnowledge of ContestedLaneKnowledge
 | WonLaneKnowledge of WonLaneKnowledge
-| TiedLaneKnowledge
 
 type DiscardKnowledge = CountMap.CountMap<DeadCardKnowledge>
 

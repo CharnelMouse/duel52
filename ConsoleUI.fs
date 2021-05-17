@@ -63,8 +63,6 @@ let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKn
             printfn "Troops"
             troops
             |> (displayTroopKnowledges currentPlayer)
-    | TiedLaneKnowledge ->
-        printfn "Lane %i (tied)" (n + 1)
     printfn ""
 
 let private displayPreLaneKnowledges currentPlayer laneKnowledges =
