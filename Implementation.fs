@@ -1,7 +1,6 @@
 module Implementation
 open Domain
 
-type private DrawCard = DrawCard of Power
 type private Base = PlayerID * Power * KnownBy
 type private InactiveCard = PlayerID * Power * Health * KnownBy
 type private ActiveCard = PlayerID * Power * Health * Readiness
@@ -20,8 +19,8 @@ type private Troop =
 | Pair of Pair
 
 type private DrawPile = {
-    TopCard: DrawCard
-    Rest: DrawCard list
+    TopCard: CardID
+    Rest: CardID list
     }
 
 type private PreBaseFlipLane = {
@@ -68,6 +67,7 @@ type private Board =
 type private CardsState = {
     Board: Board
     Hands: (PlayerID * Hand) list
+    CardPowers: Map<CardID, Power>
     Removed: CountMap.CountMap<RemovedCard>
 }
 
@@ -147,6 +147,8 @@ let private createUnshuffledDeck () =
     ]
     |> List.filter (fun power -> power <> PassivePower Vampiric)
     |> List.collect (List.replicate 4)
+    |> List.indexed
+    |> List.map (fun (index, power) -> index*1<CID>, power)
 
 let private prepareHead fn n lst =
     let h, t = List.splitAt n lst
@@ -161,7 +163,7 @@ let private prepareLanes nLanes lst =
     lst
     |> List.splitInto nLanes
     |> List.map (
-        List.mapi (fun playerIndex power ->
+        List.mapi (fun playerIndex (index, power) ->
             Base ((playerIndex + 1)*1<PID>, power, [])
             )
         )
@@ -173,20 +175,21 @@ let private prepareHands nPlayers lst =
     |> List.mapi (fun playerIndex lst ->
         (playerIndex + 1)*1<PID>,
         lst
-        |> List.map HandCard
+        |> List.map (fun (index, power) -> HandCard power)
         |> CountMap.ofList
         )
 
 let private prepareRemoved lst =
     lst
-    |> List.map RemovedCard
+    |> List.map (fun (index, power) -> RemovedCard power)
     |> CountMap.ofList
 
 let private prepareDrawPile lst =
-    let drawCards =
-        lst
-        |> List.map DrawCard
-    {TopCard = List.head drawCards; Rest = List.tail drawCards}
+    lst
+    |> List.map (fun (index, power) -> index)
+    |> function
+    | h :: t -> {TopCard = h; Rest = t}
+    | [] -> failwithf "can't prepare a draw pile with no cards"
 
 let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
     let (ownerID, power, knownBy) = baseCard
@@ -1080,8 +1083,9 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
         match drawPile.Rest with
         | [] ->
             let newHandCard =
-                match drawPile.TopCard with
-                | DrawCard power -> HandCard power
+                cardsState.CardPowers
+                |> Map.find drawPile.TopCard
+                |> HandCard
             let newHands =
                 cardsState.Hands
                 |> List.map (fun (pid, h) ->
@@ -1096,11 +1100,11 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                     Board = flipBasesOnBoard pbfb.Lanes pbfb.Discard
                 }
             {gameState with CardsState = newCards}
-        | h :: t ->
-            let newTopCard, newRest = h, t
+        | newTopCard :: newRest ->
             let newHandCard =
-                match drawPile.TopCard with
-                | DrawCard power -> HandCard power
+                cardsState.CardPowers
+                |> Map.find drawPile.TopCard
+                |> HandCard
             let newHands =
                 hands
                 |> List.map (fun (pid, h) ->
@@ -1256,6 +1260,7 @@ let private createGame nPlayers nLanes =
     let shuffledDeck =
         createUnshuffledDeck()
         |> shuffle
+    let cardPowers = Map.ofList shuffledDeck
     let lanes, notBaseCards =
         shuffledDeck
         |> prepareHead (prepareLanes nLanes) (nPlayers*nLanes)
@@ -1274,6 +1279,7 @@ let private createGame nPlayers nLanes =
                 Discard = Map.empty
                 }
             Hands = hands
+            CardPowers = cardPowers
             Removed = removed
             }
         TurnState = {

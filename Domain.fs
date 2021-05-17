@@ -25,10 +25,12 @@ type Power =
 [<Measure>] type health
 [<Measure>] type PID
 [<Measure>] type TID
+[<Measure>] type CID
 [<Measure>] type LID
 
 type PlayerID = int<PID>
 type TroopID = int<TID>
+type CardID = int<CID>
 type LaneID = int<LID>
 type Health = int<health>
 type KnownBy = int<PID> list
