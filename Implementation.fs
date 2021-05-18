@@ -9,7 +9,6 @@ type private FaceUpDeadCard = Power
 type private DeadCard =
 | FaceDownDeadCard of FaceDownDeadCard
 | FaceUpDeadCard of FaceUpDeadCard
-type private RemovedCard = RemovedCard of Power
 
 type private Pair = PlayerID * Power * (Health * Readiness) * (Health * Readiness)
 
@@ -68,7 +67,7 @@ type private CardsState = {
     Board: Board
     Hands: (PlayerID * Hand) list
     CardPowers: Map<CardID, Power>
-    Removed: CountMap.CountMap<RemovedCard>
+    Removed: CardID Set
 }
 
 type private PlayerReady = {
@@ -181,8 +180,8 @@ let private prepareHands nPlayers lst =
 
 let private prepareRemoved lst =
     lst
-    |> List.map (fun (index, power) -> RemovedCard power)
-    |> CountMap.ofList
+    |> List.map (fun (index, power) -> index)
+    |> Set.ofList
 
 let private prepareDrawPile lst =
     lst
