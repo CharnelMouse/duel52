@@ -1,7 +1,6 @@
 module Implementation
 open Domain
 
-type private Base = PlayerID * Power * KnownBy
 type private InactiveCard = PlayerID * Power * Health * KnownBy
 type private ActiveCard = PlayerID * Power * Health * Readiness
 type private FaceDownDeadCard = Power * KnownBy
@@ -23,7 +22,7 @@ type private DrawPile = {
     }
 
 type private PreBaseFlipLane = {
-    Bases: Base list
+    BasesTable: Map<PlayerID, (CardID * KnownBy)>
     Troops: CountMap.CountMap<Troop>
 }
 
@@ -127,7 +126,7 @@ let private shuffle lst =
     let sampler = System.Random()
     shuffleRec lst [] sampler
 
-let private createUnshuffledDeck () =
+let private createUnshuffledPowerDeck () =
     [
         ActivationPower View
         ActivationPower Trap
@@ -146,52 +145,49 @@ let private createUnshuffledDeck () =
     ]
     |> List.filter (fun power -> power <> PassivePower Vampiric)
     |> List.collect (List.replicate 4)
-    |> List.indexed
-    |> List.map (fun (index, power) -> index*1<CID>, power)
 
 let private prepareHead fn n lst =
     let h, t = List.splitAt n lst
     fn h, t
 
-let private createLane bases = {
-    Bases = bases
-    Troops = Map.empty
-} 
+let private createLane (basesInfo: (PlayerID * (CardID * KnownBy)) list) =
+    {
+        BasesTable = Map.ofList basesInfo
+        Troops = Map.empty
+    }
+
+let private prepareLane lst =
+    let playerIDs =
+        [1..List.length lst]
+        |> List.map (fun n -> n*1<PID>)
+    lst
+    |> List.zip playerIDs
+    |> List.map (fun (playerIndex, index) -> playerIndex, (index, []))
+    |> createLane
 
 let private prepareLanes nLanes lst =
     lst
     |> List.splitInto nLanes
-    |> List.map (
-        List.mapi (fun playerIndex (index, power) ->
-            Base ((playerIndex + 1)*1<PID>, power, [])
-            )
-        )
-    |> List.map createLane
+    |> List.map prepareLane
 
 let private prepareHands nPlayers lst =
-    let cardIDs =
-        lst
-        |> List.map (fun (index, power) -> index)
     let playerIDs =
         [1..nPlayers]
         |> List.map (fun n -> n*1<PID>)
         |> List.collect (List.replicate 5)
-    List.zip cardIDs playerIDs
+    List.zip lst playerIDs
     |> Map.ofList
 
 let private prepareRemoved lst =
     lst
-    |> List.map (fun (index, power) -> index)
     |> Set.ofList
 
 let private prepareDrawPile lst =
-    lst
-    |> List.map (fun (index, power) -> index)
-    |> function
+    match lst with
     | h :: t -> {TopCard = h; Rest = t}
     | [] -> failwithf "can't prepare a draw pile with no cards"
 
-let private getBaseKnowledge (playerID: PlayerID) (baseCard: Base) =
+let private getBaseKnowledge (playerID: PlayerID) (baseCard: PlayerID * Power * KnownBy) =
     let (ownerID, power, knownBy) = baseCard
     if List.contains playerID knownBy then
         KnownBaseCard (ownerID, power)
@@ -244,9 +240,17 @@ let private getDisplayInfo gameState =
             | PreBaseFlipBoard {Lanes = l; DrawPile = dp; Discard = d} ->
                 let lanesKnowledge =
                     l
-                    |> List.map (fun {Bases = bases; Troops = troops} ->
+                    |> List.map (fun {BasesTable = bases; Troops = troops} ->
                         {
-                            Bases = List.map getBase bases
+                            Bases =
+                                bases
+                                |> Map.toList
+                                |> List.map (fun (owner, (cardID, knownBy)) ->
+                                    owner,
+                                    Map.find cardID gs.CardsState.CardPowers,
+                                    knownBy
+                                    )
+                                |> List.map getBase
                             Troops =
                                 CountMap.map getTroop troops
                             } : PreBaseFlipLaneKnowledge
@@ -1072,18 +1076,22 @@ let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameSt
             }
         }
 
-let private flipBasesOnLane lane =
+let private flipBasesOnLane cardPowers lane =
     let baseTroops =
-        lane.Bases
-        |> List.map (fun (pid, p, kb) -> InactiveCard (pid, p, 2<health>, kb))
+        lane.BasesTable
+        |> Map.toList
+        |> List.map (fun (pid, (cid, kb)) ->
+            let power = Map.find cid cardPowers
+            InactiveCard (pid, power, 2<health>, kb)
+            )
     let newTroops =
         baseTroops
         |> List.fold (fun cm troop -> CountMap.inc troop cm) lane.Troops
     {Troops = newTroops}
 
-let private flipBasesOnBoard lanes discard =
+let private flipBasesOnBoard lanes cardPowers discard =
     PostBaseFlipBoard {
-        Lanes = List.map flipBasesOnLane lanes
+        Lanes = List.map (flipBasesOnLane cardPowers) lanes
         Discard = discard
         }
 
@@ -1101,7 +1109,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
             let newCards = {
                 cardsState with
                     HandCardOwners = newHands
-                    Board = flipBasesOnBoard pbfb.Lanes pbfb.Discard
+                    Board = flipBasesOnBoard pbfb.Lanes gameState.CardsState.CardPowers pbfb.Discard
                 }
             {gameState with CardsState = newCards}
         | newTopCard :: newRest ->
@@ -1249,12 +1257,18 @@ let rec private makeNextActionInfo gameState action =
         }
 
 let private createGame nPlayers nLanes =
-    let shuffledDeck =
-        createUnshuffledDeck()
+    let shuffledPowerDeck =
+        createUnshuffledPowerDeck()
         |> shuffle
-    let cardPowers = Map.ofList shuffledDeck
+    let cardIndices =
+        [0..(List.length shuffledPowerDeck - 1)]
+        |> List.map (fun n -> n*1<CID>)
+    let cardPowers =
+        shuffledPowerDeck
+        |> List.zip cardIndices
+        |> Map.ofList
     let lanes, notBaseCards =
-        shuffledDeck
+        cardIndices
         |> prepareHead (prepareLanes nLanes) (nPlayers*nLanes)
     let hands, notDeckCards =
         notBaseCards
