@@ -1,12 +1,6 @@
 module Implementation
 open Domain
 
-type private FaceDownDeadCard = Power * KnownBy
-type private FaceUpDeadCard = Power
-type private DeadCard =
-| FaceDownDeadCard of FaceDownDeadCard
-| FaceUpDeadCard of FaceUpDeadCard
-
 type Units = Map<CardID, (PlayerID * Health)>
 type InactiveUnits = Map<CardID, KnownBy>
 type ActiveUnits = Map<CardID, Readiness>
@@ -42,17 +36,20 @@ let private laneControl (units: Units) =
     | [(controller, _)] -> Some controller
     | _ -> None
 
-type private Discard = CountMap.CountMap<DeadCard>
+type private DodDiscard = CardID Set
+type private DiscardFaceDownKnowledge = Map<CardID, KnownBy>
 
 type private PreBaseFlipBoard = {
     Lanes: PreBaseFlipLane list
     DrawPile: DrawPile
-    Discard: Discard
+    DodDiscard: DodDiscard
+    DiscardFaceDownKnowledge: DiscardFaceDownKnowledge
 }
 
 type private PostBaseFlipBoard = {
     Lanes: PostBaseFlipLane list
-    Discard: Discard
+    DodDiscard: DodDiscard
+    DiscardFaceDownKnowledge: DiscardFaceDownKnowledge
 }
 
 type private Board =
@@ -196,7 +193,7 @@ let private getBaseKnowledge (playerID: PlayerID) (baseCard: PlayerID * Power * 
     else
         UnknownBaseCard ownerID
 
-let private getTroops (playerID: PlayerID) (cardPowers: CardPowers) (units: Units) (inactiveUnits: InactiveUnits) (activeUnits: ActiveUnits) (unitPairs: UnitPairs) : TroopKnowledge list =
+let private getTroops playerID (cardPowers: CardPowers) units inactiveUnits activeUnits unitPairs =
     let pairCardIDs =
         unitPairs
         |> Map.toList
@@ -212,10 +209,13 @@ let private getTroops (playerID: PlayerID) (cardPowers: CardPowers) (units: Unit
     let pairReadinesses =
         pairCardIDs
         |> List.map (fun (x, y) -> max (Map.find x activeUnits) (Map.find y activeUnits))
+    let pairOwners =
+        pairCardIDs
+        |> List.map (fun (x, _) -> Map.find x units |> fun (owner, _) -> owner)
     let pairKnowledge =
         pairReadinesses
         |> List.zip3 pairHealths1 pairHealths2
-        |> List.zip3 (List.replicate (List.length pairPowers) playerID) pairPowers
+        |> List.zip3 pairOwners pairPowers
         |> List.map (fun (pid, p, (h1, h2, r)) -> PairKnowledge (pid, p, h1, h2, r))
     let nonPairedActiveUnitKnowledge =
         activeUnits
@@ -238,15 +238,18 @@ let private getTroops (playerID: PlayerID) (cardPowers: CardPowers) (units: Unit
             )
     inactiveUnitKnowledge @ nonPairedActiveUnitKnowledge @ pairKnowledge
 
-let private getDeadCardKnowledge (playerID: PlayerID) deadCard =
-    match deadCard with
-    | FaceDownDeadCard (power, knownBy) ->
-        if List.contains playerID knownBy then
-            KnownDeadCard (KnownFaceDownDeadCard power)
+let private getDeadCardKnowledge (playerID: PlayerID) (cardPowers: CardPowers) discardFaceDownKnowledge cardID =
+    let power = Map.find cardID cardPowers
+    match Map.tryFind cardID discardFaceDownKnowledge with
+    | None ->
+        KnownFaceUpDeadCard power
+        |> KnownDeadCard
+    | Some kb ->
+        if List.contains playerID kb then
+            KnownFaceDownDeadCard power
+            |> KnownDeadCard
         else
             UnknownDeadCard
-    | FaceUpDeadCard power ->
-        KnownDeadCard (KnownFaceUpDeadCard power)
 
 let private getDisplayInfo gameState =
     match gameState with
@@ -264,7 +267,7 @@ let private getDisplayInfo gameState =
         let getDeadCard = getDeadCardKnowledge id
         let boardKnowledge =
             match gs.CardsState.Board with
-            | PreBaseFlipBoard {Lanes = l; DrawPile = dp; Discard = d} ->
+            | PreBaseFlipBoard {Lanes = l; DrawPile = dp; DodDiscard = d; DiscardFaceDownKnowledge = dfdk} ->
                 let lanesKnowledge =
                     l
                     |> List.map (fun {BasesTable = bases; Units = units; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs} ->
@@ -284,13 +287,17 @@ let private getDisplayInfo gameState =
                             } : PreBaseFlipLaneKnowledge
                         )
                 let drawPileSize = 1 + List.length dp.Rest
-                let discardKnowledge = CountMap.map getDeadCard d
+                let discardKnowledge =
+                    d
+                    |> Set.toList
+                    |> List.map (fun cardID -> getDeadCard gs.CardsState.CardPowers dfdk cardID)
+                    |> CountMap.ofList
                 PreBaseFlipBoardKnowledge {
                     Lanes = lanesKnowledge
                     DrawPileSize = drawPileSize
                     Discard = discardKnowledge
                     }
-            | PostBaseFlipBoard {Lanes = l; Discard = d} ->
+            | PostBaseFlipBoard {Lanes = l; DodDiscard = d; DiscardFaceDownKnowledge = dfdk} ->
                 let lanesKnowledge =
                     l
                     |> List.map (fun {Units = units; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs} ->
@@ -308,7 +315,11 @@ let private getDisplayInfo gameState =
                                     CountMap.ofList troops
                                 }
                         )
-                let discardKnowledge = CountMap.map getDeadCard d
+                let discardKnowledge =
+                    d
+                    |> Set.toList
+                    |> List.map (fun cardID -> getDeadCard gs.CardsState.CardPowers dfdk cardID)
+                    |> CountMap.ofList
                 PostBaseFlipBoardKnowledge {
                     Lanes = lanesKnowledge
                     Discard = discardKnowledge
@@ -383,7 +394,7 @@ let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
         | PostBaseFlipBoardKnowledge {Lanes = l} ->
             [1..List.length l]
     turnDisplayInfo.PlayerHand
-    |> CountMap.toList
+    |> CountMap.keyList
     |> List.allPairs validPlayLanes
     |> List.map (fun (lane, HandCard power) ->
         Play (turnDisplayInfo.CurrentPlayer, power, lane*1<LID>)
@@ -787,7 +798,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                 |> Map.toList
                 |> List.map (fun (index, _) -> index)
                 |> List.filter (fun index -> Map.find index cardsState.CardPowers = power)
-                |> List.filter (fun index -> Map.find index lane.InactiveUnits = knownBy)
+                |> List.filter (fun index -> Map.tryFind index lane.InactiveUnits = Some knownBy)
                 |> List.head
             let newInactiveUnits = Map.remove cardID lane.InactiveUnits
             let newActiveUnits = Map.add cardID Ready lane.ActiveUnits
@@ -813,7 +824,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                 |> Map.filter (fun index (owner, h) -> owner = playerID && h = health)
                 |> Map.toList
                 |> List.map (fun (index, _) -> index)
-                |> List.filter (fun index -> Map.find index lane.InactiveUnits = knownBy)
+                |> List.filter (fun index -> Map.tryFind index lane.InactiveUnits = Some knownBy)
                 |> List.head
             let newInactiveUnits = Map.remove cardID lane.InactiveUnits
             let newActiveUnits = Map.add cardID Ready lane.ActiveUnits
@@ -860,7 +871,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
             PostBaseFlipBoard {pbfb with Lanes = newLanes}           
     {gameState with CardsState = {cardsState with Board = newBoard}}
 
-let private getAttackInfo cardPowers units inactiveUnits activeUnits unitPairs playerID attackerInfo targetInfo =
+let private getAttackInfo (cardPowers: CardPowers) units (inactiveUnits: InactiveUnits) (activeUnits: ActiveUnits) unitPairs playerID attackerInfo targetInfo =
     let attackerIDs =
         match attackerInfo with
         | SingleAttacker (power, health) ->
@@ -876,23 +887,37 @@ let private getAttackInfo cardPowers units inactiveUnits activeUnits unitPairs p
             |> List.head
             |> List.singleton
         | DoubleAttacker (power, health1, health2) ->
-            units
-            |> Map.toList
-            |> List.choose (fun (id, (owner, h)) ->
-                if owner = playerID
-                    && h = health1
-                    && Map.find id cardPowers = power
-                    && Map.containsKey id unitPairs
-                then
-                    let partnerID = Map.find id unitPairs
-                    if Map.find partnerID units = (owner, health2) then
-                        Some [id; partnerID]
+            let cardsWithPower =
+                cardPowers
+                |> Map.toList
+                |> List.choose (fun (id, p) ->
+                    if p = power then
+                        Some id
                     else
                         None
-                else
-                    None
-                )
-            |> List.head
+                    )
+            let firstPartners =
+                cardsWithPower
+                |> List.filter (fun id ->
+                    match Map.tryFind id units with
+                    | Some (pid, h) -> pid = playerID && h = health1
+                    | None -> false
+                    )
+            let secondPartners =
+                cardsWithPower
+                |> List.filter (fun id ->
+                    match Map.tryFind id units with
+                    | Some (pid, h) -> pid = playerID && h = health1
+                    | None -> false
+                    )
+            let validPairIDs =
+                List.zip firstPartners secondPartners
+                |> List.filter (fun (x, y) -> Map.tryFind x unitPairs = Some y)
+            validPairIDs
+            |> List.tryHead
+            |> function
+            | Some (x, y) -> [x; y]
+            | None -> failwithf "failed doubleattacker IDs search"
     let targetID =
         match targetInfo with
         | UnknownInactiveTarget (owner, health) ->
@@ -951,7 +976,7 @@ let private getAttackInfo cardPowers units inactiveUnits activeUnits unitPairs p
                 Map.find id cardPowers = power
                 )
             |> List.head
-    attackerIDs, targetID, List.length attackerIDs * 1<health>
+    attackerIDs, targetID, Map.tryFind targetID inactiveUnits, List.length attackerIDs * 1<health>
 
 let private exhaust cardID activeCards =
     activeCards
@@ -962,27 +987,24 @@ let private exhaust cardID activeCards =
 
 let private executeAttackAction playerID laneID attackerInfo targetInfo gameState =
     match gameState.CardsState.Board with
-    | PreBaseFlipBoard {Lanes = lanes; DrawPile = drawPile; Discard = discard} ->
+    | PreBaseFlipBoard {Lanes = lanes; DrawPile = drawPile; DodDiscard = dodDiscard; DiscardFaceDownKnowledge = discardFaceDownKnowledge} ->
         let lane = List.item (int laneID - 1) lanes
-        let attackerIDs, targetID, damage =
+        let attackerIDs, targetID, maybeTargetKnownBy, damage =
             getAttackInfo gameState.CardsState.CardPowers lane.Units lane.InactiveUnits lane.ActiveUnits lane.UnitPairs playerID attackerInfo targetInfo
         let _, targetHealth = Map.find targetID lane.Units
-        let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, newDiscard =
+        let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, (newDodDiscard, newDiscardFaceDownKnowledge) =
             if targetHealth <= damage then
                 Map.remove targetID lane.Units,
                 Map.remove targetID lane.InactiveUnits,
                 Map.remove targetID lane.ActiveUnits,
                 Map.filter (fun key value -> key <> targetID && value <> targetID) lane.UnitPairs,
-                if Map.containsKey targetID lane.InactiveUnits then
-                    let deadCard =
-                        (Map.find targetID gameState.CardsState.CardPowers, Map.find targetID lane.InactiveUnits)
-                        |> FaceDownDeadCard
-                    CountMap.inc deadCard discard
-                else
-                    let deadCard =
-                        Map.find targetID gameState.CardsState.CardPowers
-                        |> FaceUpDeadCard
-                    CountMap.inc deadCard discard
+                match maybeTargetKnownBy with
+                | Some knownBy ->
+                    Set.add targetID dodDiscard,
+                    Map.add targetID knownBy discardFaceDownKnowledge
+                | None ->
+                    Set.add targetID dodDiscard,
+                    discardFaceDownKnowledge
             else
                 lane.Units
                 |> Map.change targetID (function | None -> None | Some (owner, health) -> Some (owner, health - damage)),
@@ -990,7 +1012,7 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
                 attackerIDs
                 |> List.fold (fun activeUnits id -> exhaust id activeUnits) lane.ActiveUnits,
                 lane.UnitPairs,
-                discard
+                (dodDiscard, discardFaceDownKnowledge)
         let newLane = {
             lane with
                 Units = newUnits
@@ -1008,37 +1030,36 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
                             ln
                         )
                 DrawPile = drawPile
-                Discard = newDiscard
+                DodDiscard = newDodDiscard
+                DiscardFaceDownKnowledge = newDiscardFaceDownKnowledge
                 }
         {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
-    | PostBaseFlipBoard {Lanes = lanes; Discard = discard} ->
+    | PostBaseFlipBoard {Lanes = lanes; DodDiscard = dodDiscard; DiscardFaceDownKnowledge = discardFaceDownKnowledge} ->
         let lane = List.item (int laneID - 1) lanes
-        let attackerIDs, targetID, damage =
+        let attackerIDs, targetID, maybeTargetKnownBy, damage =
             getAttackInfo gameState.CardsState.CardPowers lane.Units lane.InactiveUnits lane.ActiveUnits lane.UnitPairs playerID attackerInfo targetInfo
         let _, targetHealth = Map.find targetID lane.Units
-        let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, newDiscard =
+        let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, (newDodDiscard, newDiscardFaceDownKnowledge) =
             if targetHealth <= damage then
                 Map.remove targetID lane.Units,
                 Map.remove targetID lane.InactiveUnits,
                 Map.remove targetID lane.ActiveUnits,
                 Map.filter (fun key value -> key <> targetID && value <> targetID) lane.UnitPairs,
-                if Map.containsKey targetID lane.InactiveUnits then
-                    let deadCard =
-                        (Map.find targetID gameState.CardsState.CardPowers, Map.find targetID lane.InactiveUnits)
-                        |> FaceDownDeadCard
-                    CountMap.inc deadCard discard
-                else
-                    let deadCard =
-                        Map.find targetID gameState.CardsState.CardPowers
-                        |> FaceUpDeadCard
-                    CountMap.inc deadCard discard
+                match maybeTargetKnownBy with
+                | Some knownBy ->
+                    Set.add targetID dodDiscard,
+                    Map.add targetID knownBy discardFaceDownKnowledge
+                | None ->
+                    Set.add targetID dodDiscard,
+                    discardFaceDownKnowledge
             else
-                Map.change targetID (function | None -> None | Some (owner, health) -> Some (owner, health - damage)) lane.Units,
+                lane.Units
+                |> Map.change targetID (function | None -> None | Some (owner, health) -> Some (owner, health - damage)),
                 lane.InactiveUnits,
                 attackerIDs
                 |> List.fold (fun activeUnits id -> exhaust id activeUnits) lane.ActiveUnits,
                 lane.UnitPairs,
-                discard
+                (dodDiscard, discardFaceDownKnowledge)
         let newLane = {
             lane with
                 Units = newUnits
@@ -1055,9 +1076,23 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
                         else
                             ln
                         )
-                Discard = newDiscard
+                DodDiscard = newDodDiscard
+                DiscardFaceDownKnowledge = newDiscardFaceDownKnowledge
                 }
         {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
+
+let private findPairee ownerID health power readiness cardPowers activeUnits units =
+    units
+    |> Map.toList
+    |> List.choose (fun (id, (owner, h)) ->
+        if owner = ownerID && h = health then
+            Some id
+        else
+            None
+        )
+    |> List.filter (fun id -> Map.find id cardPowers = power)
+    |> List.filter (fun id -> Map.tryFind id activeUnits = Some readiness)
+    |> List.head
 
 let private executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState =
     let newBoard =
@@ -1069,28 +1104,11 @@ let private executeCreatePairAction playerID laneID power (health1, readiness1) 
                     if (n + 1)*1<LID> = laneID then
                         let cardID1 =
                             lane.Units
-                            |> Map.toList
-                            |> List.choose (fun (id, (owner, h)) ->
-                                if owner = playerID && h = health1 then
-                                    Some id
-                                else
-                                    None
-                                )
-                            |> List.filter (fun id -> Map.find id gameState.CardsState.CardPowers = power)
-                            |> List.filter (fun id -> Map.find id lane.ActiveUnits = readiness1)
-                            |> List.head
+                            |> findPairee playerID health1 power readiness1 gameState.CardsState.CardPowers lane.ActiveUnits
                         let cardID2 =
                             lane.Units
-                            |> Map.toList
-                            |> List.choose (fun (id, (owner, h)) ->
-                                if owner = playerID && h = health2 then
-                                    Some id
-                                else
-                                    None
-                                )
-                            |> List.filter (fun id -> Map.find id gameState.CardsState.CardPowers = power)
-                            |> List.filter (fun id -> Map.find id lane.ActiveUnits = readiness2)
-                            |> List.head
+                            |> Map.filter (fun cardID _ -> cardID <> cardID1)
+                            |> findPairee playerID health2 power readiness2 gameState.CardsState.CardPowers lane.ActiveUnits
                         {lane with UnitPairs = lane.UnitPairs |> Map.add cardID1 cardID2 |> Map.add cardID2 cardID1}
                     else
                         lane
@@ -1103,28 +1121,11 @@ let private executeCreatePairAction playerID laneID power (health1, readiness1) 
                     if (n + 1)*1<LID> = laneID then
                         let cardID1 =
                             lane.Units
-                            |> Map.toList
-                            |> List.choose (fun (id, (owner, h)) ->
-                                if owner = playerID && h = health1 then
-                                    Some id
-                                else
-                                    None
-                                )
-                            |> List.filter (fun id -> Map.find id gameState.CardsState.CardPowers = power)
-                            |> List.filter (fun id -> Map.find id lane.ActiveUnits = readiness1)
-                            |> List.head
+                            |> findPairee playerID health1 power readiness1 gameState.CardsState.CardPowers lane.ActiveUnits
                         let cardID2 =
                             lane.Units
-                            |> Map.toList
-                            |> List.choose (fun (id, (owner, h)) ->
-                                if owner = playerID && h = health2 then
-                                    Some id
-                                else
-                                    None
-                                )
-                            |> List.filter (fun id -> Map.find id gameState.CardsState.CardPowers = power)
-                            |> List.filter (fun id -> Map.find id lane.ActiveUnits = readiness2)
-                            |> List.head
+                            |> Map.filter (fun cardID _ -> cardID <> cardID1)
+                            |> findPairee playerID health2 power readiness2 gameState.CardsState.CardPowers lane.ActiveUnits
                         {lane with UnitPairs = lane.UnitPairs |> Map.add cardID1 cardID2 |> Map.add cardID2 cardID1}
                     else
                         lane
@@ -1162,7 +1163,7 @@ let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameSt
             }
         }
 
-let private flipBasesOnLane cardPowers lane =
+let private flipBasesOnLane lane =
     let newUnits =
         lane.BasesTable
         |> Map.fold (fun table playerID (cardID, knownBy) -> Map.add cardID (playerID, 2<health>) table) lane.Units
@@ -1176,10 +1177,11 @@ let private flipBasesOnLane cardPowers lane =
         UnitPairs = lane.UnitPairs
         }
 
-let private flipBasesOnBoard lanes cardPowers discard =
+let private flipBasesOnBoard lanes dodDiscard discardFaceDownKnowledge =
     PostBaseFlipBoard {
-        Lanes = List.map (flipBasesOnLane cardPowers) lanes
-        Discard = discard
+        Lanes = List.map flipBasesOnLane lanes
+        DodDiscard = dodDiscard
+        DiscardFaceDownKnowledge = discardFaceDownKnowledge
         }
 
 let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
@@ -1196,7 +1198,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
             let newCards = {
                 cardsState with
                     HandCardOwners = newHands
-                    Board = flipBasesOnBoard pbfb.Lanes gameState.CardsState.CardPowers pbfb.Discard
+                    Board = flipBasesOnBoard pbfb.Lanes pbfb.DodDiscard pbfb.DiscardFaceDownKnowledge
                 }
             {gameState with CardsState = newCards}
         | newTopCard :: newRest ->
@@ -1357,7 +1359,8 @@ let private createGame nPlayers nLanes =
             Board = PreBaseFlipBoard {
                 Lanes = lanes
                 DrawPile = drawPile
-                Discard = Map.empty
+                DodDiscard = Set.empty
+                DiscardFaceDownKnowledge = Map.empty
                 }
             HandCardOwners = hands
             CardPowers = cardPowers
