@@ -11,6 +11,11 @@ type private DeadCard =
 
 type private Pair = PlayerID * Power * (Health * Readiness) * (Health * Readiness)
 
+type Units = Map<CardID, (PlayerID * Health)>
+type InactiveUnits = Map<CardID, KnownBy>
+type ActiveUnits = Map<CardID, Readiness>
+type UnitPairs = Map<CardID, CardID>
+
 type private Troop =
 | InactiveCard of InactiveCard
 | ActiveCard of ActiveCard
@@ -23,10 +28,18 @@ type private DrawPile = {
 
 type private PreBaseFlipLane = {
     BasesTable: Map<PlayerID, (CardID * KnownBy)>
+    Units: Units
+    InactiveUnits: InactiveUnits
+    ActiveUnits: ActiveUnits
+    UnitPairs: UnitPairs
     Troops: CountMap.CountMap<Troop>
 }
 
 type private PostBaseFlipLane = {
+    Units: Units
+    InactiveUnits: InactiveUnits
+    ActiveUnits: ActiveUnits
+    UnitPairs: UnitPairs
     Troops: CountMap.CountMap<Troop>
 }
 
@@ -153,6 +166,10 @@ let private prepareHead fn n lst =
 let private createLane (basesInfo: (PlayerID * (CardID * KnownBy)) list) =
     {
         BasesTable = Map.ofList basesInfo
+        Units = Map.empty
+        InactiveUnits = Map.empty
+        ActiveUnits = Map.empty
+        UnitPairs = Map.empty
         Troops = Map.empty
     }
 
@@ -672,9 +689,9 @@ let private incInPreLane card playerID (lane: PreBaseFlipLane) =
     let moveTo = CountMap.inc card
     {lane with Troops = moveTo lane.Troops}
 
-let private incInPostLane card playerID lane =
+let private incInPostLane card playerID (lane : PostBaseFlipLane) =
     let moveTo = CountMap.inc card
-    {Troops = moveTo lane.Troops}
+    {lane with Troops = moveTo lane.Troops}
 
 let private decInPreLane card playerID (lane: PreBaseFlipLane) =
     {lane with Troops = CountMap.dec card lane.Troops}
@@ -925,7 +942,7 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                 pbfb.Lanes
                 |> List.mapi (fun n lane ->
                     if (n + 1)*1<LID> = laneID then
-                        {Troops = newTroops}
+                        {lane with Troops = newTroops}
                     else
                         lane
                 )
@@ -992,7 +1009,7 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
                 |> CountMap.dec attacker
                 |> CountMap.inc attackerAfter
                 |> CountMap.dec target
-        let newLane = {Troops = newTroops}
+        let newLane = {lane with Troops = newTroops}
         let newDiscard =
             match deadCard with
             | Some dc ->
@@ -1087,7 +1104,13 @@ let private flipBasesOnLane cardPowers lane =
     let newTroops =
         baseTroops
         |> List.fold (fun cm troop -> CountMap.inc troop cm) lane.Troops
-    {Troops = newTroops}
+    {
+        Units = lane.Units
+        ActiveUnits = lane.ActiveUnits
+        InactiveUnits = lane.InactiveUnits
+        UnitPairs = lane.UnitPairs
+        Troops = newTroops
+        }
 
 let private flipBasesOnBoard lanes cardPowers discard =
     PostBaseFlipBoard {
@@ -1158,8 +1181,8 @@ let private readyAllActiveCards cardsState =
         | PostBaseFlipBoard pbfb ->
             let newLanes =
                 pbfb.Lanes
-                |> List.map (fun {Troops = troops} ->
-                        {Troops = readyTroops troops}
+                |> List.map (fun lane ->
+                        {lane with Troops = readyTroops lane.Troops}
                     )
             PostBaseFlipBoard {pbfb with Lanes = newLanes}
     {cardsState with Board = newBoard}

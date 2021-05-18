@@ -1,5 +1,7 @@
-/.gitignore
 /.ionide
 /bin
 /obj
 .fake
+/.vs
+*.sln
+*.fsproj.user
