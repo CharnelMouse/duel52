@@ -65,7 +65,7 @@ type private Board =
 
 type private CardsState = {
     Board: Board
-    Hands: (PlayerID * Hand) list
+    HandCardOwners: Map<CardID, PlayerID>
     CardPowers: Map<CardID, Power>
     Removed: CardID Set
 }
@@ -169,14 +169,15 @@ let private prepareLanes nLanes lst =
     |> List.map createLane
 
 let private prepareHands nPlayers lst =
-    lst
-    |> List.splitInto nPlayers
-    |> List.mapi (fun playerIndex lst ->
-        (playerIndex + 1)*1<PID>,
+    let cardIDs =
         lst
-        |> List.map (fun (index, power) -> HandCard power)
-        |> CountMap.ofList
-        )
+        |> List.map (fun (index, power) -> index)
+    let playerIDs =
+        [1..nPlayers]
+        |> List.map (fun n -> n*1<PID>)
+        |> List.collect (List.replicate 5)
+    List.zip cardIDs playerIDs
+    |> Map.ofList
 
 let private prepareRemoved lst =
     lst
@@ -229,12 +230,12 @@ let private getDisplayInfo gameState =
     | GameStateDuringTurn gs ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandsInfo) =
-            gs.CardsState.Hands
-            |> List.partition (fun (n, _) -> n = id)
+            gs.CardsState.HandCardOwners
+            |> Map.partition (fun _ owner -> owner = id)
         let playerHand =
             playerHandInfo
-            |> List.head
-            |> (fun (_, hand) -> hand)
+            |> Map.toList
+            |> List.map (fun (card, _) -> card)
         let getBase = getBaseKnowledge id
         let getTroop = getTroopKnowledge id
         let getDeadCard = getDeadCardKnowledge id
@@ -283,10 +284,19 @@ let private getDisplayInfo gameState =
             CurrentPlayer = id
             ActionsLeft = gs.TurnState.ActionsLeft
             BoardKnowledge = boardKnowledge
-            PlayerHand = playerHand
+            PlayerHand =
+                playerHand
+                |> List.map (fun card ->
+                    gs.CardsState.CardPowers
+                    |> Map.find card
+                    |> HandCard
+                    )
+                |> CountMap.ofList
             OpponentHandSizes =
                 opponentHandsInfo
-                |> List.map (fun (n, hand) -> n, CountMap.count hand)
+                |> Map.toList
+                |> List.countBy (fun (_, owner) -> owner)
+                |> List.sortBy (fun (owner, _) -> owner)
         }
     | GameStateBetweenTurns {TurnState = ts} ->
         SwitchDisplayInfo ts.Player
@@ -803,17 +813,21 @@ let private executePlayAction playerID power laneID gameState =
     let newCard = InactiveCard (playerID, power, 2<health>, List.singleton playerID)
     let moveFrom = CountMap.dec oldCard
     let moveTo = CountMap.inc newCard
+    let cardID =
+        gameState.CardsState.CardPowers
+        |> Map.filter (fun _ p -> p = power)
+        |> Map.toList
+        |> List.map (fun (card, _) -> card)
+        |> List.find (fun card ->
+            gameState.CardsState.HandCardOwners
+            |> Map.filter (fun _ owner -> owner = playerID)
+            |> Map.containsKey card
+            )
     let newCards = {
         gameState.CardsState with
-            Hands =
-                gameState.CardsState.Hands
-                |> List.map (fun (ownerID, cards) ->
-                    ownerID,
-                    if ownerID = playerID then
-                        moveFrom cards
-                    else
-                        cards
-                    )
+            HandCardOwners =
+                gameState.CardsState.HandCardOwners
+                |> Map.remove cardID
             Board =
                 match gameState.CardsState.Board with
                 | PreBaseFlipBoard pbfb ->
@@ -1077,44 +1091,26 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     match cardsState.Board with
     | PreBaseFlipBoard pbfb ->
-        let hands = cardsState.Hands
+        let hands = cardsState.HandCardOwners
         let drawPile = pbfb.DrawPile
         match drawPile.Rest with
         | [] ->
-            let newHandCard =
-                cardsState.CardPowers
-                |> Map.find drawPile.TopCard
-                |> HandCard
             let newHands =
-                cardsState.Hands
-                |> List.map (fun (pid, h) ->
-                    if pid = playerID then
-                        pid, CountMap.inc newHandCard h
-                    else
-                        pid, h
-                    )
+                hands
+                |> Map.add drawPile.TopCard playerID
             let newCards = {
                 cardsState with
-                    Hands = newHands
+                    HandCardOwners = newHands
                     Board = flipBasesOnBoard pbfb.Lanes pbfb.Discard
                 }
             {gameState with CardsState = newCards}
         | newTopCard :: newRest ->
-            let newHandCard =
-                cardsState.CardPowers
-                |> Map.find drawPile.TopCard
-                |> HandCard
             let newHands =
                 hands
-                |> List.map (fun (pid, h) ->
-                    if pid = playerID then
-                        pid, CountMap.inc newHandCard h
-                    else
-                        pid, h
-                    )
+                |> Map.add drawPile.TopCard playerID
             let newCards =
                 {cardsState with
-                    Hands = newHands
+                    HandCardOwners = newHands
                     Board = PreBaseFlipBoard {
                         pbfb with
                             DrawPile = {TopCard = newTopCard; Rest = newRest}
@@ -1193,10 +1189,7 @@ let private checkForGameEnd gameState =
                             | Some _, true ->
                                 false
                             )
-                    let nCardsInHands =
-                        cs.Hands
-                        |> List.fold (fun n (pid, hand) -> n + CountMap.count hand) 0
-                    if List.isEmpty contestedLanes && nCardsInHands = 0 then
+                    if List.isEmpty contestedLanes && Map.isEmpty cs.HandCardOwners then
                         GameStateTied {Lanes = lanes}
                     else
                         gameState
@@ -1277,7 +1270,7 @@ let private createGame nPlayers nLanes =
                 DrawPile = drawPile
                 Discard = Map.empty
                 }
-            Hands = hands
+            HandCardOwners = hands
             CardPowers = cardPowers
             Removed = removed
             }
