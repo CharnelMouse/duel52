@@ -16,33 +16,33 @@ let private displayBaseKnowledge baseKnowledge =
     | KnownBaseCard (playerID, power) ->
         printfn "Player %i: %s" playerID (deparsePower power)
 
-let private displayTroopKnowledge currentPlayer troopKnowledge n =
+let private displayTroopKnowledge currentPlayer troopKnowledge =
     match troopKnowledge with
     | UnknownInactiveCardKnowledge (playerID, health, knownBy) ->
-        printfn "Player %i, (%i) Inactive, %i health" playerID n health
+        printfn "Player %i, Inactive, %i health" playerID health
     | KnownInactiveCardKnowledge (playerID, power, health, knownBy) ->
-        printfn "Player %i, (%i) Inactive %s, %i health" playerID n (deparsePower power) health
+        printfn "Player %i, Inactive %s, %i health" playerID (deparsePower power) health
     // later will need cases for active/pair when card is frozen
     | ActiveCardKnowledge (playerID, power, health, readiness) ->
         if playerID = currentPlayer then
-            printfn "Player %i, (%i) %A %s, %i health" playerID n readiness (deparsePower power) health
+            printfn "Player %i, %A %s, %i health" playerID readiness (deparsePower power) health
         else
-            printfn "Player %i, (%i) %s, %i health" playerID n (deparsePower power) health
+            printfn "Player %i, %s, %i health" playerID (deparsePower power) health
     | PairKnowledge (playerID, power, health1, health2, readiness) ->
         if playerID = currentPlayer then
-            printfn "Player %i, (%i) %A %s pair: health %i and %i" playerID n readiness (deparsePower power) health1 health2
+            printfn "Player %i, %A %s pair: health %i and %i" playerID readiness (deparsePower power) health1 health2
         else
-            printfn "Player %i, (%i) %s pair: health %i and %i" playerID n (deparsePower power) health1 health2
+            printfn "Player %i, %s pair: health %i and %i" playerID (deparsePower power) health1 health2
 
 let private displayTroopKnowledges currentPlayer =
-    CountMap.iter (displayTroopKnowledge currentPlayer)
+    List.iter (displayTroopKnowledge currentPlayer)
 
 let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
     let {Bases = baseKnowledges; Troops = troops} = lane
     printfn "Lane %i" (n + 1)
     printfn "Bases present"
     List.iter displayBaseKnowledge baseKnowledges
-    if CountMap.isEmpty troops then
+    if List.isEmpty troops then
         printfn "No troops present"
     else
         printfn "Troops"
@@ -57,7 +57,7 @@ let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKn
         displayTroopKnowledges currentPlayer troops
     | WonLaneKnowledge {Controller = controller; Troops = troops} ->
         printfn "Lane %i (won by player %i)" (n + 1) controller
-        if CountMap.isEmpty troops then
+        if List.isEmpty troops then
             printfn "No troops present"
         else
             printfn "Troops"
@@ -75,8 +75,8 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     |> List.indexed
     |> List.iter (displayPostLaneKnowledge currentPlayer)
 
-let private displayHandCard (HandCard power) n =
-    printfn "(%i) %s" n (deparsePower power)
+let private displayHandCard (HandCard power) =
+    printfn "%s" (deparsePower power)
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -84,27 +84,19 @@ let private displayOpponentHandSize (id, size) =
     else
         printfn "Player %i has %i cards" id size
 
-let private displayKnownDeadCard knownDeadCard n =
-    match knownDeadCard with
-    | KnownFaceDownDeadCard power -> printfn "(%i) %s, face-down" n (deparsePower power)
-    | KnownFaceUpDeadCard power -> printfn "(%i) %s, face-up" n (deparsePower power)
+let private displayDeadCard deadCard =
+    match deadCard with
+    | UnknownDeadCard -> printfn "unknown card"
+    | KnownDeadCard (KnownFaceDownDeadCard power) -> printfn "%s, face-down" (deparsePower power)
+    | KnownDeadCard (KnownFaceUpDeadCard power) -> printfn "%s, face-up" (deparsePower power)
 
 let private displayDiscardKnowledge discardKnowledge =
-    let (unknown, known) = 
+    if List.isEmpty discardKnowledge then
+        printfn "Discard pile is empty"
+    else
+        printfn "\nDiscard pile:"
         discardKnowledge
-        |> CountMap.partition (function
-            | UnknownDeadCard -> true
-            | KnownDeadCard _ -> false
-        )
-    if not (CountMap.isEmpty unknown) then
-        printfn "%i unknown face-down cards" (CountMap.count unknown)
-    if not (CountMap.isEmpty known) then
-        known
-        |> CountMap.choose (function
-            | UnknownDeadCard -> None
-            | KnownDeadCard c -> Some c
-            )
-        |> CountMap.iter displayKnownDeadCard
+        |> List.iter displayDeadCard
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
@@ -123,11 +115,11 @@ let private displayOngoingGameInfo displayInfo =
         | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
             displayPostLaneKnowledges currentPlayer lanes
         printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
-        if Map.isEmpty playerHand then
+        if List.isEmpty playerHand then
             printfn "Hand is empty"
         else
             printfn "Hand"
-            Map.iter displayHandCard playerHand
+            List.iter displayHandCard playerHand
         printfn ""
         match opponentHandSizes with
         | [] -> failwithf "opponents expected"
@@ -139,18 +131,9 @@ let private displayOngoingGameInfo displayInfo =
         match boardKnowledge with
         | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
             printfn "Draw pile: %i" dps
-            if Map.isEmpty dk then
-                printfn "Discard pile is empty"
-            else
-                printfn "\nDiscard pile:"
-                displayDiscardKnowledge dk
+            displayDiscardKnowledge dk
         | PostBaseFlipBoardKnowledge {Discard = dk} ->
-            printfn "Draw pile is empty"
-            if Map.isEmpty dk then
-                printfn "Discard pile is empty"
-            else
-                printfn "\nDiscard pile:"
-                displayDiscardKnowledge dk
+            displayDiscardKnowledge dk
     | SwitchDisplayInfo playerID ->
         printfn "Player %i's turn" playerID
     | WonGameDisplayInfo {Winner = winner; LaneWins = laneWins} ->

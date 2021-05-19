@@ -37,7 +37,7 @@ type KnownBy = int<PID> list
 
 type HandCard = HandCard of Power
 
-type Hand = CountMap.CountMap<HandCard>
+type Hand = HandCard list
 
 type Readiness =
 | Ready
@@ -67,23 +67,23 @@ type TroopKnowledge =
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list
-    Troops: CountMap.CountMap<TroopKnowledge>
+    Troops: TroopKnowledge list
 }
 
 type ContestedLaneKnowledge = {
-    Troops: CountMap.CountMap<TroopKnowledge>
+    Troops: TroopKnowledge list
 }
 
 type WonLaneKnowledge = {
     Controller: PlayerID
-    Troops: CountMap.CountMap<TroopKnowledge>
+    Troops: TroopKnowledge list
 }
 
 type PostBaseFlipLaneKnowledge =
 | ContestedLaneKnowledge of ContestedLaneKnowledge
 | WonLaneKnowledge of WonLaneKnowledge
 
-type DiscardKnowledge = CountMap.CountMap<DeadCardKnowledge>
+type DiscardKnowledge = DeadCardKnowledge list
 
 type PreBaseFlipBoardKnowledge = {
     Lanes: PreBaseFlipLaneKnowledge list
