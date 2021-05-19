@@ -978,8 +978,11 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
         let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, (newDodDiscard, newDiscardFaceDownKnowledge) =
             if targetHealth <= damage then
                 Map.remove targetID lane.Units,
-                Map.remove targetID lane.InactiveUnits,
-                Map.remove targetID lane.ActiveUnits,
+                lane.InactiveUnits
+                |> Map.remove targetID,
+                attackerIDs
+                |> List.fold (fun activeUnits id -> exhaust id activeUnits) lane.ActiveUnits
+                |> Map.remove targetID,
                 Map.filter (fun key value -> key <> targetID && value <> targetID) lane.UnitPairs,
                 match maybeTargetKnownBy with
                 | Some knownBy ->
