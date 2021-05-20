@@ -16,37 +16,41 @@ let private displayBaseKnowledge baseKnowledge =
     | KnownBaseCard (playerID, power) ->
         printfn "Player %i: %s" playerID (deparsePower power)
 
-let private displayTroopKnowledge currentPlayer troopKnowledge =
+let private displayTroopKnowledge currentPlayer ownerID troopKnowledge =
     match troopKnowledge with
-    | UnknownInactiveCardKnowledge (playerID, health, knownBy) ->
-        printfn "Player %i, Inactive, %i health" playerID health
-    | KnownInactiveCardKnowledge (playerID, power, health, knownBy) ->
-        printfn "Player %i, Inactive %s, %i health" playerID (deparsePower power) health
+    | UnknownInactiveCardKnowledge (health, knownBy) ->
+        printfn "Inactive, %i health" health
+    | KnownInactiveCardKnowledge (power, health, knownBy) ->
+        printfn "Inactive %s, %i health" (deparsePower power) health
     // later will need cases for active/pair when card is frozen
-    | ActiveCardKnowledge (playerID, power, health, readiness) ->
-        if playerID = currentPlayer then
-            printfn "Player %i, %A %s, %i health" playerID readiness (deparsePower power) health
+    | ActiveCardKnowledge (power, health, readiness) ->
+        if ownerID = currentPlayer then
+            printfn "%A %s, %i health" readiness (deparsePower power) health
         else
-            printfn "Player %i, %s, %i health" playerID (deparsePower power) health
-    | PairKnowledge (playerID, power, health1, health2, readiness) ->
-        if playerID = currentPlayer then
-            printfn "Player %i, %A %s pair: health %i and %i" playerID readiness (deparsePower power) health1 health2
+            printfn "%s, %i health" (deparsePower power) health
+    | PairKnowledge (power, health1, health2, readiness) ->
+        if ownerID = currentPlayer then
+            printfn "%A %s pair: health %i and %i" readiness (deparsePower power) health1 health2
         else
-            printfn "Player %i, %s pair: health %i and %i" playerID (deparsePower power) health1 health2
+            printfn "%s pair: health %i and %i" (deparsePower power) health1 health2
 
-let private displayTroopKnowledges currentPlayer =
-    List.iter (displayTroopKnowledge currentPlayer)
+let private displayTroopKnowledges currentPlayer troopKnowledges =
+    if Map.isEmpty troopKnowledges then
+        printfn "No troops present"
+    else
+        printfn "Troops"
+        troopKnowledges
+        |> Map.iter (fun owner tks ->
+            printfn "Player %i" owner
+            List.iter (displayTroopKnowledge currentPlayer owner) tks
+            )
 
 let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
     let {Bases = baseKnowledges; Troops = troops} = lane
     printfn "Lane %i" (n + 1)
     printfn "Bases present"
     List.iter displayBaseKnowledge baseKnowledges
-    if List.isEmpty troops then
-        printfn "No troops present"
-    else
-        printfn "Troops"
-        displayTroopKnowledges currentPlayer troops
+    displayTroopKnowledges currentPlayer troops
     printfn ""
 
 let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKnowledge)) =
@@ -57,7 +61,7 @@ let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKn
         displayTroopKnowledges currentPlayer troops
     | WonLaneKnowledge {Controller = controller; Troops = troops} ->
         printfn "Lane %i (won by player %i)" (n + 1) controller
-        if List.isEmpty troops then
+        if Map.forall (fun _ tks -> List.isEmpty tks) troops then
             printfn "No troops present"
         else
             printfn "Troops"

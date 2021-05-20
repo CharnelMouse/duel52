@@ -60,23 +60,25 @@ type DeadCardKnowledge =
 | KnownDeadCard of KnownDeadCard
 
 type TroopKnowledge =
-| UnknownInactiveCardKnowledge of PlayerID * Health * KnownBy
-| KnownInactiveCardKnowledge of PlayerID * Power * Health * KnownBy
-| ActiveCardKnowledge of PlayerID * Power * Health * Readiness
-| PairKnowledge of PlayerID * Power * Health * Health * Readiness
+| UnknownInactiveCardKnowledge of Health * KnownBy
+| KnownInactiveCardKnowledge of Power * Health * KnownBy
+| ActiveCardKnowledge of Power * Health * Readiness
+| PairKnowledge of Power * Health * Health * Readiness
+
+type TroopsKnowledge = Map<PlayerID, TroopKnowledge list>
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list
-    Troops: TroopKnowledge list
+    Troops: TroopsKnowledge
 }
 
 type ContestedLaneKnowledge = {
-    Troops: TroopKnowledge list
+    Troops: TroopsKnowledge
 }
 
 type WonLaneKnowledge = {
     Controller: PlayerID
-    Troops: TroopKnowledge list
+    Troops: TroopsKnowledge
 }
 
 type PostBaseFlipLaneKnowledge =
