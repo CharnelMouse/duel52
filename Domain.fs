@@ -60,8 +60,8 @@ type DeadCardKnowledge =
 | KnownDeadCard of KnownDeadCard
 
 type TroopKnowledge =
-| UnknownInactiveCardKnowledge of Health * KnownBy
-| KnownInactiveCardKnowledge of Power * Health * KnownBy
+| UnknownInactiveCardKnowledge of Health
+| KnownInactiveCardKnowledge of Power * Health
 | ActiveCardKnowledge of Power * Health * Readiness
 | PairKnowledge of Power * Health * Health * Readiness
 
@@ -136,8 +136,8 @@ type AttackTargetInfo =
 | ActivePairMemberTarget of PlayerID * Power * Health * Health
 
 type ActivationTarget =
-| KnownActivationTarget of Power * Health * KnownBy
-| UnknownActivationTarget of Health * KnownBy
+| KnownActivationTarget of Power * Health
+| UnknownActivationTarget of Health
 
 type TurnActionInfo =
 | Play of PlayerID * Power * LaneID

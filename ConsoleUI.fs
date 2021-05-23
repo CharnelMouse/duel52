@@ -18,9 +18,9 @@ let private displayBaseKnowledge baseKnowledge =
 
 let private displayTroopKnowledge currentPlayer ownerID troopKnowledge =
     match troopKnowledge with
-    | UnknownInactiveCardKnowledge (health, knownBy) ->
+    | UnknownInactiveCardKnowledge health ->
         printfn "Inactive, %i health" health
-    | KnownInactiveCardKnowledge (power, health, knownBy) ->
+    | KnownInactiveCardKnowledge (power, health) ->
         printfn "Inactive %s, %i health" (deparsePower power) health
     // later will need cases for active/pair when card is frozen
     | ActiveCardKnowledge (power, health, readiness) ->
@@ -166,11 +166,11 @@ let private actionString action =
     | TurnActionInfo (Play (_, power, laneID)) ->
         "Play " + deparsePower power
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget (health, knownBy))) ->
+    | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget health)) ->
         "Activate " + "unknown card"
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health, knownBy))) ->
+    | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health))) ->
         "Activate " + deparsePower power
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
