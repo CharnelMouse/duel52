@@ -60,10 +60,16 @@ type private PostDrawGameInfo = {
     HandCardOwners: HandCardOwners
 }
 
+type private LaneWins = Map<LaneID, PlayerID>
+
+type private PostHandGameInfo = {
+    LaneWins: LaneWins
+}
+
 type private GameStage =
 | Early of EarlyGameInfo
 | DrawPileEmpty of PostDrawGameInfo
-| HandsEmpty
+| HandsEmpty of PostHandGameInfo
 
 type private CardsState = {
     Board: Board
@@ -262,7 +268,7 @@ let private getDisplayInfo gameState =
             | DrawPileEmpty {HandCardOwners = hco} ->
                 hco
                 |> Map.partition (fun _ owner -> owner = id)
-            | HandsEmpty ->
+            | HandsEmpty _ ->
                 Map.empty, Map.empty
         let playerHand =
             playerHandInfo
@@ -272,7 +278,7 @@ let private getDisplayInfo gameState =
         let getBase = getBaseKnowledge id
         let getDeadCard = getDeadCardKnowledge id
         let boardKnowledge =
-            let {Lanes = l; Discard =d; HiddenCardKnownBys = kb} = gs.CardsState.Board
+            let {Lanes = l; Discard = d; HiddenCardKnownBys = kb} = gs.CardsState.Board
             match gs.CardsState.GameStage with
             | Early {Bases = b; DrawPile = dp} ->
                 let lanesKnowledge =
@@ -305,7 +311,7 @@ let private getDisplayInfo gameState =
                     Discard = discardKnowledge
                     }
             | DrawPileEmpty _
-            | HandsEmpty ->
+            | HandsEmpty _ ->
                 let lanesKnowledge =
                     l
                     |> List.map (fun {Units = units; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs} ->
@@ -706,7 +712,7 @@ let private executePlayAction playerID power laneID gameState =
             hco
         | DrawPileEmpty {HandCardOwners = hco} ->
             hco
-        | HandsEmpty ->
+        | HandsEmpty _ ->
             failwithf "can't play a card when hands are empty"
     let cardID =
         gameState.CardsState.CardPowers
@@ -748,14 +754,14 @@ let private executePlayAction playerID power laneID gameState =
             if Map.isEmpty newHandInfo then
                 {gameState.CardsState with
                     Board = newBoard
-                    GameStage = HandsEmpty
+                    GameStage = HandsEmpty {LaneWins = Map.empty}
                     }
             else
                 {gameState.CardsState with
                     Board = newBoard
                     GameStage = DrawPileEmpty {gs with HandCardOwners = newHandInfo}
                     }
-        | HandsEmpty ->
+        | HandsEmpty _ ->
             failwithf "Shouldn't be here!"
     {gameState with CardsState = newCards}
 
@@ -1104,7 +1110,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                 }
             {gameState with CardsState = newCards}
     | DrawPileEmpty _
-    | HandsEmpty ->
+    | HandsEmpty _ ->
         gameState
 
 let private readyActiveUnits activeUnits =
@@ -1146,7 +1152,7 @@ let private checkForGameEnd gameState =
                     GameStateWon {Winner = leadingPlayer; Lanes = lanes}
                 else
                     gameState
-        | HandsEmpty ->
+        | HandsEmpty _ ->
             let lanes = cs.Board.Lanes
             let wonLaneCounts =
                 lanes
