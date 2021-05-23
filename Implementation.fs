@@ -44,23 +44,20 @@ let private laneSolePresence (units: Units) =
     | [(controller, _)] -> Some controller
     | _ -> None
 
-type private PreBaseFlipBoard = {
+type private BoardInfo = {
     Lanes: Lane list
-    Bases: Bases list
-    DrawPile: DrawPile
     Discard: Discard
     HiddenCardKnownBys: HiddenCardKnownBys
 }
 
-type private PostBaseFlipBoard = {
-    Lanes: Lane list
-    Discard: Discard
-    HiddenCardKnownBys: HiddenCardKnownBys
+type private PreDrawEmptyBoardInfo = {
+    Bases: Bases list
+    DrawPile: DrawPile
 }
 
 type private Board =
-| PreBaseFlipBoard of PreBaseFlipBoard
-| PostBaseFlipBoard of PostBaseFlipBoard
+| PreBaseFlipBoard of BoardInfo * PreDrawEmptyBoardInfo
+| PostBaseFlipBoard of BoardInfo
 
 type private CardsState = {
     Board: Board
@@ -263,7 +260,7 @@ let private getDisplayInfo gameState =
         let getDeadCard = getDeadCardKnowledge id
         let boardKnowledge =
             match gs.CardsState.Board with
-            | PreBaseFlipBoard {Lanes = l; Bases = b; DrawPile = dp; Discard = d; HiddenCardKnownBys = kb} ->
+            | PreBaseFlipBoard ({Lanes = l; Discard = d; HiddenCardKnownBys = kb}, {Bases = b; DrawPile = dp}) ->
                 let lanesKnowledge =
                     List.zip b l
                     |> List.map (fun (bases, {Units = units; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs}) ->
@@ -705,8 +702,8 @@ let private executePlayAction playerID power laneID gameState =
                 |> Map.remove cardID
             Board =
                 match gameState.CardsState.Board with
-                | PreBaseFlipBoard pbfb ->
-                    let l = pbfb.Lanes
+                | PreBaseFlipBoard (boardInfo, preInfo) ->
+                    let l = boardInfo.Lanes
                     let newLanes =
                         l
                         |> List.mapi (fun n lane ->
@@ -719,7 +716,7 @@ let private executePlayAction playerID power laneID gameState =
                             else
                                 lane
                             )
-                    PreBaseFlipBoard {pbfb with Lanes = newLanes}
+                    PreBaseFlipBoard ({boardInfo with Lanes = newLanes}, preInfo)
                 | PostBaseFlipBoard pbfb ->
                     let l = pbfb.Lanes
                     let newLanes =
@@ -742,8 +739,8 @@ let private executeActivateAction playerID laneID activationTarget gameState =
     let cardsState = gameState.CardsState
     let newBoard =
         match cardsState.Board, activationTarget with
-        | PreBaseFlipBoard pbfb, UnknownActivationTarget health ->
-            let lanes = pbfb.Lanes
+        | PreBaseFlipBoard (boardInfo, preInfo), UnknownActivationTarget health ->
+            let lanes = boardInfo.Lanes
             let lane = List.item (int laneID - 1) lanes
             let cardID =
                 lane.Units
@@ -766,13 +763,15 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                     else
                         l
                 )
-            PreBaseFlipBoard {
-                pbfb with
+            PreBaseFlipBoard ({
+                boardInfo with
                     Lanes = newLanes
-                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) pbfb.HiddenCardKnownBys
-                }
-        | PreBaseFlipBoard pbfb, KnownActivationTarget (power, health) ->
-            let lanes = pbfb.Lanes
+                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) boardInfo.HiddenCardKnownBys
+                },
+                preInfo
+                )
+        | PreBaseFlipBoard (boardInfo, preInfo), KnownActivationTarget (power, health) ->
+            let lanes = boardInfo.Lanes
             let lane = List.item (int laneID - 1) lanes
             let cardID =
                 lane.Units
@@ -796,11 +795,13 @@ let private executeActivateAction playerID laneID activationTarget gameState =
                     else
                         l
                 )
-            PreBaseFlipBoard {
-                pbfb with
+            PreBaseFlipBoard ({
+                boardInfo with
                     Lanes = newLanes
-                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) pbfb.HiddenCardKnownBys
-                }
+                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) boardInfo.HiddenCardKnownBys
+                },
+                preInfo
+                )
         | PostBaseFlipBoard pbfb, UnknownActivationTarget health ->
             let lanes = pbfb.Lanes
             let lane = List.item (int laneID - 1) lanes
@@ -980,7 +981,7 @@ let private exhaust cardID activeCards =
 
 let private executeAttackAction playerID laneID attackerInfo targetInfo gameState =
     match gameState.CardsState.Board with
-    | PreBaseFlipBoard {Bases = bases; Lanes = lanes; DrawPile = drawPile; Discard = discard; HiddenCardKnownBys = hiddenCardKnownBys} ->
+    | PreBaseFlipBoard ({Lanes = lanes; Discard = discard; HiddenCardKnownBys = hiddenCardKnownBys}, preInfo) ->
         let lane = List.item (int laneID - 1) lanes
         let attackerIDs, targetID, damage =
             getAttackInfo gameState.CardsState.CardPowers lane.Units lane.InactiveUnits lane.ActiveUnits lane.UnitPairs playerID attackerInfo targetInfo
@@ -1010,20 +1011,22 @@ let private executeAttackAction playerID laneID attackerInfo targetInfo gameStat
                 ActiveUnits = newActiveUnits
                 UnitPairs = newUnitPairs
             }
-        let newBoard = PreBaseFlipBoard {
-                Bases = bases
-                Lanes =
-                    lanes
-                    |> List.mapi (fun n ln ->
-                        if n = int laneID - 1 then
-                            newLane
-                        else
-                            ln
-                        )
-                DrawPile = drawPile
-                Discard = newDiscard
-                HiddenCardKnownBys = hiddenCardKnownBys
-                }
+        let newBoard =
+            PreBaseFlipBoard (
+                {
+                    Lanes =
+                        lanes
+                        |> List.mapi (fun n ln ->
+                            if n = int laneID - 1 then
+                                newLane
+                            else
+                                ln
+                            )
+                    Discard = newDiscard
+                    HiddenCardKnownBys = hiddenCardKnownBys
+                    },
+                preInfo
+                )
         {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
     | PostBaseFlipBoard {Lanes = lanes; Discard = discard; HiddenCardKnownBys = hiddenCardKnownBys} ->
         let lane = List.item (int laneID - 1) lanes
@@ -1082,9 +1085,9 @@ let private findPairee ownerID health power readiness cardPowers activeUnits uni
 let private executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState =
     let newBoard =
         match gameState.CardsState.Board with
-        | PreBaseFlipBoard pbfb ->
+        | PreBaseFlipBoard (boardInfo, preInfo) ->
             let newLanes =
-                pbfb.Lanes
+                boardInfo.Lanes
                 |> List.mapi (fun n lane ->
                     if (n + 1)*1<LID> = laneID then
                         let cardID1 =
@@ -1098,7 +1101,7 @@ let private executeCreatePairAction playerID laneID power (health1, readiness1) 
                     else
                         lane
                     )
-            PreBaseFlipBoard {pbfb with Lanes = newLanes}
+            PreBaseFlipBoard ({boardInfo with Lanes = newLanes}, preInfo)
         | PostBaseFlipBoard pbfb ->
             let newLanes =
                 pbfb.Lanes
@@ -1172,9 +1175,9 @@ let private flipBasesOnBoard bases lanes discard hiddenCardKnownBys =
 let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     match cardsState.Board with
-    | PreBaseFlipBoard pbfb ->
+    | PreBaseFlipBoard (boardInfo, preInfo) ->
         let hands = cardsState.HandCardOwners
-        let drawPile = pbfb.DrawPile
+        let drawPile = preInfo.DrawPile
         match drawPile.Rest with
         | [] ->
             let newHands =
@@ -1183,7 +1186,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
             let newCards = {
                 cardsState with
                     HandCardOwners = newHands
-                    Board = flipBasesOnBoard pbfb.Bases pbfb.Lanes pbfb.Discard pbfb.HiddenCardKnownBys
+                    Board = flipBasesOnBoard preInfo.Bases boardInfo.Lanes boardInfo.Discard boardInfo.HiddenCardKnownBys
                 }
             {gameState with CardsState = newCards}
         | newTopCard :: newRest ->
@@ -1193,10 +1196,11 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
             let newCards =
                 {cardsState with
                     HandCardOwners = newHands
-                    Board = PreBaseFlipBoard {
-                        pbfb with
-                            DrawPile = {TopCard = newTopCard; Rest = newRest}
-                        }
+                    Board =
+                        PreBaseFlipBoard (
+                            boardInfo,
+                            {preInfo with DrawPile = {TopCard = newTopCard; Rest = newRest}}
+                            )
                 }
             {gameState with CardsState = newCards}
     | PostBaseFlipBoard _ ->
@@ -1210,13 +1214,13 @@ let private readyAllActiveCards cardsState =
     let board = cardsState.Board
     let newBoard =
         match board with
-        | PreBaseFlipBoard pbfb ->
+        | PreBaseFlipBoard (boardInfo, preInfo) ->
             let newLanes =
-                pbfb.Lanes
+                boardInfo.Lanes
                 |> List.map (fun lane ->
                         {lane with ActiveUnits = readyActiveUnits lane.ActiveUnits}
                     )
-            PreBaseFlipBoard {pbfb with Lanes = newLanes}
+            PreBaseFlipBoard ({boardInfo with Lanes = newLanes}, preInfo)
         | PostBaseFlipBoard pbfb ->
             let newLanes =
                 pbfb.Lanes
@@ -1341,16 +1345,21 @@ let private createGame nPlayers nLanes =
     let drawPile = prepareDrawPile notRemoved
     let gameState = GameStateBetweenTurns {
         CardsState = {
-            Board = PreBaseFlipBoard {
-                Bases = bases
-                Lanes = List.replicate nLanes emptyLane
-                DrawPile = drawPile
-                Discard = Set.empty
-                HiddenCardKnownBys =
-                    hands
-                    |> Map.toList
-                    |> Set.ofList
-                }
+            Board =
+                PreBaseFlipBoard (
+                    {
+                        Lanes = List.replicate nLanes emptyLane
+                        Discard = Set.empty
+                        HiddenCardKnownBys =
+                            hands
+                            |> Map.toList
+                            |> Set.ofList
+                        },
+                    {
+                        Bases = bases
+                        DrawPile = drawPile
+                        }
+                    )
             HandCardOwners = hands
             CardPowers = cardPowers
             Removed = removed
