@@ -1,11 +1,19 @@
 module Implementation
 open Domain
 
-type Units = Map<CardID, (PlayerID * Health)>
-type InactiveUnits = CardID Set
-type ActiveUnits = Map<CardID, Readiness>
-type UnitPairs = Map<CardID, CardID>
-type HiddenCardKnownBys = (CardID * PlayerID) Set
+type private CardPowers = Map<CardID, Power>
+
+type private HiddenCardKnownBys = (CardID * PlayerID) Set
+type private Bases = Map<PlayerID, CardID>
+type private HandCardOwners = Map<CardID, PlayerID>
+
+type private Units = Map<CardID, (PlayerID * Health)>
+type private InactiveUnits = CardID Set
+type private ActiveUnits = Map<CardID, Readiness>
+type private UnitPairs = Map<CardID, CardID>
+
+type private DodDiscard = CardID Set
+type private RemovedCards = CardID Set
 
 type private DrawPile = {
     TopCard: CardID
@@ -13,7 +21,7 @@ type private DrawPile = {
     }
 
 type private PreBaseFlipLane = {
-    BasesTable: Map<PlayerID, CardID>
+    BasesTable: Bases
     Units: Units
     InactiveUnits: InactiveUnits
     ActiveUnits: ActiveUnits
@@ -37,8 +45,6 @@ let private laneControl (units: Units) =
     | [(controller, _)] -> Some controller
     | _ -> None
 
-type private DodDiscard = CardID Set
-
 type private PreBaseFlipBoard = {
     Lanes: PreBaseFlipLane list
     DrawPile: DrawPile
@@ -56,13 +62,11 @@ type private Board =
 | PreBaseFlipBoard of PreBaseFlipBoard
 | PostBaseFlipBoard of PostBaseFlipBoard
 
-type private CardPowers = Map<CardID, Power>
-
 type private CardsState = {
     Board: Board
-    HandCardOwners: Map<CardID, PlayerID>
+    HandCardOwners: HandCardOwners
     CardPowers: CardPowers
-    Removed: CardID Set
+    Removed: RemovedCards
 }
 
 type private PlayerReady = {
@@ -146,7 +150,7 @@ let private prepareHead fn n lst =
     let h, t = List.splitAt n lst
     fn h, t
 
-let private createLane (basesInfo: Map<PlayerID, CardID>) =
+let private createLane (basesInfo: Bases) =
     {
         BasesTable = basesInfo
         Units = Map.empty
