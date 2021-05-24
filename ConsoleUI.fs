@@ -4,35 +4,45 @@ open Domain
 
 let private deparsePower power =
     match power with
-    | ActivationPower p ->
-        string p
-    | PassivePower p ->
-        string p
+    | ActivationPower View -> '2'
+    | ActivationPower Trap -> '3'
+    | ActivationPower Foresight -> '4'
+    | ActivationPower Flip -> '5'
+    | ActivationPower Freeze -> '6'
+    | ActivationPower Heal -> '7'
+    | PassivePower Retaliate -> '8'
+    | PassivePower Nimble -> '9'
+    | PassivePower TwinStrike -> 'X'
+    | PassivePower Taunt -> 'J'
+    | PassivePower Vampiric -> 'V'
+    | ActivationPower Move -> 'Q'
+    | ActivationPower Empower -> 'K'
+    | ActivationPower Action -> 'A'
 
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard playerID ->
-        ()
+        printf "?"
     | KnownBaseCard (playerID, power) ->
-        printfn "Player %i: %s" playerID (deparsePower power)
+        printf "%c" (deparsePower power)
 
 let private displayTroopKnowledge currentPlayer ownerID troopKnowledge =
     match troopKnowledge with
     | UnknownInactiveCardKnowledge health ->
         printfn "Inactive, %i health" health
     | KnownInactiveCardKnowledge (power, health) ->
-        printfn "Inactive %s, %i health" (deparsePower power) health
+        printfn "Inactive %c, %i health" (deparsePower power) health
     // later will need cases for active/pair when card is frozen
     | ActiveCardKnowledge (power, health, readiness) ->
         if ownerID = currentPlayer then
-            printfn "%A %s, %i health" readiness (deparsePower power) health
+            printfn "%A %c, %i health" readiness (deparsePower power) health
         else
-            printfn "%s, %i health" (deparsePower power) health
+            printfn "%c, %i health" (deparsePower power) health
     | PairKnowledge (power, health1, health2, readiness) ->
         if ownerID = currentPlayer then
-            printfn "%A %s pair: health %i and %i" readiness (deparsePower power) health1 health2
+            printfn "%A %c pair: health %i and %i" readiness (deparsePower power) health1 health2
         else
-            printfn "%s pair: health %i and %i" (deparsePower power) health1 health2
+            printfn "%c pair: health %i and %i" (deparsePower power) health1 health2
 
 let private displayTroopKnowledges currentPlayer troopKnowledges =
     if Map.isEmpty troopKnowledges then
@@ -48,8 +58,9 @@ let private displayTroopKnowledges currentPlayer troopKnowledges =
 let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
     let {Bases = baseKnowledges; Troops = troops} = lane
     printfn "Lane %i" (n + 1)
-    printfn "Bases present"
+    printf "Bases: "
     List.iter displayBaseKnowledge baseKnowledges
+    printfn ""
     displayTroopKnowledges currentPlayer troops
     printfn ""
 
@@ -80,7 +91,7 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     |> List.iter (displayPostLaneKnowledge currentPlayer)
 
 let private displayHandCard (HandCard power) =
-    printfn "%s" (deparsePower power)
+    printf "%c" (deparsePower power)
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -91,8 +102,8 @@ let private displayOpponentHandSize (id, size) =
 let private displayDeadCard deadCard =
     match deadCard with
     | UnknownDeadCard -> printfn "unknown card"
-    | KnownDeadCard (KnownFaceDownDeadCard power) -> printfn "%s, face-down" (deparsePower power)
-    | KnownDeadCard (KnownFaceUpDeadCard power) -> printfn "%s, face-up" (deparsePower power)
+    | KnownDeadCard (KnownFaceDownDeadCard power) -> printfn "%c, face-down" (deparsePower power)
+    | KnownDeadCard (KnownFaceUpDeadCard power) -> printfn "%c, face-up" (deparsePower power)
 
 let private displayDiscardKnowledge discardKnowledge =
     if List.isEmpty discardKnowledge then
@@ -122,7 +133,7 @@ let private displayOngoingGameInfo displayInfo =
         if List.isEmpty playerHand then
             printfn "Hand is empty"
         else
-            printfn "Hand"
+            printf "Hand: "
             List.iter displayHandCard playerHand
         printfn ""
         match opponentHandSizes with
@@ -164,23 +175,23 @@ let private displayOngoingGameInfo displayInfo =
 let private actionString action =
     match action with
     | TurnActionInfo (Play (_, power, laneID)) ->
-        "Play " + deparsePower power
+        "Play " + string (deparsePower power)
         + " to lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget health)) ->
         "Activate " + "unknown card"
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health))) ->
-        "Activate " + deparsePower power
+        "Activate " + string (deparsePower power)
         +  " (" + string health + " HP)"
         + " in lane " + string laneID
     | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
         let attackerText =
             match attackerInfo with
             | SingleAttacker (power, health) ->
-                deparsePower power + " (" + string health + " HP)"
+                string (deparsePower power) + " (" + string health + " HP)"
             | DoubleAttacker (power, health1, health2) ->
-                deparsePower power + " (" + string health1 + ", " + string health2 + " HP)"
+                string (deparsePower power) + " (" + string health1 + ", " + string health2 + " HP)"
         let targetText =
             match targetInfo with
             | UnknownInactiveTarget (pid, h) ->
@@ -189,22 +200,22 @@ let private actionString action =
                 + " in lane " + string laneID
             | KnownInactiveTarget (pid, p, h) ->
                 "player " + string pid + "'s"
-                + " inactive " + deparsePower p
+                + " inactive " + string (deparsePower p)
                 + " (" + string h + " HP)"
                 + " in lane " + string laneID
             | ActiveSingleTarget (pid, p, h) ->
                 "player " + string pid + "'s"
-                + " active " + deparsePower p
+                + " active " + string (deparsePower p)
                 + " (" + string h + " HP)"
                 + " in lane " + string laneID
             | ActivePairMemberTarget (pid, p, h1, h2) ->
                 "player " + string pid + "'s"
-                + " " + deparsePower p + " pair member"
+                + " " + string (deparsePower p) + " pair member"
                 + " (" + string h1 + " HP, partner " + string h2 + ")"
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
     | TurnActionInfo (CreatePair (_, laneID, power, (health1, readiness1), (health2, readiness2))) ->
-        "Create " + deparsePower power + " pair"
+        "Create " + string (deparsePower power) + " pair"
         + " in lane " + string laneID
         + " from " + string readiness1 + " " + string health1 + " HP"
         + " and " + string readiness2 + " " + string health2 + " HP"

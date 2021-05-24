@@ -231,20 +231,15 @@ let private getTroops playerID (cardPowers: CardPowers) (units: Units) inactiveU
             )
     let inactiveUnitKnowledge =
         inactiveUnits
-        |> Set.map (fun cardID ->
+        |> Set.toList
+        |> List.map (fun cardID ->
             let owner, health = Map.find cardID units
-            let knownBy =
-                hiddenCardKnownBys
-                |> Set.filter (fun (cid, _) -> cid = cardID)
-                |> Set.map (fun (_, pid) -> pid)
-                |> Set.toList
             if Set.contains (cardID, playerID) hiddenCardKnownBys then
                 let power = Map.find cardID cardPowers
                 owner, KnownInactiveCardKnowledge (power, health)
             else
                 owner, UnknownInactiveCardKnowledge health
             )
-        |> Seq.toList
     inactiveUnitKnowledge @ nonPairedActiveUnitKnowledge @ pairKnowledge
     |> List.groupBy (fun (pid, _) -> pid)
     |> List.map (fun (pid, pairs) -> pid, pairs |> List.map (fun (_, knowledge) -> knowledge))
