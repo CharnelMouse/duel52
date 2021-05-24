@@ -33,7 +33,6 @@ type TroopID = int<TID>
 type CardID = int<CID>
 type LaneID = int<LID>
 type Health = int<health>
-type KnownBy = int<PID> list
 
 type HandCard = HandCard of Power
 
