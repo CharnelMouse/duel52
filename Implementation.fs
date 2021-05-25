@@ -1046,6 +1046,88 @@ let private executeCreatePairAction playerID laneID power (health1, readiness1) 
         {boardInfo with Lanes = newLanes}
     {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
 
+let private updateLockedLaneWins (gameState: GameStateDuringTurn) =
+    match gameState.CardsState.GameStage with
+    | Early _
+    | DrawPileEmpty _ ->
+        gameState
+    | HandsEmpty {LockedLaneWins = lw} ->
+        let lanes = gameState.CardsState.Board.Lanes
+        let currentLaneWins =
+            lanes
+            |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
+            |> List.choose (fun (laneID, lane) ->
+                match laneSolePresence lane.Units with
+                | Some c -> Some (laneID, c)
+                | None -> None
+                )
+            |> Map.ofList
+        let newWins =
+            currentLaneWins
+            |> Map.fold (fun state laneID winnerID -> Map.add laneID winnerID state) lw
+        let newCardsState = {gameState.CardsState with GameStage = HandsEmpty {LockedLaneWins = newWins}}
+        {gameState with CardsState = newCardsState}
+
+let private checkForGameEnd gameState =
+    match gameState with
+    | GameStateDuringTurn {CardsState = cs} ->
+        match cs.GameStage with
+        | Early _ ->
+            gameState
+        | DrawPileEmpty _ ->
+            let lanes = cs.Board.Lanes
+            let wonLaneCounts =
+                lanes
+                |> List.choose (fun {Units = units} ->
+                    laneSolePresence units
+                    )
+                |> List.countBy id
+            match wonLaneCounts with
+            | [] -> gameState
+            | lst ->
+                let (leadingPlayer, leadingWins) =
+                    lst
+                    |> List.maxBy (fun (_, n) -> n)
+                if leadingWins >= 2 then
+                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
+                else
+                    gameState
+        | HandsEmpty {LockedLaneWins = laneWins} ->
+            let lanes = cs.Board.Lanes
+            let wonLaneCounts =
+                laneWins
+                |> Map.toList
+                |> List.countBy (fun (laneID, playerID) -> playerID)
+            match wonLaneCounts with
+            | [] -> gameState
+            | lst ->
+                let (leadingPlayer, leadingWins) =
+                    lst
+                    |> List.maxBy (fun (_, n) -> n)
+                if leadingWins >= 2 then
+                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
+                else
+                    let contestedLanes =
+                        lanes
+                        |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
+                        |> List.filter (fun (laneID, {Units = units}) ->
+                            match Map.containsKey laneID laneWins, Map.isEmpty units with
+                            | false, false ->
+                                true
+                            | false, true
+                            | true, false // shouldn't happen?
+                            | true, true ->
+                                false
+                            )
+                    if List.isEmpty contestedLanes then
+                        GameStateTied {Lanes = lanes}
+                    else
+                        gameState
+    | GameStateBetweenTurns _
+    | GameStateWon _
+    | GameStateTied _ ->
+        gameState
+
 let private executeTurnAction action gameState =
     let newStateBeforeActionUpdate =
         match action with
@@ -1057,12 +1139,29 @@ let private executeTurnAction action gameState =
             executeAttackAction playerID laneID attackerInfo targetInfo gameState
         | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
             executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState
-    {newStateBeforeActionUpdate with
-        TurnState = {
-            newStateBeforeActionUpdate.TurnState with
-                ActionsLeft = newStateBeforeActionUpdate.TurnState.ActionsLeft - 1
+    match gameState.CardsState.GameStage with
+    | Early _ ->
+        {newStateBeforeActionUpdate with
+            TurnState = {
+                newStateBeforeActionUpdate.TurnState with
+                    ActionsLeft = newStateBeforeActionUpdate.TurnState.ActionsLeft - 1
+                }
             }
-        }
+    | DrawPileEmpty _ ->
+        {newStateBeforeActionUpdate with
+            TurnState = {
+                newStateBeforeActionUpdate.TurnState with
+                    ActionsLeft = newStateBeforeActionUpdate.TurnState.ActionsLeft - 1
+                }
+            }
+    | HandsEmpty _ ->
+        {newStateBeforeActionUpdate with
+            TurnState = {
+                newStateBeforeActionUpdate.TurnState with
+                    ActionsLeft = newStateBeforeActionUpdate.TurnState.ActionsLeft - 1
+                }
+            }
+        |> updateLockedLaneWins // only want to do this after a play or an attack
 
 let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameStateDuringTurn =
     let ts = gameState.TurnState
@@ -1158,94 +1257,11 @@ let private readyAllActiveCards cardsState =
         {boardInfo with Lanes = newLanes}
     {cardsState with Board = newBoard}
 
-let private updateLockedLaneWins (gameState: GameStateDuringTurn) =
-    match gameState.CardsState.GameStage with
-    | Early _
-    | DrawPileEmpty _ ->
-        gameState
-    | HandsEmpty {LockedLaneWins = lw} ->
-        let lanes = gameState.CardsState.Board.Lanes
-        let currentLaneWins =
-            lanes
-            |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
-            |> List.choose (fun (laneID, lane) ->
-                match laneSolePresence lane.Units with
-                | Some c -> Some (laneID, c)
-                | None -> None
-                )
-            |> Map.ofList
-        let newWins =
-            currentLaneWins
-            |> Map.fold (fun state laneID winnerID -> Map.add laneID winnerID state) lw
-        let newCardsState = {gameState.CardsState with GameStage = HandsEmpty {LockedLaneWins = newWins}}
-        {gameState with CardsState = newCardsState}
-
-let private checkForGameEnd gameState =
-    match gameState with
-    | GameStateDuringTurn {CardsState = cs} ->
-        match cs.GameStage with
-        | Early _ ->
-            gameState
-        | DrawPileEmpty _ ->
-            let lanes = cs.Board.Lanes
-            let wonLaneCounts =
-                lanes
-                |> List.choose (fun {Units = units} ->
-                    laneSolePresence units
-                    )
-                |> List.countBy id
-            match wonLaneCounts with
-            | [] -> gameState
-            | lst ->
-                let (leadingPlayer, leadingWins) =
-                    lst
-                    |> List.maxBy (fun (_, n) -> n)
-                if leadingWins >= 2 then
-                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
-                else
-                    gameState
-        | HandsEmpty {LockedLaneWins = laneWins} ->
-            let lanes = cs.Board.Lanes
-            let wonLaneCounts =
-                laneWins
-                |> Map.toList
-                |> List.countBy (fun (laneID, playerID) -> playerID)
-            match wonLaneCounts with
-            | [] -> gameState
-            | lst ->
-                let (leadingPlayer, leadingWins) =
-                    lst
-                    |> List.maxBy (fun (_, n) -> n)
-                if leadingWins >= 2 then
-                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
-                else
-                    let contestedLanes =
-                        lanes
-                        |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
-                        |> List.filter (fun (laneID, {Units = units}) ->
-                            match Map.containsKey laneID laneWins, Map.isEmpty units with
-                            | false, false ->
-                                true
-                            | false, true
-                            | true, false // shouldn't happen?
-                            | true, true ->
-                                false
-                            )
-                    if List.isEmpty contestedLanes then
-                        GameStateTied {Lanes = lanes}
-                    else
-                        gameState
-    | GameStateBetweenTurns _
-    | GameStateWon _
-    | GameStateTied _ ->
-        gameState
-
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match gameState, action with
         | GameStateDuringTurn gs, TurnActionInfo tai ->
             executeTurnAction tai gs
-            |> updateLockedLaneWins
             |> GameStateDuringTurn
             |> checkForGameEnd
         | GameStateDuringTurn gs, EndTurn _ ->
