@@ -137,7 +137,7 @@ let private displayOngoingGameInfo displayInfo =
             List.iter displayHandCard playerHand
         printfn ""
         match opponentHandSizes with
-        | [] -> failwithf "opponents expected"
+        | [] -> ()
         | [h] -> displayOpponentHandSize h
         | _ ->
             printfn "Opponent hand sizes"
