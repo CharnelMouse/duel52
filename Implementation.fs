@@ -1213,9 +1213,12 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
+            let newKnownBys =
+                boardInfo.HiddenCardKnownBys
+                |> Set.add (drawPile.TopCard, playerID)
             let newCards = {
                 cardsState with
-                    Board = flipBasesOnBoard preInfo.Bases boardInfo.Lanes boardInfo.Discard boardInfo.HiddenCardKnownBys
+                    Board = flipBasesOnBoard preInfo.Bases boardInfo.Lanes boardInfo.Discard newKnownBys
                     GameStage = DrawPileEmpty {HandCards = newHandCards}
                 }
             {gameState with CardsState = newCards}
@@ -1228,6 +1231,9 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
+            let newKnownBys =
+                boardInfo.HiddenCardKnownBys
+                |> Set.add (drawPile.TopCard, playerID)
             let newCards =
                 {cardsState with
                     GameStage =
@@ -1236,6 +1242,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                                 DrawPile = {TopCard = newTopCard; Rest = newRest}
                                 HandCards = newHandCards
                             }
+                    Board = {boardInfo with HiddenCardKnownBys = newKnownBys}
                 }
             {gameState with CardsState = newCards}
     | DrawPileEmpty _
