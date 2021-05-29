@@ -805,70 +805,56 @@ let private executePlayAction playerID power laneID gameState =
     |> removeHandsIfAllEmpty
     |> changeCardsState gameState
 
+let private removeCardFromInactiveUnits cardID lane =
+    {lane with InactiveUnits = Set.remove cardID lane.InactiveUnits}
+
+let private addCardToActiveUnits cardID lane =
+    {lane with ActiveUnits = Map.add cardID Ready lane.ActiveUnits}
+
+let private changeLaneWithFn laneID (fn: Lane -> Lane) (board: Board) =
+    {board with
+        Lanes =
+            board.Lanes
+            |> List.mapi (fun n l ->
+                if n = (int laneID - 1) then
+                    fn l
+                else
+                    l
+            )
+        }
+
+let private removeCardFromKnownBys cardID board =
+    {board with
+        HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) board.HiddenCardKnownBys
+        }
+
+let private changeBoard cardsState newBoard =
+    {cardsState with Board = newBoard}
+
 let private executeActivateAction playerID laneID activationTarget gameState =
     let cardsState = gameState.CardsState
-    let newBoard =
-        match cardsState.Board, activationTarget with
-        | boardInfo, UnknownActivationTarget health ->
-            let lanes = boardInfo.Lanes
-            let lane = List.item (int laneID - 1) lanes
-            let cardID =
-                lane.Units
-                |> Map.filter (fun index (owner, h) -> owner = playerID && h = health)
-                |> Map.toList
-                |> List.map (fun (index, _) -> index)
-                |> List.head
-            let newInactiveUnits = Set.remove cardID lane.InactiveUnits
-            let newActiveUnits = Map.add cardID Ready lane.ActiveUnits
-            let newLane = {
-                lane with
-                    InactiveUnits = newInactiveUnits
-                    ActiveUnits = newActiveUnits
-                }
-            let newLanes =
-                lanes
-                |> List.mapi (fun n l ->
-                    if n = (int laneID - 1) then
-                        newLane
-                    else
-                        l
-                )
-            {
-                boardInfo with
-                    Lanes = newLanes
-                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) boardInfo.HiddenCardKnownBys
-                }
-        | boardInfo, KnownActivationTarget (power, health) ->
-            let lanes = boardInfo.Lanes
-            let lane = List.item (int laneID - 1) lanes
-            let cardID =
-                lane.Units
-                |> Map.filter (fun index (owner, h) -> owner = playerID && h = health)
-                |> Map.toList
-                |> List.map (fun (index, _) -> index)
-                |> List.filter (fun index -> Map.find index cardsState.CardPowers = power)
-                |> List.head
-            let newInactiveUnits = Set.remove cardID lane.InactiveUnits
-            let newActiveUnits = Map.add cardID Ready lane.ActiveUnits
-            let newLane = {
-                lane with
-                    InactiveUnits = newInactiveUnits
-                    ActiveUnits = newActiveUnits
-                }
-            let newLanes =
-                lanes
-                |> List.mapi (fun n l ->
-                    if n = (int laneID - 1) then
-                        newLane
-                    else
-                        l
-                )
-            {
-                boardInfo with
-                    Lanes = newLanes
-                    HiddenCardKnownBys = Set.filter (fun (cid, _) -> cid <> cardID) boardInfo.HiddenCardKnownBys
-                }
-    {gameState with CardsState = {cardsState with Board = newBoard}}
+    let lanes = cardsState.Board.Lanes
+    let lane = List.item (int laneID - 1) lanes
+    let cardID =
+        match activationTarget with
+        | UnknownActivationTarget health ->
+            lane.Units
+            |> Map.filter (fun index (owner, h) -> owner = playerID && h = health)
+            |> Map.toList
+            |> List.map (fun (index, _) -> index)
+            |> List.head
+        | KnownActivationTarget (power, health) ->
+            lane.Units
+            |> Map.filter (fun index (owner, h) -> owner = playerID && h = health)
+            |> Map.toList
+            |> List.map (fun (index, _) -> index)
+            |> List.filter (fun index -> Map.find index cardsState.CardPowers = power)
+            |> List.head
+    cardsState.Board
+    |> changeLaneWithFn laneID (removeCardFromInactiveUnits cardID >> addCardToActiveUnits cardID)
+    |> removeCardFromKnownBys cardID
+    |> changeBoard cardsState
+    |> changeCardsState gameState
 
 let private getAttackInfo (cardPowers: CardPowers) units (inactiveUnits: InactiveUnits) (activeUnits: ActiveUnits) unitPairs playerID attackerInfo targetInfo =
     let attackerIDs =
