@@ -1039,26 +1039,28 @@ let private findPairee ownerID health power readiness cardPowers activeUnits uni
     |> List.filter (fun id -> Map.tryFind id activeUnits = Some readiness)
     |> List.head
 
+let private addCardsToPairs cardID1 cardID2 lane =
+    {lane with
+        UnitPairs =
+            lane.UnitPairs
+            |> Map.add cardID1 cardID2
+            |> Map.add cardID2 cardID1
+        }
+
 let private executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState =
-    let newBoard =
-        let boardInfo = gameState.CardsState.Board
-        let newLanes =
-            boardInfo.Lanes
-            |> List.mapi (fun n lane ->
-                if (n + 1)*1<LID> = laneID then
-                    let cardID1 =
-                        lane.Units
-                        |> findPairee playerID health1 power readiness1 gameState.CardsState.CardPowers lane.ActiveUnits
-                    let cardID2 =
-                        lane.Units
-                        |> Map.filter (fun cardID _ -> cardID <> cardID1)
-                        |> findPairee playerID health2 power readiness2 gameState.CardsState.CardPowers lane.ActiveUnits
-                    {lane with UnitPairs = lane.UnitPairs |> Map.add cardID1 cardID2 |> Map.add cardID2 cardID1}
-                else
-                    lane
-                )
-        {boardInfo with Lanes = newLanes}
-    {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
+    let boardInfo = gameState.CardsState.Board
+    let lane = List.item (int laneID - 1) boardInfo.Lanes
+    let cardID1 =
+        lane.Units
+        |> findPairee playerID health1 power readiness1 gameState.CardsState.CardPowers lane.ActiveUnits
+    let cardID2 =
+        lane.Units
+        |> Map.filter (fun cardID _ -> cardID <> cardID1)
+        |> findPairee playerID health2 power readiness2 gameState.CardsState.CardPowers lane.ActiveUnits
+    gameState.CardsState.Board
+    |> changeLaneWithFn laneID (addCardsToPairs cardID1 cardID2)
+    |> changeBoard gameState.CardsState
+    |> changeCardsState gameState
 
 let private updateLockedLaneWins (gameState: GameStateDuringTurn) =
     match gameState.CardsState.GameStage with
