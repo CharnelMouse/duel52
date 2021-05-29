@@ -725,6 +725,64 @@ let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
     | TiedGameDisplayInfo _ ->
         List.empty
 
+let private addCardToBoard cardID playerID laneID (cardsState: CardsState) =
+    let board = cardsState.Board
+    let l = board.Lanes
+    let newLanes =
+        l
+        |> List.mapi (fun n lane ->
+            if (n + 1)*1<LID> = laneID then
+                {
+                    lane with
+                        Units = Map.add cardID (playerID, 2<health>) lane.Units
+                        InactiveUnits = Set.add cardID lane.InactiveUnits
+                }
+            else
+                lane
+            )
+    {cardsState with Board = {board with Lanes = newLanes}}
+
+let private removeCardFromHand cardID playerID (cardsState: CardsState) =
+    match cardsState.GameStage with
+    | Early gs ->
+        let hands = gs.HandCards
+        let newHands =
+            hands
+            |> Map.change playerID (function
+                | Some lst -> lst |> List.filter (fun c -> c <> cardID) |> Some
+                | None -> failwithf "Can't remove card from non-existant player's hand"
+                )
+        {cardsState with
+            GameStage = Early {gs with HandCards = newHands}
+            }
+    | DrawPileEmpty gs ->
+        let hands = gs.HandCards
+        let newHands =
+            hands
+            |> Map.change playerID (function
+                | Some lst -> lst |> List.filter (fun c -> c <> cardID) |> Some
+                | None -> failwithf "Can't remove card from non-existant player's hand"
+                )
+        {cardsState with
+            GameStage = DrawPileEmpty {gs with HandCards = newHands}
+            }
+    | HandsEmpty _ ->
+        failwithf "Shouldn't be here!"
+
+let private removeHandsIfAllEmpty (cardsState: CardsState) =
+    match cardsState.GameStage with
+    | DrawPileEmpty gs when Map.forall (fun _ cards -> List.isEmpty cards) gs.HandCards ->
+        {cardsState with
+            GameStage = HandsEmpty {LockedLaneWins = Map.empty}
+            }
+    | Early _
+    | DrawPileEmpty _
+    | HandsEmpty _ ->
+        cardsState
+
+let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
+    {gameState with CardsState = newCardsState}
+
 let private executePlayAction playerID power laneID gameState =
     let handCards =
         match gameState.CardsState.GameStage with
@@ -741,49 +799,11 @@ let private executePlayAction playerID power laneID gameState =
         |> Map.toList
         |> List.map (fun (card, _) -> card)
         |> List.find (fun card -> List.contains card currentPlayerHand)
-    let newCards =
-        let newCurrentPlayerHand =
-            currentPlayerHand
-            |> List.filter (fun id -> id <> cardID)
-        let newHandInfo =
-            handCards
-            |> Map.add playerID newCurrentPlayerHand
-        let newBoard =
-            let boardInfo = gameState.CardsState.Board
-            let l = boardInfo.Lanes
-            let newLanes =
-                l
-                |> List.mapi (fun n lane ->
-                    if (n + 1)*1<LID> = laneID then
-                        {
-                            lane with
-                                Units = Map.add cardID (playerID, 2<health>) lane.Units
-                                InactiveUnits = Set.add cardID lane.InactiveUnits
-                        }
-                    else
-                        lane
-                    )
-            {boardInfo with Lanes = newLanes}
-        match gameState.CardsState.GameStage with
-        | Early gs ->
-            {gameState.CardsState with
-                Board = newBoard
-                GameStage = Early {gs with HandCards = newHandInfo}
-                }
-        | DrawPileEmpty gs ->
-            if Map.forall (fun _ cards -> List.isEmpty cards) newHandInfo then
-                {gameState.CardsState with
-                    Board = newBoard
-                    GameStage = HandsEmpty {LockedLaneWins = Map.empty}
-                    }
-            else
-                {gameState.CardsState with
-                    Board = newBoard
-                    GameStage = DrawPileEmpty {gs with HandCards = newHandInfo}
-                    }
-        | HandsEmpty _ ->
-            failwithf "Shouldn't be here!"
-    {gameState with CardsState = newCards}
+    gameState.CardsState
+    |> addCardToBoard cardID playerID laneID
+    |> removeCardFromHand cardID playerID
+    |> removeHandsIfAllEmpty
+    |> changeCardsState gameState
 
 let private executeActivateAction playerID laneID activationTarget gameState =
     let cardsState = gameState.CardsState
