@@ -856,7 +856,9 @@ let private executeActivateAction playerID laneID activationTarget gameState =
     |> changeBoard cardsState
     |> changeCardsState gameState
 
-let private getAttackInfo (cardPowers: CardPowers) units (inactiveUnits: InactiveUnits) (activeUnits: ActiveUnits) unitPairs playerID attackerInfo targetInfo =
+let private getAttackInfo (cardPowers: CardPowers) lanes laneID playerID attackerInfo targetInfo =
+    let lane = List.item (int laneID - 1) lanes
+    let {Units = units; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs} = lane
     let attackerIDs =
         match attackerInfo with
         | SingleAttacker (power, health) ->
@@ -965,58 +967,64 @@ let private getAttackInfo (cardPowers: CardPowers) units (inactiveUnits: Inactiv
             |> List.head
     attackerIDs, targetID, List.length attackerIDs * 1<health>
 
-let private exhaust cardID activeCards =
-    activeCards
-    |> Map.change cardID (function
-        | None -> None
-        | Some _ -> Some Exhausted
+let private damageCard cardID damage (lane: Lane) =
+    {
+        lane with
+            Units =
+                lane.Units
+                |> Map.change cardID (function | None -> None | Some (owner, health) -> Some (owner, health - damage))
+        }
+
+let private exhaustCards cardIDs (lane: Lane) =
+    {lane with
+        ActiveUnits =
+            cardIDs
+            |> List.fold (fun aus id -> Map.add id Exhausted aus) lane.ActiveUnits
+        }
+
+let private changeDiscard discard (board: Board) =
+    {board with Discard = discard}
+
+let private findDeadCards (laneID: LaneID) (board: Board) =
+    let lane = List.item (int laneID - 1) board.Lanes
+    lane.Units
+    |> Map.filter (fun _ (_, health) -> health = 0<health>)
+    |> Map.toList
+    |> List.map (fun (cardID, _) -> cardID)
+
+let private removeCardsFromUnits cardIDs lane =
+    {lane with Units = Map.filter (fun id _ -> not (List.contains id cardIDs)) lane.Units}
+let private removeCardsFromInactiveUnits cardIDs lane =
+    {lane with InactiveUnits = Set.difference lane.InactiveUnits (Set.ofList cardIDs)}
+let private removeCardsFromActiveUnits cardIDs lane =
+    {lane with ActiveUnits = Map.filter (fun id _ -> not (List.contains id cardIDs)) lane.ActiveUnits}
+let private removeCardsFromUnitPairs cardIDs lane =
+    {lane with UnitPairs = Map.filter (fun id id2 -> not (List.contains id cardIDs || List.contains id2 cardIDs)) lane.UnitPairs}
+
+let private moveDeadCardsToDiscard laneID (board: Board) =
+    let deadCards = findDeadCards laneID board
+    board
+    |> changeLaneWithFn laneID (
+        removeCardsFromUnits deadCards
+        >> removeCardsFromInactiveUnits deadCards
+        >> removeCardsFromActiveUnits deadCards
+        >> removeCardsFromUnitPairs deadCards
         )
+    |> changeDiscard (List.fold (fun discard id -> Set.add id discard) board.Discard deadCards)
 
 let private executeAttackAction playerID laneID attackerInfo targetInfo gameState =
-    let {Lanes = lanes; Discard = discard; HiddenCardKnownBys = hiddenCardKnownBys} = gameState.CardsState.Board
-    let lane = List.item (int laneID - 1) lanes
+    let cardsState = gameState.CardsState
+    let board = cardsState.Board
     let attackerIDs, targetID, damage =
-        getAttackInfo gameState.CardsState.CardPowers lane.Units lane.InactiveUnits lane.ActiveUnits lane.UnitPairs playerID attackerInfo targetInfo
-    let _, targetHealth = Map.find targetID lane.Units
-    let newUnits, newInactiveUnits, newActiveUnits, newUnitPairs, newDiscard =
-        if targetHealth <= damage then
-            Map.remove targetID lane.Units,
-            lane.InactiveUnits
-            |> Set.remove targetID,
-            attackerIDs
-            |> List.fold (fun activeUnits id -> exhaust id activeUnits) lane.ActiveUnits
-            |> Map.remove targetID,
-            Map.filter (fun key value -> key <> targetID && value <> targetID) lane.UnitPairs,
-            Set.add targetID discard
-        else
-            lane.Units
-            |> Map.change targetID (function | None -> None | Some (owner, health) -> Some (owner, health - damage)),
-            lane.InactiveUnits,
-            attackerIDs
-            |> List.fold (fun activeUnits id -> exhaust id activeUnits) lane.ActiveUnits,
-            lane.UnitPairs,
-            discard
-    let newLane = {
-        lane with
-            Units = newUnits
-            InactiveUnits = newInactiveUnits
-            ActiveUnits = newActiveUnits
-            UnitPairs = newUnitPairs
-        }
-    let newBoard =
-        {
-            Lanes =
-                lanes
-                |> List.mapi (fun n ln ->
-                    if n = int laneID - 1 then
-                        newLane
-                    else
-                        ln
-                    )
-            Discard = newDiscard
-            HiddenCardKnownBys = hiddenCardKnownBys
-            }
-    {gameState with CardsState = {gameState.CardsState with Board = newBoard}}
+        getAttackInfo cardsState.CardPowers board.Lanes laneID playerID attackerInfo targetInfo
+    board
+    |> changeLaneWithFn laneID (
+        exhaustCards attackerIDs
+        >> damageCard targetID damage
+        )
+    |> moveDeadCardsToDiscard laneID
+    |> changeBoard cardsState
+    |> changeCardsState gameState
 
 let private findPairee ownerID health power readiness cardPowers activeUnits units =
     units
