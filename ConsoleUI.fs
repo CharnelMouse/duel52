@@ -174,8 +174,8 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | TurnActionInfo (Play (_, power, laneID)) ->
-        "Play " + string (deparsePower power)
+    | TurnActionInfo (Play (handPosition, laneID)) ->
+        "Play card " + string handPosition
         + " to lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget health)) ->
         "Activate " + "unknown card"

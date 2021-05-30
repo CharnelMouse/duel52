@@ -27,12 +27,14 @@ type Power =
 [<Measure>] type TID
 [<Measure>] type CID
 [<Measure>] type LID
+[<Measure>] type HP
 
 type PlayerID = int<PID>
 type TroopID = int<TID>
 type CardID = int<CID>
 type LaneID = int<LID>
 type Health = int<health>
+type HandPosition = int<HP>
 
 type HandCard = HandCard of Power
 
@@ -139,7 +141,7 @@ type ActivationTarget =
 | UnknownActivationTarget of Health
 
 type TurnActionInfo =
-| Play of PlayerID * Power * LaneID
+| Play of HandPosition * LaneID
 | Activate of PlayerID * LaneID * ActivationTarget
 | Attack of PlayerID * LaneID * AttackerInfo * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)

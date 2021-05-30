@@ -420,18 +420,18 @@ let private getDisplayInfo gameState =
             LaneWins = laneWins
         }
 
-let private getPlayActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
-    let validPlayLanes =
-        match turnDisplayInfo.BoardKnowledge with
-        | PreBaseFlipBoardKnowledge {Lanes = l} ->
-            [1..List.length l]
-        | PostBaseFlipBoardKnowledge {Lanes = l} ->
-            [1..List.length l]
-    turnDisplayInfo.PlayerHand
-    |> List.distinct
-    |> List.allPairs validPlayLanes
-    |> List.map (fun (lane, HandCard power) ->
-        Play (turnDisplayInfo.CurrentPlayer, power, lane*1<LID>)
+let private getPlayActionsInfo (gameState: GameStateDuringTurn) =
+    let playerID = gameState.TurnState.CurrentPlayer
+    match gameState.CardsState.GameStage with
+    | Early gs ->
+        [for i in 1..List.length (Map.find playerID gs.HandCards) -> i*1<HP>]
+    | DrawPileEmpty gs ->
+        [for i in 1..List.length (Map.find playerID gs.HandCards) -> i*1<HP>]
+    | HandsEmpty _ ->
+        List.empty
+    |> List.allPairs [for i in 1..List.length gameState.CardsState.Board.Lanes -> i*1<LID>]
+    |> List.map (fun (lane, handIndex) ->
+        Play (handIndex, lane)
         |> TurnActionInfo
         )
 
@@ -708,25 +708,39 @@ let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 []
             )
 
-let private getPossibleActionsInfo (displayInfo: DisplayInfo) =
-    match displayInfo with
-    | TurnDisplayInfo turnDisplayInfo ->
-        if turnDisplayInfo.ActionsLeft = 0 then
-            EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
+let private getPossibleActionsInfo (gameState: GameState) (displayInfo: DisplayInfo) =
+    match gameState with
+    | GameStateBetweenTurns gs ->
+        StartTurn gs.TurnState.Player
+        |> List.singleton
+    | GameStateDuringTurn gs ->
+        if gs.TurnState.ActionsLeft = 0 then
+            EndTurn gs.TurnState.CurrentPlayer
+            |> List.singleton
         else
-            let actions =
-                getPlayActionsInfo turnDisplayInfo
-                @ (getActivateActionsInfo turnDisplayInfo)
-                @ (getAttackActionsInfo turnDisplayInfo)
-                @ (getPairActionsInfo turnDisplayInfo)
-            if List.isEmpty actions then
-                EndTurn turnDisplayInfo.CurrentPlayer |> List.singleton
-            else
-                actions
-    | SwitchDisplayInfo playerID ->
-        StartTurn playerID |> List.singleton
-    | WonGameDisplayInfo _
-    | TiedGameDisplayInfo _ ->
+            let currentPlayer = gs.TurnState.CurrentPlayer
+            match displayInfo with
+            | TurnDisplayInfo turnDisplayInfo ->
+                if gs.TurnState.ActionsLeft = 0 then
+                    EndTurn currentPlayer
+                    |> List.singleton
+                else
+                    let actions =
+                        getPlayActionsInfo gs
+                        @ (getActivateActionsInfo turnDisplayInfo)
+                        @ (getAttackActionsInfo turnDisplayInfo)
+                        @ (getPairActionsInfo turnDisplayInfo)
+                    if List.isEmpty actions then
+                        EndTurn currentPlayer
+                        |> List.singleton
+                    else
+                        actions
+            | SwitchDisplayInfo _
+            | WonGameDisplayInfo _
+            | TiedGameDisplayInfo _ ->
+                failwithf "Impossible game state / turn display info pair"
+    | GameStateWon _
+    | GameStateTied _ ->
         List.empty
 
 let private addCardToBoard cardID playerID laneID (cardsState: CardsState) =
@@ -786,23 +800,20 @@ let private removeHandsIfAllEmpty (cardsState: CardsState) =
 let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
     {gameState with CardsState = newCardsState}
 
-let private executePlayAction playerID power laneID gameState =
-    let handCards =
-        match gameState.CardsState.GameStage with
+let private executePlayAction handPosition laneID gameState =
+    let playerID = gameState.TurnState.CurrentPlayer
+    let cardsState = gameState.CardsState
+    let cardID =
+        match cardsState.GameStage with
         | Early {HandCards = hco} ->
             hco
         | DrawPileEmpty {HandCards = hco} ->
             hco
         | HandsEmpty _ ->
             failwithf "can't play a card when hands are empty"
-    let currentPlayerHand = Map.find playerID handCards
-    let cardID =
-        gameState.CardsState.CardPowers
-        |> Map.filter (fun _ p -> p = power)
-        |> Map.toList
-        |> List.map (fun (card, _) -> card)
-        |> List.find (fun card -> List.contains card currentPlayerHand)
-    gameState.CardsState
+        |> Map.find playerID
+        |> List.item (int handPosition - 1)
+    cardsState
     |> addCardToBoard cardID playerID laneID
     |> removeCardFromHand cardID playerID
     |> removeHandsIfAllEmpty
@@ -1131,8 +1142,8 @@ let private checkForGameEnd gameState =
 let private executeTurnAction action gameState =
     let newStateBeforeActionUpdate =
         match action with
-        | Play (playerID, power, laneID) ->
-            executePlayAction playerID power laneID gameState
+        | Play (handPosition, laneID) ->
+            executePlayAction handPosition laneID gameState
         | Activate (playerID, laneID, activationTarget) ->
             executeActivateAction playerID laneID activationTarget gameState
         | Attack (playerID, laneID, attackerInfo, targetInfo) ->
@@ -1303,7 +1314,7 @@ let rec private makeNextActionInfo gameState action =
         InProgress (
             newDisplayInfo,
             newDisplayInfo
-            |> getPossibleActionsInfo
+            |> getPossibleActionsInfo newGameState
             |> List.map (makeNextActionInfo newGameState)
             )
     {
@@ -1360,7 +1371,7 @@ let private createGame nPlayers nLanes =
         }
     let displayInfo = getDisplayInfo gameState
     let nextActions =
-        getPossibleActionsInfo displayInfo
+        getPossibleActionsInfo gameState displayInfo
         |> List.map (makeNextActionInfo gameState)
     InProgress (displayInfo, nextActions)
 
