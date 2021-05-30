@@ -1089,26 +1089,9 @@ let private checkForGameEnd gameState =
     match gameState with
     | GameStateDuringTurn {CardsState = cs} ->
         match cs.GameStage with
-        | Early _ ->
-            gameState
+        | Early _
         | DrawPileEmpty _ ->
-            let lanes = cs.Board.Lanes
-            let wonLaneCounts =
-                lanes
-                |> List.choose (fun {Units = units} ->
-                    laneSolePresence units
-                    )
-                |> List.countBy id
-            match wonLaneCounts with
-            | [] -> gameState
-            | lst ->
-                let (leadingPlayer, leadingWins) =
-                    lst
-                    |> List.maxBy (fun (_, n) -> n)
-                if leadingWins >= 2 then
-                    GameStateWon {Winner = leadingPlayer; Lanes = lanes}
-                else
-                    gameState
+            gameState
         | HandsEmpty {LockedLaneWins = laneWins} ->
             let lanes = cs.Board.Lanes
             let wonLaneCounts =
