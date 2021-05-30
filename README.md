@@ -25,9 +25,6 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Empower
   - Action
 
-Needed fixes:
-- Keep killed active cards visible in discard
-
 Future extensions:
 
 - Variants with 1, 3, or 4 players
