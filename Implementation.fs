@@ -1333,8 +1333,7 @@ let private createGame nPlayers nLanes =
         createUnshuffledPowerDeck()
         |> shuffle
     let cardIndices =
-        [0..(List.length shuffledPowerDeck - 1)]
-        |> List.map (fun n -> n*1<CID>)
+        [for i in 1..List.length shuffledPowerDeck -> i*1<CID>]
     let cardPowers =
         shuffledPowerDeck
         |> List.zip cardIndices
