@@ -70,28 +70,20 @@ type ActiveUnitKnowledge = Power * Health * Readiness
 
 type PairKnowledge = Power * Health * Health * Readiness
 
-type InactiveUnitsKnowledge = Map<PlayerID, InactiveUnitKnowledge list>
-type ActiveUnitsKnowledge = Map<PlayerID, ActiveUnitKnowledge list>
-type PairsKnowledge = Map<PlayerID, PairKnowledge list>
+type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list
-    InactiveUnits: InactiveUnitsKnowledge
-    ActiveUnits: ActiveUnitsKnowledge
-    Pairs: PairsKnowledge
+    Troops: TroopKnowledge
 }
 
 type ContestedLaneKnowledge = {
-    InactiveUnits: InactiveUnitsKnowledge
-    ActiveUnits: ActiveUnitsKnowledge
-    Pairs: PairsKnowledge
+    Troops: TroopKnowledge
 }
 
 type WonLaneKnowledge = {
     Controller: PlayerID
-    InactiveUnits: InactiveUnitsKnowledge
-    ActiveUnits: ActiveUnitsKnowledge
-    Pairs: PairsKnowledge
+    Troops: TroopKnowledge
 }
 
 type PostBaseFlipLaneKnowledge =
