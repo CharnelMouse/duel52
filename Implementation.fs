@@ -201,7 +201,7 @@ let private getBaseKnowledge (playerID: PlayerID) (baseCard: PlayerID * Power * 
     else
         UnknownBaseCard ownerID
 
-let private getTroops playerID (cardPowers: CardPowers) (unitOwners: UnitOwners) (unitHealths: UnitHealths) (revealedCards: RevealedCards) inactiveUnits activeUnits unitPairs hiddenCardKnownBys : TroopsKnowledge =
+let private getTroops playerID (cardPowers: CardPowers) (unitOwners: UnitOwners) (unitHealths: UnitHealths) (revealedCards: RevealedCards) inactiveUnits activeUnits unitPairs hiddenCardKnownBys : UnitsKnowledge * PairsKnowledge =
     let pairCardIDs =
         unitPairs
         |> Map.toList
@@ -243,7 +243,11 @@ let private getTroops playerID (cardPowers: CardPowers) (unitOwners: UnitOwners)
             else
                 owner, UnknownInactiveCardKnowledge health
             )
-    inactiveUnitKnowledge @ nonPairedActiveUnitKnowledge @ pairKnowledge
+    inactiveUnitKnowledge @ nonPairedActiveUnitKnowledge
+    |> List.groupBy (fun (pid, _) -> pid)
+    |> List.map (fun (pid, pairs) -> pid, pairs |> List.map (fun (_, knowledge) -> knowledge))
+    |> Map.ofList,
+    pairKnowledge
     |> List.groupBy (fun (pid, _) -> pid)
     |> List.map (fun (pid, pairs) -> pid, pairs |> List.map (fun (_, knowledge) -> knowledge))
     |> Map.ofList
@@ -287,7 +291,7 @@ let private getDisplayInfo gameState =
                 let lanesKnowledge =
                     List.zip b l
                     |> List.map (fun (bases, {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs}) ->
-                        let troops = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
+                        let units, pairs = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
                         {
                             Bases =
                                 bases
@@ -300,7 +304,8 @@ let private getDisplayInfo gameState =
                                     |> Set.map (fun (_, pid) -> pid)
                                     )
                                 |> List.map getBase
-                            Troops = troops
+                            Units = units
+                            Pairs = pairs
                             } : PreBaseFlipLaneKnowledge
                         )
                 let drawPileSize = 1 + List.length dp.Rest
@@ -316,16 +321,18 @@ let private getDisplayInfo gameState =
                 let lanesKnowledge =
                     l
                     |> List.map (fun {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs} ->
-                        let troops = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
+                        let units, pairs = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
                         match (laneSolePresence unitOwners) with
                         | None ->
                             ContestedLaneKnowledge {
-                                Troops = troops
+                                Units = units
+                                Pairs = pairs
                                 }
                         | Some c ->
                             WonLaneKnowledge {
                                 Controller = c
-                                Troops = troops
+                                Units = units
+                                Pairs = pairs
                                 }
                         )
                 let discardKnowledge =
@@ -340,16 +347,18 @@ let private getDisplayInfo gameState =
                     l
                     |> List.zip ([for i in 1..List.length l -> i*1<LID>])
                     |> List.map (fun (laneID, {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; UnitPairs = unitPairs}) ->
-                        let troops = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
+                        let units, pairs = getTroops id cardPowers unitOwners unitHealths rc inactiveUnits activeUnits unitPairs kb
                         match Map.tryFind laneID laneWins with
                         | None ->
                             ContestedLaneKnowledge {
-                                Troops = troops
+                                Units = units
+                                Pairs = pairs
                                 }
                         | Some c ->
                             WonLaneKnowledge {
                                 Controller = c
-                                Troops = troops
+                                Units = units
+                                Pairs = pairs
                                 }
                         )
                 let discardKnowledge =
@@ -440,8 +449,8 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     | PreBaseFlipBoardKnowledge {Lanes = l} ->
         l
         |> List.indexed
-        |> List.collect (fun (n, {Troops = troops}) ->
-            troops
+        |> List.collect (fun (n, {Units = units}) ->
+            units
             |> Map.tryFind playerID
             |> function
             | None -> []
@@ -457,8 +466,7 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health))
                         |> TurnActionInfo
                         |> Some
-                    | ActiveCardKnowledge _
-                    | PairKnowledge _ ->
+                    | ActiveCardKnowledge _ ->
                         None
                     )
             |> List.distinct
@@ -468,8 +476,8 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
         |> List.indexed
         |> List.collect (fun (n, lane) ->
             match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                troops
+            | ContestedLaneKnowledge {Units = units} ->
+                units
                 |> Map.tryFind playerID
                 |> function
                 | None -> []
@@ -485,13 +493,12 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                             Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health))
                             |> TurnActionInfo
                             |> Some
-                        | ActiveCardKnowledge _
-                        | PairKnowledge _ ->
+                        | ActiveCardKnowledge _ ->
                             None
                         )
                 |> List.distinct
-            | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
-                troops
+            | WonLaneKnowledge {Controller = c; Units = units} when c = playerID ->
+                units
                 |> Map.tryFind playerID
                 |> function
                 | None -> []
@@ -507,8 +514,7 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                             Activate (playerID, (n + 1)*1<LID>, KnownActivationTarget (power, health))
                             |> TurnActionInfo
                             |> Some
-                        | ActiveCardKnowledge _
-                        | PairKnowledge _ ->
+                        | ActiveCardKnowledge _ ->
                             None
                         )
                 |> List.distinct
@@ -516,9 +522,9 @@ let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 []
             )
 
-let private getPairActionsInfoFromTroops playerID laneID troops =
+let private getPairActionsInfoFromUnits playerID laneID units =
     let potentialSingles =
-        troops
+        units
         |> Map.tryFind playerID
         |> function
         | None -> []
@@ -529,8 +535,7 @@ let private getPairActionsInfoFromTroops playerID laneID troops =
                 | ActiveCardKnowledge (power, health, readiness) ->
                     Some (power, health, readiness)
                 | UnknownInactiveCardKnowledge _
-                | KnownInactiveCardKnowledge _
-                | PairKnowledge _ ->
+                | KnownInactiveCardKnowledge _ ->
                     None
                 )
     let rec distPairs lst =
@@ -559,10 +564,10 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     | PreBaseFlipBoardKnowledge {Lanes = l} ->
         l
         |> List.indexed
-        |> List.collect (fun (n, {Troops = troops}) ->
+        |> List.collect (fun (n, {Units = units; Pairs = pairs}) ->
             let laneID = (n + 1)*1<LID>
-            let possibleAttackers =
-                troops
+            let possibleUnitAttackers =
+                units
                 |> Map.tryFind playerID
                 |> function
                 | None -> []
@@ -578,15 +583,25 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                                 Some (SingleAttacker (p, h))
                             else
                                 None
-                        | PairKnowledge (p, h1, h2, r) ->
-                            if r = Ready then
-                                Some (DoubleAttacker (p, h1, h2))
-                            else
-                                None
                         )
                     |> List.distinct
-            let possibleTargets =
-                troops
+            let possiblePairAttackers =
+                pairs
+                |> Map.tryFind playerID
+                |> function
+                | None -> []
+                | Some ownTroops ->
+                    ownTroops
+                    |> List.distinct
+                    |> List.choose (fun (p, h1, h2, r) ->
+                        if r = Ready then
+                            Some (DoubleAttacker (p, h1, h2))
+                        else
+                            None
+                        )
+                    |> List.distinct
+            let possibleUnitTargets =
+                units
                 |> Map.filter (fun pid _ -> pid <> playerID)
                 |> Map.toList
                 |> List.collect (fun (pid, tks) ->
@@ -602,16 +617,26 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         | ActiveCardKnowledge (p, h, _) ->
                             ActiveSingleTarget (pid, p, h)
                             |> List.singleton
-                        | PairKnowledge (p, h1, h2, _) ->
-                            [
-                                ActivePairMemberTarget (pid, p, h1, h2);
-                                ActivePairMemberTarget (pid, p, h2, h1)
-                                ]
-                            |> List.distinct
                         )
                     |> List.distinct
                     )
-            List.allPairs possibleAttackers possibleTargets
+            let possiblePairTargets =
+                pairs
+                |> Map.filter (fun pid _ -> pid <> playerID)
+                |> Map.toList
+                |> List.collect (fun (pid, tks) ->
+                    tks
+                    |> List.distinct
+                    |> List.collect (fun (p, h1, h2, _) ->
+                        [
+                            ActivePairMemberTarget (pid, p, h1, h2);
+                            ActivePairMemberTarget (pid, p, h2, h1)
+                            ]
+                        |> List.distinct
+                        )
+                    |> List.distinct
+                    )
+            List.allPairs (possibleUnitAttackers @ possiblePairAttackers) (possibleUnitTargets @ possiblePairTargets)
             |> List.map (fun (attacker, target) ->
                 Attack (playerID, laneID, attacker, target)
                 |> TurnActionInfo
@@ -623,9 +648,9 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
         |> List.collect (fun (n, lane) ->
             let laneID = (n + 1)*1<LID>
             match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                let possibleAttackers =
-                    troops
+            | ContestedLaneKnowledge {Units = units; Pairs = pairs} ->
+                let possibleUnitAttackers =
+                    units
                     |> Map.tryFind playerID
                     |> function
                     | None -> []
@@ -641,15 +666,25 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                                     Some (SingleAttacker (p, h))
                                 else
                                     None
-                            | PairKnowledge (p, h1, h2, r) ->
-                                if r = Ready then
-                                    Some (DoubleAttacker (p, h1, h2))
-                                else
-                                    None
                             )
                         |> List.distinct
-                let possibleTargets =
-                    troops
+                let possiblePairAttackers =
+                    pairs
+                    |> Map.tryFind playerID
+                    |> function
+                    | None -> []
+                    | Some ownTroops ->
+                        ownTroops
+                        |> List.distinct
+                        |> List.choose (fun (p, h1, h2, r) ->
+                            if r = Ready then
+                                Some (DoubleAttacker (p, h1, h2))
+                            else
+                                None
+                            )
+                        |> List.distinct
+                let possibleUnitTargets =
+                    units
                     |> Map.filter (fun pid _ -> pid <> playerID)
                     |> Map.toList
                     |> List.collect (fun (pid, tks) ->
@@ -665,16 +700,26 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                             | ActiveCardKnowledge (p, h, _) ->
                                 ActiveSingleTarget (pid, p, h)
                                 |> List.singleton
-                            | PairKnowledge (p, h1, h2, _) ->
-                                [
-                                    ActivePairMemberTarget (pid, p, h1, h2);
-                                    ActivePairMemberTarget (pid, p, h2, h1)
-                                    ]
-                                |> List.distinct
                             )
                         |> List.distinct
                         )
-                List.allPairs possibleAttackers possibleTargets
+                let possiblePairTargets =
+                    pairs
+                    |> Map.filter (fun pid _ -> pid <> playerID)
+                    |> Map.toList
+                    |> List.collect (fun (pid, tks) ->
+                        tks
+                        |> List.distinct
+                        |> List.collect (fun (p, h1, h2, _) ->
+                            [
+                                ActivePairMemberTarget (pid, p, h1, h2);
+                                ActivePairMemberTarget (pid, p, h2, h1)
+                                ]
+                            |> List.distinct
+                            )
+                        |> List.distinct
+                        )
+                List.allPairs (possibleUnitAttackers @ possiblePairAttackers) (possibleUnitTargets @ possiblePairTargets)
                 |> List.map (fun (attacker, target) ->
                     Attack (playerID, laneID, attacker, target)
                     |> TurnActionInfo
@@ -689,9 +734,9 @@ let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     | PreBaseFlipBoardKnowledge {Lanes = l} ->
         l
         |> List.indexed
-        |> List.collect (fun (n, {Troops = troops}) ->
+        |> List.collect (fun (n, {Units = units}) ->
             let laneID = (n + 1)*1<LID>
-            getPairActionsInfoFromTroops playerID laneID troops
+            getPairActionsInfoFromUnits playerID laneID units
             )
     | PostBaseFlipBoardKnowledge {Lanes = l} ->
         l
@@ -699,10 +744,10 @@ let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
         |> List.collect (fun (n, lane) ->
             let laneID = (n + 1)*1<LID>
             match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                getPairActionsInfoFromTroops playerID laneID troops
-            | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
-                getPairActionsInfoFromTroops playerID laneID troops
+            | ContestedLaneKnowledge {Units = units} ->
+                getPairActionsInfoFromUnits playerID laneID units
+            | WonLaneKnowledge {Controller = c; Units = units} when c = playerID ->
+                getPairActionsInfoFromUnits playerID laneID units
             | WonLaneKnowledge _ ->
                 []
             )
@@ -857,14 +902,14 @@ let private executeActivateAction playerID laneID activationTarget gameState =
         match activationTarget with
         | UnknownActivationTarget health ->
             lane.UnitOwners
-            |> Map.filter (fun _ owner -> owner = playerID)
+            |> Map.filter (fun id owner -> owner = playerID && List.contains id lane.InactiveUnits)
             |> Map.toList
             |> List.map (fun (index, _) -> index)
             |> List.filter (fun id -> Map.find id lane.UnitHealths = health)
             |> List.head
         | KnownActivationTarget (power, health) ->
             lane.UnitOwners
-            |> Map.filter (fun index owner -> owner = playerID)
+            |> Map.filter (fun id owner -> owner = playerID && List.contains id lane.InactiveUnits)
             |> Map.toList
             |> List.map (fun (index, _) -> index)
             |> List.filter (fun index ->
@@ -1065,7 +1110,11 @@ let private findPairee ownerID health power readiness cardPowers activeUnits uni
         else
             None
         )
-    |> List.filter (fun id -> Map.find id unitHealths = health)
+    |> List.filter (fun id ->
+        match Map.tryFind id unitHealths with
+        | Some h -> h = health
+        | None -> false
+    )
     |> List.filter (fun id -> Map.find id cardPowers = power)
     |> List.filter (fun id -> Map.tryFind id activeUnits = Some readiness)
     |> List.head
