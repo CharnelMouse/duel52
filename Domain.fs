@@ -28,6 +28,7 @@ type Power =
 [<Measure>] type CID
 [<Measure>] type LID
 [<Measure>] type HP
+[<Measure>] type LPIP
 
 type PlayerID = int<PID>
 type TroopID = int<TID>
@@ -35,6 +36,7 @@ type CardID = int<CID>
 type LaneID = int<LID>
 type Health = int<health>
 type HandPosition = int<HP>
+type LanePlayerInactivePosition = int<LPIP>
 
 type HandCard = HandCard of Power
 
@@ -60,30 +62,35 @@ type DeadCardKnowledge =
 | UnknownDeadCard
 | KnownDeadCard of KnownDeadCard
 
-type UnitKnowledge =
+type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of Health
 | KnownInactiveCardKnowledge of Power * Health
-| ActiveCardKnowledge of Power * Health * Readiness
+
+type ActiveUnitKnowledge = Power * Health * Readiness
 
 type PairKnowledge = Power * Health * Health * Readiness
 
-type UnitsKnowledge = Map<PlayerID, UnitKnowledge list>
+type InactiveUnitsKnowledge = Map<PlayerID, InactiveUnitKnowledge list>
+type ActiveUnitsKnowledge = Map<PlayerID, ActiveUnitKnowledge list>
 type PairsKnowledge = Map<PlayerID, PairKnowledge list>
 
 type PreBaseFlipLaneKnowledge = {
     Bases: BaseKnowledge list
-    Units: UnitsKnowledge
+    InactiveUnits: InactiveUnitsKnowledge
+    ActiveUnits: ActiveUnitsKnowledge
     Pairs: PairsKnowledge
 }
 
 type ContestedLaneKnowledge = {
-    Units: UnitsKnowledge
+    InactiveUnits: InactiveUnitsKnowledge
+    ActiveUnits: ActiveUnitsKnowledge
     Pairs: PairsKnowledge
 }
 
 type WonLaneKnowledge = {
     Controller: PlayerID
-    Units: UnitsKnowledge
+    InactiveUnits: InactiveUnitsKnowledge
+    ActiveUnits: ActiveUnitsKnowledge
     Pairs: PairsKnowledge
 }
 
@@ -147,7 +154,7 @@ type ActivationTarget =
 
 type TurnActionInfo =
 | Play of HandPosition * LaneID
-| Activate of PlayerID * LaneID * ActivationTarget
+| Activate of PlayerID * LaneID * LanePlayerInactivePosition
 | Attack of PlayerID * LaneID * AttackerInfo * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
 

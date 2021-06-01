@@ -26,18 +26,20 @@ let private displayBaseKnowledge baseKnowledge =
     | KnownBaseCard (playerID, power) ->
         printf "%c" (deparsePower power)
 
-let private displayUnitKnowledge currentPlayer ownerID unitKnowledge =
-    match unitKnowledge with
+let private displayInactiveUnitKnowledge inactiveUnitKnowledge =
+    match inactiveUnitKnowledge with
     | UnknownInactiveCardKnowledge health ->
         printfn "Inactive, %i health" health
     | KnownInactiveCardKnowledge (power, health) ->
         printfn "Inactive %c, %i health" (deparsePower power) health
     // later will need cases for active/pair when card is frozen
-    | ActiveCardKnowledge (power, health, readiness) ->
-        if ownerID = currentPlayer then
-            printfn "%A %c, %i health" readiness (deparsePower power) health
-        else
-            printfn "%c, %i health" (deparsePower power) health
+
+let private displayActiveUnitKnowledge currentPlayer ownerID activeUnitKnowledge =
+    let (power, health, readiness) = activeUnitKnowledge
+    if ownerID = currentPlayer then
+        printfn "%A %c, %i health" readiness (deparsePower power) health
+    else
+        printfn "%c, %i health" (deparsePower power) health
 
 let private displayPairKnowledge currentPlayer ownerID pairKnowledge =
     let (power, health1, health2, readiness) = pairKnowledge
@@ -46,15 +48,20 @@ let private displayPairKnowledge currentPlayer ownerID pairKnowledge =
     else
         printfn "%c pair: health %i and %i" (deparsePower power) health1 health2
 
-let private displayTroopKnowledges currentPlayer unitKnowledges pairKnowledges =
-    if Map.isEmpty unitKnowledges then
+let private displayTroopKnowledges currentPlayer inactiveUnitKnowledges activeUnitKnowledges pairKnowledges =
+    if Map.isEmpty inactiveUnitKnowledges && Map.isEmpty activeUnitKnowledges && Map.isEmpty pairKnowledges then
         printfn "No troops present"
     else
         printfn "Troops"
-        unitKnowledges
+        inactiveUnitKnowledges
         |> Map.iter (fun owner tks ->
             printfn "Player %i" owner
-            List.iter (displayUnitKnowledge currentPlayer owner) tks
+            List.iter displayInactiveUnitKnowledge tks
+            )
+        activeUnitKnowledges
+        |> Map.iter (fun owner tks ->
+            printfn "Player %i" owner
+            List.iter (displayActiveUnitKnowledge currentPlayer owner) tks
             )
         pairKnowledges
         |> Map.iter (fun owner tks ->
@@ -63,28 +70,29 @@ let private displayTroopKnowledges currentPlayer unitKnowledges pairKnowledges =
             )
 
 let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
-    let {Bases = baseKnowledges; Units = units; Pairs = pairs} = lane
+    let {Bases = baseKnowledges; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs} = lane
     printfn "Lane %i" (n + 1)
     printf "Bases: "
     List.iter displayBaseKnowledge baseKnowledges
     printfn ""
-    displayTroopKnowledges currentPlayer units pairs
+    displayTroopKnowledges currentPlayer inactiveUnits activeUnits pairs
     printfn ""
 
 let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKnowledge)) =
     match lane with
-    | ContestedLaneKnowledge {Units = units; Pairs = pairs} ->
+    | ContestedLaneKnowledge {InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs} ->
         printfn "Lane %i" (n + 1)
         printfn "Troops"
-        displayTroopKnowledges currentPlayer units pairs
-    | WonLaneKnowledge {Controller = controller; Units = units; Pairs = pairs} ->
+        displayTroopKnowledges currentPlayer inactiveUnits activeUnits pairs
+    | WonLaneKnowledge {Controller = controller; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs} ->
         printfn "Lane %i (won by player %i)" (n + 1) controller
-        if Map.forall (fun _ tks -> List.isEmpty tks) units
+        if Map.forall (fun _ tks -> List.isEmpty tks) inactiveUnits
+            && Map.forall (fun _ tks -> List.isEmpty tks) activeUnits
             && Map.forall (fun _ tks -> List.isEmpty tks) pairs then
             printfn "No troops present"
         else
             printfn "Troops"
-            displayTroopKnowledges currentPlayer units pairs
+            displayTroopKnowledges currentPlayer inactiveUnits activeUnits pairs
     printfn ""
 
 let private displayPreLaneKnowledges currentPlayer laneKnowledges =
@@ -184,13 +192,8 @@ let private actionString action =
     | TurnActionInfo (Play (handPosition, laneID)) ->
         "Play card " + string handPosition
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, UnknownActivationTarget health)) ->
-        "Activate " + "unknown card"
-        +  " (" + string health + " HP)"
-        + " in lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, KnownActivationTarget (power, health))) ->
-        "Activate " + string (deparsePower power)
-        +  " (" + string health + " HP)"
+    | TurnActionInfo (Activate (_, laneID, position)) ->
+        "Activate active card " + string position
         + " in lane " + string laneID
     | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
         let attackerText =
