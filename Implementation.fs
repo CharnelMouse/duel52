@@ -696,69 +696,19 @@ let private getPlayActionsInfo (gameState: GameStateDuringTurn) =
         |> TurnActionInfo
         )
 
-let private getActivateActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
-    let playerID = turnDisplayInfo.CurrentPlayer
-    match turnDisplayInfo.BoardKnowledge with
-    | PreBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.zip [for i in 1..List.length l -> i*1<LID>]
-        |> List.collect (fun (laneID, {Troops = troops}) ->
-            let ownTroops =
-                troops
-                |> Map.find playerID
-                |> (fun (inactiveUnits, _, _) -> inactiveUnits)
-            ownTroops
-            |> List.zip [for i in 1..List.length ownTroops -> i*1<LPIP>]
-            |> List.choose (fun (position, troop) ->
-                match troop with
-                | UnknownInactiveCardKnowledge _
-                | KnownInactiveCardKnowledge _ ->
-                    Activate (playerID, laneID, position)
-                    |> TurnActionInfo
-                    |> Some
-                )
-            |> List.distinct
-            )
-    | PostBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.zip [for i in 1..List.length l -> i*1<LID>]
-        |> List.collect (fun (laneID, lane) ->
-            match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                let ownTroops =
-                    troops
-                    |> Map.find playerID
-                    |> (fun (inactiveUnits, _, _) -> inactiveUnits)
-                ownTroops
-                |> List.zip [for i in 1..List.length ownTroops -> i*1<LPIP>]
-                |> List.choose (fun (position, troop) ->
-                    match troop with
-                    | UnknownInactiveCardKnowledge _
-                    | KnownInactiveCardKnowledge _ ->
-                        Activate (playerID, laneID, position)
-                        |> TurnActionInfo
-                        |> Some
-                    )
-                |> List.distinct
-            | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
-                let ownTroops =
-                    troops
-                    |> Map.find playerID
-                    |> (fun (inactiveUnits, _, _) -> inactiveUnits)
-                ownTroops
-                |> List.zip [for i in 1..List.length ownTroops -> i*1<LPIP>]
-                |> List.choose (fun (position, troop) ->
-                    match troop with
-                    | UnknownInactiveCardKnowledge _
-                    | KnownInactiveCardKnowledge _ ->
-                        Activate (playerID, laneID, position)
-                        |> TurnActionInfo
-                        |> Some
-                    )
-                |> List.distinct
-            | WonLaneKnowledge _ ->
-                []
-            )
+let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
+    let playerID = gameState.TurnState.CurrentPlayer
+    let lanes = gameState.CardsState.Board.Lanes
+    lanes
+    |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
+    |> List.collect (fun (laneID, {UnitOwners = unitOwners; InactiveUnits = inactiveUnits}) ->
+        let nOwnTroops =
+            inactiveUnits
+            |> List.filter (fun id -> Map.find id unitOwners = playerID)
+            |> List.length
+        [for i in 1..nOwnTroops -> i*1<LPIP>]
+        |> List.map (fun position -> Activate (playerID, laneID, position) |> TurnActionInfo)
+        )
 
 let private getPairActionsInfoFromUnits playerID laneID activeUnits =
     let rec distPairs lst =
@@ -1010,7 +960,7 @@ let private getPossibleActionsInfo (gameState: GameState) (displayInfo: DisplayI
                 else
                     let actions =
                         getPlayActionsInfo gs
-                        @ (getActivateActionsInfo turnDisplayInfo)
+                        @ getActivateActionsInfo gs
                         @ (getAttackActionsInfo turnDisplayInfo)
                         @ (getPairActionsInfo turnDisplayInfo)
                     if List.isEmpty actions then
