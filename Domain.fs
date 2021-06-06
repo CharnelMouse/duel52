@@ -29,6 +29,9 @@ type Power =
 [<Measure>] type LID
 [<Measure>] type HP
 [<Measure>] type LPIP
+[<Measure>] type LPAP
+[<Measure>] type LPPP
+[<Measure>] type PUP
 
 type PlayerID = int<PID>
 type TroopID = int<TID>
@@ -37,6 +40,9 @@ type LaneID = int<LID>
 type Health = int<health>
 type HandPosition = int<HP>
 type LanePlayerInactivePosition = int<LPIP>
+type LanePlayerActivePosition = int<LPAP>
+type LanePlayerPairPosition = int<LPPP>
+type PairUnitPosition = int<PUP>
 
 type HandCard = HandCard of Power
 
@@ -130,14 +136,10 @@ type DisplayInfo =
 | WonGameDisplayInfo of WonGameDisplayInfo
 | TiedGameDisplayInfo of TiedGameDisplayInfo
 
-type SingleAttackerInfo = Power * Health
-type PairAttackerInfo = Power * Health * Health
-
 type AttackTargetInfo =
-| UnknownInactiveTarget of PlayerID * Health
-| KnownInactiveTarget of PlayerID * Power * Health
-| ActiveSingleTarget of PlayerID * Power * Health
-| ActivePairMemberTarget of PlayerID * Power * Health * Health
+| InactiveTarget of PlayerID * LanePlayerInactivePosition
+| ActiveSingleTarget of PlayerID * LanePlayerActivePosition
+| ActivePairMemberTarget of PlayerID * LanePlayerPairPosition * PairUnitPosition
 
 type ActivationTarget =
 | KnownActivationTarget of Power * Health
@@ -146,8 +148,8 @@ type ActivationTarget =
 type TurnActionInfo =
 | Play of HandPosition * LaneID
 | Activate of PlayerID * LaneID * LanePlayerInactivePosition
-| SingleAttack of PlayerID * LaneID * SingleAttackerInfo * AttackTargetInfo
-| PairAttack of PlayerID * LaneID * PairAttackerInfo * AttackTargetInfo
+| SingleAttack of PlayerID * LaneID * LanePlayerActivePosition * AttackTargetInfo
+| PairAttack of PlayerID * LaneID * LanePlayerPairPosition * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
 
 type ActionInfo =

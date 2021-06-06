@@ -744,10 +744,10 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     |> Map.find playerID
                     |> (fun (_, activeTroops, _) -> activeTroops)
                 activeTroops
-                |> List.distinct
-                |> List.choose (fun (p, h, r) ->
+                |> List.zip [for i in 1..List.length activeTroops -> i*1<LPAP>]
+                |> List.choose (fun (lpap, (_, _, r)) ->
                     if r = Ready then
-                        Some (p, h)
+                        Some lpap
                     else
                         None
                     )
@@ -758,27 +758,21 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     |> Map.find playerID
                     |> (fun (_, _, pairs) -> pairs)
                 pairs
-                |> List.distinct
-                |> List.choose (fun (p, h1, h2, r) ->
+                |> List.zip [for i in 1..List.length pairs -> i*1<LPPP>]
+                |> List.choose (fun (lppp, (_, _, _, r)) ->
                     if r = Ready then
-                        Some (p, h1, h2)
+                        Some lppp
                     else
                         None
                     )
-                |> List.distinct
             let possibleInactiveUnitTargets =
                 troops
                 |> Map.filter (fun owner _ -> owner <> playerID)
                 |> Map.toList
                 |> List.collect (fun (owner, (inactiveUnits, _, _)) ->
-                    inactiveUnits
-                    |> List.map (fun tks ->
-                        tks
-                        |> function
-                        | UnknownInactiveCardKnowledge h ->
-                            UnknownInactiveTarget (owner, h)
-                        | KnownInactiveCardKnowledge (p, h) ->
-                            KnownInactiveTarget (owner, p, h)
+                    [for i in 1..List.length inactiveUnits -> i*1<LPIP>]
+                    |> List.map (fun position ->
+                        InactiveTarget (owner, position)
                         )
                     )
                 |> List.distinct
@@ -787,9 +781,9 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 |> Map.filter (fun owner _ -> owner <> playerID)
                 |> Map.toList
                 |> List.collect (fun (owner, (_, activeUnits, _)) ->
-                    activeUnits
-                    |> List.map (fun (p, h, _) ->
-                        ActiveSingleTarget (owner, p, h)
+                    [for i in 1..List.length activeUnits -> i*1<LPAP>]
+                    |> List.map (fun position ->
+                        ActiveSingleTarget (owner, position)
                         )
                     )
                 |> List.distinct
@@ -798,11 +792,11 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                 |> Map.filter (fun owner _ -> owner <> playerID)
                 |> Map.toList
                 |> List.collect (fun (owner, (_, _, pairs)) ->
-                    pairs
-                    |> List.collect (fun (p, h1, h2, _) ->
+                    [for i in 1..List.length pairs -> i*1<LPPP>]
+                    |> List.collect (fun position ->
                         [
-                            ActivePairMemberTarget (owner, p, h1, h2);
-                            ActivePairMemberTarget (owner, p, h2, h1)
+                            ActivePairMemberTarget (owner, position, 1<PUP>);
+                            ActivePairMemberTarget (owner, position, 2<PUP>)
                             ]
                         )
                     )
@@ -816,8 +810,8 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     )
             let pairAttacks =
                 List.allPairs possiblePairAttackers allTargets
-                |> List.map (fun (attacker, target) ->
-                    PairAttack (playerID, laneID, attacker, target)
+                |> List.map (fun (attackerPairPosition, target) ->
+                    PairAttack (playerID, laneID, attackerPairPosition, target)
                     |> TurnActionInfo
                     )
             singleAttacks @ pairAttacks
@@ -835,10 +829,10 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         |> Map.find playerID
                         |> (fun (_, activeTroops, _) -> activeTroops)
                     activeTroops
-                    |> List.distinct
-                    |> List.choose (fun (p, h, r) ->
+                    |> List.zip [for i in 1..List.length activeTroops -> i*1<LPAP>]
+                    |> List.choose (fun (lpap, (_, _, r)) ->
                         if r = Ready then
-                            Some (p, h)
+                            Some lpap
                         else
                             None
                         )
@@ -849,27 +843,21 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         |> Map.find playerID
                         |> (fun (_, _, pairs) -> pairs)
                     pairs
-                    |> List.distinct
-                    |> List.choose (fun (p, h1, h2, r) ->
+                    |> List.zip [for i in 1..List.length pairs -> i*1<LPPP>]
+                    |> List.choose (fun (lppp, (_, _, _, r)) ->
                         if r = Ready then
-                            Some (p, h1, h2)
+                            Some lppp
                         else
                             None
                         )
-                    |> List.distinct
                 let possibleInactiveUnitTargets =
                     troops
                     |> Map.filter (fun owner _ -> owner <> playerID)
                     |> Map.toList
                     |> List.collect (fun (owner, (inactiveUnits, _, _)) ->
-                        inactiveUnits
-                        |> List.map (fun tks ->
-                            tks
-                            |> function
-                            | UnknownInactiveCardKnowledge h ->
-                                UnknownInactiveTarget (owner, h)
-                            | KnownInactiveCardKnowledge (p, h) ->
-                                KnownInactiveTarget (owner, p, h)
+                        [for i in 1..List.length inactiveUnits -> i*1<LPIP>]
+                        |> List.map (fun position ->
+                            InactiveTarget (owner, position)
                             )
                         )
                     |> List.distinct
@@ -878,9 +866,9 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     |> Map.filter (fun owner _ -> owner <> playerID)
                     |> Map.toList
                     |> List.collect (fun (owner, (_, activeUnits, _)) ->
-                        activeUnits
-                        |> List.map (fun (p, h, _) ->
-                            ActiveSingleTarget (owner, p, h)
+                        [for i in 1..List.length activeUnits -> i*1<LPAP>]
+                        |> List.map (fun position ->
+                            ActiveSingleTarget (owner, position)
                             )
                         )
                     |> List.distinct
@@ -889,11 +877,11 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                     |> Map.filter (fun owner _ -> owner <> playerID)
                     |> Map.toList
                     |> List.collect (fun (owner, (_, _, pairs)) ->
-                        pairs
-                        |> List.collect (fun (p, h1, h2, _) ->
+                        [for i in 1..List.length pairs -> i*1<LPPP>]
+                        |> List.collect (fun position ->
                             [
-                                ActivePairMemberTarget (owner, p, h1, h2);
-                                ActivePairMemberTarget (owner, p, h2, h1)
+                                ActivePairMemberTarget (owner, position, 1<PUP>);
+                                ActivePairMemberTarget (owner, position, 2<PUP>)
                                 ]
                             )
                         )
@@ -907,8 +895,8 @@ let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
                         )
                 let pairAttacks =
                     List.allPairs possiblePairAttackers allTargets
-                    |> List.map (fun (attacker, target) ->
-                        PairAttack (playerID, laneID, attacker, target)
+                    |> List.map (fun (attackerPairPosition, target) ->
+                        PairAttack (playerID, laneID, attackerPairPosition, target)
                         |> TurnActionInfo
                         )
                 singleAttacks @ pairAttacks
@@ -1014,210 +1002,83 @@ let private executeActivateAction playerID laneID lanePlayerPosition gameState =
     |> changeBoard cardsState
     |> changeCardsState gameState
 
-let private getSingleAttackInfo (cardPowers: CardPowers) lanes laneID playerID singleAttackerInfo targetInfo revealedCards =
+let private getSingleAttackInfo lanes laneID playerID attackerLPAP targetInfo =
     let lane = List.item (int laneID - 1) lanes
-    let {UnitOwners = unitOwners; UnitHealths = unitHealths; ActiveUnits = activeUnits; UnitPairs = unitPairs; Readinesses = readinesses} = lane
-    let attackerIDs =
-        match singleAttackerInfo with
-        | (power, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, owner) ->
-                if owner = playerID then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> Map.find id cardPowers = power)
-            |> List.filter (fun id -> Map.tryFind id readinesses = Some Ready)
-            |> List.head
-            |> List.singleton
+    let {UnitOwners = unitOwners; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs} = lane
+    let attackerID =
+        activeUnits
+        |> List.filter (fun id -> Map.find id unitOwners = playerID)
+        |> List.item (int attackerLPAP - 1)
     let targetID =
         match targetInfo with
-        | UnknownInactiveTarget (owner, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
+        | InactiveTarget (owner, position) ->
+            inactiveUnits
+            |> List.filter (fun id -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+        | ActiveSingleTarget (owner, position) ->
+            activeUnits
+            |> List.filter (fun id -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+        | ActivePairMemberTarget (owner, position, pairUnitPosition) ->
+            pairs
+            |> List.filter (fun (id, _) -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+            |> (fun (id1, id2) ->
+                match pairUnitPosition with
+                | 1<PUP> -> id1
+                | 2<PUP> -> id2
+                | _ -> failwithf "invalid pair unit position"
                 )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.head
-        | KnownInactiveTarget (owner, power, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> not (Set.contains id revealedCards))
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-        | ActiveSingleTarget (owner, power, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> List.contains id activeUnits)
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-        | ActivePairMemberTarget (owner, power, health, partnerHealth) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> Map.containsKey id unitPairs)
-            |> List.filter (fun id ->
-                let partnerID = Map.find id unitPairs
-                Map.find partnerID unitHealths = partnerHealth
-                )
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-    attackerIDs, targetID, List.length attackerIDs * 1<health>
+    attackerID, targetID, 1<health>
 
-let private getPairAttackInfo (cardPowers: CardPowers) lanes laneID playerID pairAttackerInfo targetInfo revealedCards =
+let private getPairAttackInfo lanes laneID playerID attackerPairPosition targetInfo =
     let lane = List.item (int laneID - 1) lanes
-    let {UnitOwners = unitOwners; UnitHealths = unitHealths; ActiveUnits = activeUnits; UnitPairs = unitPairs; Readinesses = readinesses} = lane
-    let attackerIDs =
-        match pairAttackerInfo with
-        | (power, health1, health2) ->
-            let readyCardsWithPower =
-                cardPowers
-                |> Map.toList
-                |> List.choose (fun (id, p) ->
-                    if p = power then
-                        Some id
-                    else
-                        None
-                    )
-                |> List.filter (fun id -> Map.tryFind id readinesses = Some Ready)
-            let firstPartners =
-                readyCardsWithPower
-                |> List.filter (fun id ->
-                    match Map.tryFind id unitOwners, Map.tryFind id unitHealths with
-                    | Some pid, Some h -> pid = playerID && h = health1
-                    | _ -> false
-                    )
-            let secondPartners =
-                readyCardsWithPower
-                |> List.filter (fun id ->
-                    match Map.tryFind id unitOwners, Map.tryFind id unitHealths with
-                    | Some pid, Some h -> pid = playerID && h = health2
-                    | _ -> false
-                    )
-            let validPairIDs =
-                List.allPairs firstPartners secondPartners
-                |> List.filter (fun (x, y) -> Map.tryFind x unitPairs = Some y)
-            validPairIDs
-            |> List.tryHead
-            |> function
-            | Some (x, y) -> [x; y]
-            | None -> failwithf "failed doubleattacker IDs search: player %i %A, %i and %i. Pair info: %A" playerID power health1 health2 unitPairs
+    let {UnitOwners = unitOwners; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs} = lane
+    let (attackerID1, attackerID2) =
+        pairs
+        |> List.filter (fun (id, _) -> Map.find id unitOwners = playerID)
+        |> List.item (int attackerPairPosition - 1)
     let targetID =
         match targetInfo with
-        | UnknownInactiveTarget (owner, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
+        | InactiveTarget (owner, position) ->
+            inactiveUnits
+            |> List.filter (fun id -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+        | ActiveSingleTarget (owner, position) ->
+            activeUnits
+            |> List.filter (fun id -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+        | ActivePairMemberTarget (owner, position, pairUnitPosition) ->
+            pairs
+            |> List.filter (fun (id, _) -> Map.find id unitOwners = owner)
+            |> List.item (int position - 1)
+            |> (fun (id1, id2) ->
+                match pairUnitPosition with
+                | 1<PUP> -> id1
+                | 2<PUP> -> id2
+                | _ -> failwithf "invalid pair unit position"
                 )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.head
-        | KnownInactiveTarget (owner, power, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> not (Set.contains id revealedCards))
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-        | ActiveSingleTarget (owner, power, health) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> List.contains id activeUnits)
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-        | ActivePairMemberTarget (owner, power, health, partnerHealth) ->
-            unitOwners
-            |> Map.toList
-            |> List.choose (fun (id, o) ->
-                if o = owner then
-                    Some id
-                else
-                    None
-                )
-            |> List.filter (fun id -> Map.find id unitHealths = health)
-            |> List.filter (fun id -> Map.containsKey id unitPairs)
-            |> List.filter (fun id ->
-                let partnerID = Map.find id unitPairs
-                Map.find partnerID unitHealths = partnerHealth
-                )
-            |> List.filter (fun id ->
-                Map.find id cardPowers = power
-                )
-            |> List.head
-    attackerIDs, targetID, List.length attackerIDs * 1<health>
+    [attackerID1; attackerID2], targetID, 2<health>
 
-let private executeSingleAttackAction playerID laneID singleAttackerInfo targetInfo gameState =
+let private executeSingleAttackAction playerID laneID attackerLPAP targetInfo gameState =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
-    let attackerIDs, targetID, damage =
-        getSingleAttackInfo cardsState.CardPowers board.Lanes laneID playerID singleAttackerInfo targetInfo board.RevealedCards
+    let attackerID, targetID, damage =
+        getSingleAttackInfo board.Lanes laneID playerID attackerLPAP targetInfo
     board
     |> changeLaneWithFn laneID (
-        exhaustCards attackerIDs
+        exhaustCards [attackerID]
         >> damageCard targetID damage
         )
     |> moveDeadCardsToDiscard laneID
     |> changeBoard cardsState
     |> changeCardsState gameState
 
-let private executePairAttackAction playerID laneID pairAttackerInfo targetInfo gameState =
+let private executePairAttackAction playerID laneID attackerPairPosition targetInfo gameState =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let attackerIDs, targetID, damage =
-        getPairAttackInfo cardsState.CardPowers board.Lanes laneID playerID pairAttackerInfo targetInfo board.RevealedCards
+        getPairAttackInfo board.Lanes laneID playerID attackerPairPosition targetInfo
     board
     |> changeLaneWithFn laneID (
         exhaustCards attackerIDs
@@ -1286,10 +1147,10 @@ let private executeTurnAction action gameState =
         executePlayAction handPosition laneID gameState
     | Activate (playerID, laneID, lanePlayerPosition) ->
         executeActivateAction playerID laneID lanePlayerPosition gameState
-    | SingleAttack (playerID, laneID, singleAttackerInfo, targetInfo) ->
-        executeSingleAttackAction playerID laneID singleAttackerInfo targetInfo gameState
-    | PairAttack (playerID, laneID, pairAttackerInfo, targetInfo) ->
-        executePairAttackAction playerID laneID pairAttackerInfo targetInfo gameState
+    | SingleAttack (playerID, laneID, attackerLPAP, targetInfo) ->
+        executeSingleAttackAction playerID laneID attackerLPAP targetInfo gameState
+    | PairAttack (playerID, laneID, attackerPairPosition, targetInfo) ->
+        executePairAttackAction playerID laneID attackerPairPosition targetInfo gameState
     | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
         executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState
     |> decrementActionsLeft

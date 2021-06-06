@@ -193,56 +193,40 @@ let private actionString action =
     | TurnActionInfo (Activate (_, laneID, position)) ->
         "Activate active card " + string position
         + " in lane " + string laneID
-    | TurnActionInfo (SingleAttack (_, laneID, singleAttackerInfo, targetInfo)) ->
+    | TurnActionInfo (SingleAttack (_, laneID, singleAttackerPosition, targetInfo)) ->
         let attackerText =
-            let (power, health) = singleAttackerInfo
-            string (deparsePower power) + " (" + string health + " HP)"
+            "Active card " + string singleAttackerPosition
         let targetText =
             match targetInfo with
-            | UnknownInactiveTarget (pid, h) ->
+            | InactiveTarget (pid, pos) ->
                 "player " + string pid + "'s"
-                + " unknown inactive (" + string h + " HP)"
+                + " inactive card " + string pos
                 + " in lane " + string laneID
-            | KnownInactiveTarget (pid, p, h) ->
+            | ActiveSingleTarget (pid, pos) ->
                 "player " + string pid + "'s"
-                + " inactive " + string (deparsePower p)
-                + " (" + string h + " HP)"
+                + " active card " + string pos
                 + " in lane " + string laneID
-            | ActiveSingleTarget (pid, p, h) ->
+            | ActivePairMemberTarget (pid, pos, pairUnitPos) ->
                 "player " + string pid + "'s"
-                + " active " + string (deparsePower p)
-                + " (" + string h + " HP)"
-                + " in lane " + string laneID
-            | ActivePairMemberTarget (pid, p, h1, h2) ->
-                "player " + string pid + "'s"
-                + " " + string (deparsePower p) + " pair member"
-                + " (" + string h1 + " HP, partner " + string h2 + ")"
+                + " pair " + string pos + " member " + string pairUnitPos
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (PairAttack (_, laneID, pairAttackerInfo, targetInfo)) ->
+    | TurnActionInfo (PairAttack (_, laneID, attackerPairPosition, targetInfo)) ->
         let attackerText =
-            let (power, health1, health2) = pairAttackerInfo
-            string (deparsePower power) + " (" + string health1 + ", " + string health2 + " HP)"
+            "Pair " + string attackerPairPosition
         let targetText =
             match targetInfo with
-            | UnknownInactiveTarget (pid, h) ->
+            | InactiveTarget (pid, pos) ->
                 "player " + string pid + "'s"
-                + " unknown inactive (" + string h + " HP)"
+                + " inactive card " + string pos
                 + " in lane " + string laneID
-            | KnownInactiveTarget (pid, p, h) ->
+            | ActiveSingleTarget (pid, pos) ->
                 "player " + string pid + "'s"
-                + " inactive " + string (deparsePower p)
-                + " (" + string h + " HP)"
+                + " active card " + string pos
                 + " in lane " + string laneID
-            | ActiveSingleTarget (pid, p, h) ->
+            | ActivePairMemberTarget (pid, pos, pairUnitPos) ->
                 "player " + string pid + "'s"
-                + " active " + string (deparsePower p)
-                + " (" + string h + " HP)"
-                + " in lane " + string laneID
-            | ActivePairMemberTarget (pid, p, h1, h2) ->
-                "player " + string pid + "'s"
-                + " " + string (deparsePower p) + " pair member"
-                + " (" + string h1 + " HP, partner " + string h2 + ")"
+                + " pair " + string pos + " member " + string pairUnitPos
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
     | TurnActionInfo (CreatePair (_, laneID, power, (health1, readiness1), (health2, readiness2))) ->
