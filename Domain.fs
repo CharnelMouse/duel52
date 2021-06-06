@@ -31,7 +31,6 @@ type Power =
 [<Measure>] type LPIP
 [<Measure>] type LPAP
 [<Measure>] type LPPP
-[<Measure>] type PUP
 
 type PlayerID = int<PID>
 type TroopID = int<TID>
@@ -42,7 +41,7 @@ type HandPosition = int<HP>
 type LanePlayerInactivePosition = int<LPIP>
 type LanePlayerActivePosition = int<LPAP>
 type LanePlayerPairPosition = int<LPPP>
-type PairUnitPosition = int<PUP>
+type PairUnitPosition = | One | Two
 
 type HandCard = HandCard of Power
 

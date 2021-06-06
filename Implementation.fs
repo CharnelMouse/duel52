@@ -789,8 +789,8 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
                 [for i in 1..List.length pairs -> i*1<LPPP>]
                 |> List.collect (fun position ->
                     [
-                        ActivePairMemberTarget (owner, position, 1<PUP>);
-                        ActivePairMemberTarget (owner, position, 2<PUP>)
+                        ActivePairMemberTarget (owner, position, One);
+                        ActivePairMemberTarget (owner, position, Two)
                         ]
                     )
                 )
@@ -931,9 +931,8 @@ let private getSingleAttackInfo lanes laneID playerID attackerLPAP targetInfo =
             |> List.item (int position - 1)
             |> (fun (id1, id2) ->
                 match pairUnitPosition with
-                | 1<PUP> -> id1
-                | 2<PUP> -> id2
-                | _ -> failwithf "invalid pair unit position"
+                | One -> id1
+                | Two -> id2
                 )
     attackerID, targetID, 1<health>
 
@@ -960,9 +959,8 @@ let private getPairAttackInfo lanes laneID playerID attackerPairPosition targetI
             |> List.item (int position - 1)
             |> (fun (id1, id2) ->
                 match pairUnitPosition with
-                | 1<PUP> -> id1
-                | 2<PUP> -> id2
-                | _ -> failwithf "invalid pair unit position"
+                | One -> id1
+                | Two -> id2
                 )
     [attackerID1; attackerID2], targetID, 2<health>
 
