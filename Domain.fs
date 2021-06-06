@@ -149,7 +149,7 @@ type TurnActionInfo =
 | Activate of PlayerID * LaneID * LanePlayerInactivePosition
 | SingleAttack of PlayerID * LaneID * LanePlayerActivePosition * AttackTargetInfo
 | PairAttack of PlayerID * LaneID * LanePlayerPairPosition * AttackTargetInfo
-| CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
+| CreatePair of PlayerID * LaneID * LanePlayerActivePosition * LanePlayerActivePosition
 
 type ActionInfo =
 | TurnActionInfo of TurnActionInfo

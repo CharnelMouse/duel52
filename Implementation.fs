@@ -710,26 +710,23 @@ let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
         |> List.map (fun position -> Activate (playerID, laneID, position) |> TurnActionInfo)
         )
 
-let private getPairActionsInfoFromUnits playerID laneID activeUnits =
+let private getPairActionsInfoFromUnits playerID laneID ownActiveUnits =
     let rec distPairs lst =
         match lst with
         | [] -> []
         | [_] -> []
         | h::t -> List.allPairs [h] t @ distPairs t
-    activeUnits
+    ownActiveUnits
+    |> List.zip [for i in 1..List.length ownActiveUnits -> i*1<LPAP>]
     |> distPairs
-    |> List.filter (fun ((power1, _, _), (power2, _, _)) -> power1 = power2)
-    |> List.map (fun ((power, health1, readiness1), (_, health2, readiness2)) ->
-        let vars =
-            if health1 >= health2 then
-                (playerID, laneID, power, (health1, readiness1), (health2, readiness2))
-            else
-                (playerID, laneID, power, (health2, readiness2), (health1, readiness1))
-        vars
-        |> CreatePair
-        |> TurnActionInfo
+    |> List.choose (fun ((position1, (power1, _, _)), (position2, (power2, _, _))) ->
+        if power1 = power2 then
+            CreatePair (playerID, laneID, position1, position2)
+            |> TurnActionInfo
+            |> Some
+        else
+            None
         )
-    |> List.distinct
 
 let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
     let playerID = gameState.TurnState.CurrentPlayer
@@ -1010,16 +1007,18 @@ let private findPairee ownerID health power readiness cardPowers readinesses uni
     |> List.filter (fun id -> Map.tryFind id readinesses = Some readiness)
     |> List.head
 
-let private executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState =
+let private executeCreatePairAction playerID laneID position1 position2 gameState =
     let boardInfo = gameState.CardsState.Board
     let lane = List.item (int laneID - 1) boardInfo.Lanes
+    let ownActiveUnits =
+        lane.ActiveUnits
+        |> List.filter (fun id -> Map.find id lane.UnitOwners = playerID)
     let cardID1 =
-        lane.UnitHealths
-        |> findPairee playerID health1 power readiness1 gameState.CardsState.CardPowers lane.Readinesses lane.UnitOwners
+        ownActiveUnits
+        |> List.item (int position1 - 1)
     let cardID2 =
-        lane.UnitHealths
-        |> Map.filter (fun cardID _ -> cardID <> cardID1)
-        |> findPairee playerID health2 power readiness2 gameState.CardsState.CardPowers lane.Readinesses lane.UnitOwners
+        ownActiveUnits
+        |> List.item (int position2 - 1)
     gameState.CardsState.Board
     |> changeLaneWithFn laneID (
         removeCardsFromActiveUnits [cardID1; cardID2]
@@ -1055,8 +1054,8 @@ let private executeTurnAction action gameState =
         executeSingleAttackAction playerID laneID attackerLPAP targetInfo gameState
     | PairAttack (playerID, laneID, attackerPairPosition, targetInfo) ->
         executePairAttackAction playerID laneID attackerPairPosition targetInfo gameState
-    | CreatePair (playerID, laneID, power, (health1, readiness1), (health2, readiness2)) ->
-        executeCreatePairAction playerID laneID power (health1, readiness1) (health2, readiness2) gameState
+    | CreatePair (playerID, laneID, position1, position2) ->
+        executeCreatePairAction playerID laneID position1 position2 gameState
     |> decrementActionsLeft
     |> updateLockedLaneWinsIfHandsEmpty
 

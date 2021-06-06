@@ -229,11 +229,10 @@ let private actionString action =
                 + " pair " + string pos + " member " + string pairUnitPos
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (CreatePair (_, laneID, power, (health1, readiness1), (health2, readiness2))) ->
-        "Create " + string (deparsePower power) + " pair"
+    | TurnActionInfo (CreatePair (_, laneID, position1, position2)) ->
+        "Create pair"
         + " in lane " + string laneID
-        + " from " + string readiness1 + " " + string health1 + " HP"
-        + " and " + string readiness2 + " " + string health2 + " HP"
+        + " from cards " + string position1 + " and " + string position2
     | EndTurn _ ->
         "End turn"
     | StartTurn _ ->
