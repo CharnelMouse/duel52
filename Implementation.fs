@@ -731,178 +731,84 @@ let private getPairActionsInfoFromUnits playerID laneID activeUnits =
         )
     |> List.distinct
 
-let private getAttackActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
-    let playerID = turnDisplayInfo.CurrentPlayer
-    match turnDisplayInfo.BoardKnowledge with
-    | PreBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.zip [for i in 1..List.length l -> i*1<LID>]
-        |> List.collect (fun (laneID, {Troops = troops}) ->
-            let possibleUnitAttackers =
-                let activeTroops =
-                    troops
-                    |> Map.find playerID
-                    |> (fun (_, activeTroops, _) -> activeTroops)
-                activeTroops
-                |> List.zip [for i in 1..List.length activeTroops -> i*1<LPAP>]
-                |> List.choose (fun (lpap, (_, _, r)) ->
-                    if r = Ready then
-                        Some lpap
-                    else
-                        None
-                    )
-                |> List.distinct
-            let possiblePairAttackers =
-                let pairs =
-                    troops
-                    |> Map.find playerID
-                    |> (fun (_, _, pairs) -> pairs)
+let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
+    let playerID = gameState.TurnState.CurrentPlayer
+    let lanes = gameState.CardsState.Board.Lanes
+    lanes
+    |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
+    |> List.collect (fun (laneID, {UnitOwners = unitOwners; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses}) ->
+        let possibleUnitAttackers =
+            let ownUnits =
+                activeUnits
+                |> List.filter (fun id -> Map.find id unitOwners = playerID)
+            ownUnits
+            |> List.zip [for i in 1..List.length ownUnits -> i*1<LPAP>]
+            |> List.choose (fun (lpap, id) ->
+                if Map.find id readinesses = Ready then
+                    Some lpap
+                else
+                    None
+                )
+        let possiblePairAttackers =
+            let pairs =
                 pairs
-                |> List.zip [for i in 1..List.length pairs -> i*1<LPPP>]
-                |> List.choose (fun (lppp, (_, _, _, r)) ->
-                    if r = Ready then
-                        Some lppp
-                    else
-                        None
+                |> List.filter (fun (id, _) -> Map.find id unitOwners = playerID)
+            pairs
+            |> List.zip [for i in 1..List.length pairs -> i*1<LPPP>]
+            |> List.choose (fun (lppp, (id1, id2)) ->
+                if Map.find id1 readinesses = Ready && Map.find id2 readinesses = Ready then
+                    Some lppp
+                else
+                    None
+                )
+        let possibleInactiveUnitTargets =
+            inactiveUnits
+            |> List.groupBy (fun id -> Map.find id unitOwners)
+            |> List.filter (fun (owner, _) -> owner <> playerID)
+            |> List.collect (fun (owner, inactiveUnits) ->
+                [for i in 1..List.length inactiveUnits -> i*1<LPIP>]
+                |> List.map (fun position ->
+                    InactiveTarget (owner, position)
                     )
-            let possibleInactiveUnitTargets =
-                troops
-                |> Map.filter (fun owner _ -> owner <> playerID)
-                |> Map.toList
-                |> List.collect (fun (owner, (inactiveUnits, _, _)) ->
-                    [for i in 1..List.length inactiveUnits -> i*1<LPIP>]
-                    |> List.map (fun position ->
-                        InactiveTarget (owner, position)
-                        )
+                )
+        let possibleActiveUnitTargets =
+            activeUnits
+            |> List.groupBy (fun id -> Map.find id unitOwners)
+            |> List.filter (fun (owner, _) -> owner <> playerID)
+            |> List.collect (fun (owner, activeUnits) ->
+                [for i in 1..List.length activeUnits -> i*1<LPAP>]
+                |> List.map (fun position ->
+                    ActiveSingleTarget (owner, position)
                     )
-                |> List.distinct
-            let possibleActiveUnitTargets =
-                troops
-                |> Map.filter (fun owner _ -> owner <> playerID)
-                |> Map.toList
-                |> List.collect (fun (owner, (_, activeUnits, _)) ->
-                    [for i in 1..List.length activeUnits -> i*1<LPAP>]
-                    |> List.map (fun position ->
-                        ActiveSingleTarget (owner, position)
-                        )
+                )
+        let possiblePairTargets =
+            pairs
+            |> List.groupBy (fun (id, _) -> Map.find id unitOwners)
+            |> List.filter (fun (owner, _) -> owner <> playerID)
+            |> List.collect (fun (owner, pairs) ->
+                [for i in 1..List.length pairs -> i*1<LPPP>]
+                |> List.collect (fun position ->
+                    [
+                        ActivePairMemberTarget (owner, position, 1<PUP>);
+                        ActivePairMemberTarget (owner, position, 2<PUP>)
+                        ]
                     )
-                |> List.distinct
-            let possiblePairTargets =
-                troops
-                |> Map.filter (fun owner _ -> owner <> playerID)
-                |> Map.toList
-                |> List.collect (fun (owner, (_, _, pairs)) ->
-                    [for i in 1..List.length pairs -> i*1<LPPP>]
-                    |> List.collect (fun position ->
-                        [
-                            ActivePairMemberTarget (owner, position, 1<PUP>);
-                            ActivePairMemberTarget (owner, position, 2<PUP>)
-                            ]
-                        )
-                    )
-                |> List.distinct
-            let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
-            let singleAttacks =
-                List.allPairs possibleUnitAttackers allTargets
-                |> List.map (fun (attacker, target) ->
-                    SingleAttack (playerID, laneID, attacker, target)
-                    |> TurnActionInfo
-                    )
-            let pairAttacks =
-                List.allPairs possiblePairAttackers allTargets
-                |> List.map (fun (attackerPairPosition, target) ->
-                    PairAttack (playerID, laneID, attackerPairPosition, target)
-                    |> TurnActionInfo
-                    )
-            singleAttacks @ pairAttacks
-            )
-    | PostBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.indexed
-        |> List.collect (fun (n, lane) ->
-            let laneID = (n + 1)*1<LID>
-            match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                let possibleUnitAttackers =
-                    let activeTroops =
-                        troops
-                        |> Map.find playerID
-                        |> (fun (_, activeTroops, _) -> activeTroops)
-                    activeTroops
-                    |> List.zip [for i in 1..List.length activeTroops -> i*1<LPAP>]
-                    |> List.choose (fun (lpap, (_, _, r)) ->
-                        if r = Ready then
-                            Some lpap
-                        else
-                            None
-                        )
-                    |> List.distinct
-                let possiblePairAttackers =
-                    let pairs =
-                        troops
-                        |> Map.find playerID
-                        |> (fun (_, _, pairs) -> pairs)
-                    pairs
-                    |> List.zip [for i in 1..List.length pairs -> i*1<LPPP>]
-                    |> List.choose (fun (lppp, (_, _, _, r)) ->
-                        if r = Ready then
-                            Some lppp
-                        else
-                            None
-                        )
-                let possibleInactiveUnitTargets =
-                    troops
-                    |> Map.filter (fun owner _ -> owner <> playerID)
-                    |> Map.toList
-                    |> List.collect (fun (owner, (inactiveUnits, _, _)) ->
-                        [for i in 1..List.length inactiveUnits -> i*1<LPIP>]
-                        |> List.map (fun position ->
-                            InactiveTarget (owner, position)
-                            )
-                        )
-                    |> List.distinct
-                let possibleActiveUnitTargets =
-                    troops
-                    |> Map.filter (fun owner _ -> owner <> playerID)
-                    |> Map.toList
-                    |> List.collect (fun (owner, (_, activeUnits, _)) ->
-                        [for i in 1..List.length activeUnits -> i*1<LPAP>]
-                        |> List.map (fun position ->
-                            ActiveSingleTarget (owner, position)
-                            )
-                        )
-                    |> List.distinct
-                let possiblePairTargets =
-                    troops
-                    |> Map.filter (fun owner _ -> owner <> playerID)
-                    |> Map.toList
-                    |> List.collect (fun (owner, (_, _, pairs)) ->
-                        [for i in 1..List.length pairs -> i*1<LPPP>]
-                        |> List.collect (fun position ->
-                            [
-                                ActivePairMemberTarget (owner, position, 1<PUP>);
-                                ActivePairMemberTarget (owner, position, 2<PUP>)
-                                ]
-                            )
-                        )
-                    |> List.distinct
-                let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
-                let singleAttacks =
-                    List.allPairs possibleUnitAttackers allTargets
-                    |> List.map (fun (attacker, target) ->
-                        SingleAttack (playerID, laneID, attacker, target)
-                        |> TurnActionInfo
-                        )
-                let pairAttacks =
-                    List.allPairs possiblePairAttackers allTargets
-                    |> List.map (fun (attackerPairPosition, target) ->
-                        PairAttack (playerID, laneID, attackerPairPosition, target)
-                        |> TurnActionInfo
-                        )
-                singleAttacks @ pairAttacks
-            | WonLaneKnowledge _ ->
-                []
-            )
+                )
+        let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
+        let singleAttacks =
+            List.allPairs possibleUnitAttackers allTargets
+            |> List.map (fun (attacker, target) ->
+                SingleAttack (playerID, laneID, attacker, target)
+                |> TurnActionInfo
+                )
+        let pairAttacks =
+            List.allPairs possiblePairAttackers allTargets
+            |> List.map (fun (attackerPairPosition, target) ->
+                PairAttack (playerID, laneID, attackerPairPosition, target)
+                |> TurnActionInfo
+                )
+        singleAttacks @ pairAttacks
+        )
 
 let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
     let playerID = turnDisplayInfo.CurrentPlayer
@@ -949,7 +855,7 @@ let private getPossibleActionsInfo (gameState: GameState) (displayInfo: DisplayI
                     let actions =
                         getPlayActionsInfo gs
                         @ getActivateActionsInfo gs
-                        @ (getAttackActionsInfo turnDisplayInfo)
+                        @ getAttackActionsInfo gs
                         @ (getPairActionsInfo turnDisplayInfo)
                     if List.isEmpty actions then
                         EndTurn currentPlayer
