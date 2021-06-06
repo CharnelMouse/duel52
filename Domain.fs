@@ -130,9 +130,8 @@ type DisplayInfo =
 | WonGameDisplayInfo of WonGameDisplayInfo
 | TiedGameDisplayInfo of TiedGameDisplayInfo
 
-type AttackerInfo =
-| SingleAttacker of Power * Health
-| DoubleAttacker of Power * Health * Health
+type SingleAttackerInfo = Power * Health
+type PairAttackerInfo = Power * Health * Health
 
 type AttackTargetInfo =
 | UnknownInactiveTarget of PlayerID * Health
@@ -147,7 +146,8 @@ type ActivationTarget =
 type TurnActionInfo =
 | Play of HandPosition * LaneID
 | Activate of PlayerID * LaneID * LanePlayerInactivePosition
-| Attack of PlayerID * LaneID * AttackerInfo * AttackTargetInfo
+| SingleAttack of PlayerID * LaneID * SingleAttackerInfo * AttackTargetInfo
+| PairAttack of PlayerID * LaneID * PairAttackerInfo * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * Power * (Health * Readiness) * (Health * Readiness)
 
 type ActionInfo =

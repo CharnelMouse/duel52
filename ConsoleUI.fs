@@ -193,13 +193,36 @@ let private actionString action =
     | TurnActionInfo (Activate (_, laneID, position)) ->
         "Activate active card " + string position
         + " in lane " + string laneID
-    | TurnActionInfo (Attack (_, laneID, attackerInfo, targetInfo)) ->
+    | TurnActionInfo (SingleAttack (_, laneID, singleAttackerInfo, targetInfo)) ->
         let attackerText =
-            match attackerInfo with
-            | SingleAttacker (power, health) ->
-                string (deparsePower power) + " (" + string health + " HP)"
-            | DoubleAttacker (power, health1, health2) ->
-                string (deparsePower power) + " (" + string health1 + ", " + string health2 + " HP)"
+            let (power, health) = singleAttackerInfo
+            string (deparsePower power) + " (" + string health + " HP)"
+        let targetText =
+            match targetInfo with
+            | UnknownInactiveTarget (pid, h) ->
+                "player " + string pid + "'s"
+                + " unknown inactive (" + string h + " HP)"
+                + " in lane " + string laneID
+            | KnownInactiveTarget (pid, p, h) ->
+                "player " + string pid + "'s"
+                + " inactive " + string (deparsePower p)
+                + " (" + string h + " HP)"
+                + " in lane " + string laneID
+            | ActiveSingleTarget (pid, p, h) ->
+                "player " + string pid + "'s"
+                + " active " + string (deparsePower p)
+                + " (" + string h + " HP)"
+                + " in lane " + string laneID
+            | ActivePairMemberTarget (pid, p, h1, h2) ->
+                "player " + string pid + "'s"
+                + " " + string (deparsePower p) + " pair member"
+                + " (" + string h1 + " HP, partner " + string h2 + ")"
+                + " in lane " + string laneID
+        attackerText + " attacks " + targetText
+    | TurnActionInfo (PairAttack (_, laneID, pairAttackerInfo, targetInfo)) ->
+        let attackerText =
+            let (power, health1, health2) = pairAttackerInfo
+            string (deparsePower power) + " (" + string health1 + ", " + string health2 + " HP)"
         let targetText =
             match targetInfo with
             | UnknownInactiveTarget (pid, h) ->
