@@ -710,7 +710,7 @@ let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
         |> List.map (fun position -> Activate (playerID, laneID, position) |> TurnActionInfo)
         )
 
-let private getPairActionsInfoFromUnits playerID laneID ownActiveUnits =
+let private getPairActionsInfoFromUnits powers playerID laneID ownActiveUnits =
     let rec distPairs lst =
         match lst with
         | [] -> []
@@ -719,8 +719,8 @@ let private getPairActionsInfoFromUnits playerID laneID ownActiveUnits =
     ownActiveUnits
     |> List.zip [for i in 1..List.length ownActiveUnits -> i*1<LPAP>]
     |> distPairs
-    |> List.choose (fun ((position1, (power1, _, _)), (position2, (power2, _, _))) ->
-        if power1 = power2 then
+    |> List.choose (fun ((position1, id1), (position2, id2)) ->
+        if Map.find id1 powers = Map.find id2 powers then
             CreatePair (playerID, laneID, position1, position2)
             |> TurnActionInfo
             |> Some
@@ -807,32 +807,18 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
         singleAttacks @ pairAttacks
         )
 
-let private getPairActionsInfo (turnDisplayInfo: TurnDisplayInfo) =
-    let playerID = turnDisplayInfo.CurrentPlayer
-    match turnDisplayInfo.BoardKnowledge with
-    | PreBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.zip [for i in 1..List.length l -> i*1<LID>]
-        |> List.collect (fun (laneID, {Troops = troops}) ->
-            let (_, activeUnits, _) = Map.find playerID troops
-            getPairActionsInfoFromUnits playerID laneID activeUnits
-            )
-    | PostBaseFlipBoardKnowledge {Lanes = l} ->
-        l
-        |> List.zip [for i in 1..List.length l -> i*1<LID>]
-        |> List.collect (fun (laneID, lane) ->
-            match lane with
-            | ContestedLaneKnowledge {Troops = troops} ->
-                let (_, activeUnits, _) = Map.find playerID troops
-                getPairActionsInfoFromUnits playerID laneID activeUnits
-            | WonLaneKnowledge {Controller = c; Troops = troops} when c = playerID ->
-                let (_, activeUnits, _) = Map.find playerID troops
-                getPairActionsInfoFromUnits playerID laneID activeUnits
-            | WonLaneKnowledge _ ->
-                []
-            )
+let private getPairActionsInfo (gameState: GameStateDuringTurn) =
+    let playerID = gameState.TurnState.CurrentPlayer
+    let lanes = gameState.CardsState.Board.Lanes
+    lanes
+    |> List.zip [for i in 1..List.length lanes -> i*1<LID>]
+    |> List.collect (fun (laneID, {UnitOwners = unitOwners; ActiveUnits = activeUnits}) ->
+        activeUnits
+        |> List.filter (fun id -> Map.find id unitOwners = playerID)
+        |> getPairActionsInfoFromUnits gameState.CardsState.CardPowers playerID laneID
+        )
 
-let private getPossibleActionsInfo (gameState: GameState) (displayInfo: DisplayInfo) =
+let private getPossibleActionsInfo (gameState: GameState) =
     match gameState with
     | GameStateBetweenTurns gs ->
         StartTurn gs.TurnState.Player
@@ -843,26 +829,20 @@ let private getPossibleActionsInfo (gameState: GameState) (displayInfo: DisplayI
             |> List.singleton
         else
             let currentPlayer = gs.TurnState.CurrentPlayer
-            match displayInfo with
-            | TurnDisplayInfo turnDisplayInfo ->
-                if gs.TurnState.ActionsLeft = 0 then
+            if gs.TurnState.ActionsLeft = 0 then
+                EndTurn currentPlayer
+                |> List.singleton
+            else
+                let actions =
+                    getPlayActionsInfo gs
+                    @ getActivateActionsInfo gs
+                    @ getAttackActionsInfo gs
+                    @ getPairActionsInfo gs
+                if List.isEmpty actions then
                     EndTurn currentPlayer
                     |> List.singleton
                 else
-                    let actions =
-                        getPlayActionsInfo gs
-                        @ getActivateActionsInfo gs
-                        @ getAttackActionsInfo gs
-                        @ (getPairActionsInfo turnDisplayInfo)
-                    if List.isEmpty actions then
-                        EndTurn currentPlayer
-                        |> List.singleton
-                    else
-                        actions
-            | SwitchDisplayInfo _
-            | WonGameDisplayInfo _
-            | TiedGameDisplayInfo _ ->
-                failwithf "Impossible game state / turn display info pair"
+                    actions
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
@@ -1180,8 +1160,7 @@ let rec private makeNextActionInfo gameState action =
     let capability() =
         InProgress (
             newDisplayInfo,
-            newDisplayInfo
-            |> getPossibleActionsInfo newGameState
+            getPossibleActionsInfo newGameState
             |> List.map (makeNextActionInfo newGameState)
             )
     {
@@ -1238,7 +1217,7 @@ let private createGame nPlayers nLanes =
         }
     let displayInfo = getDisplayInfo gameState
     let nextActions =
-        getPossibleActionsInfo gameState displayInfo
+        getPossibleActionsInfo gameState
         |> List.map (makeNextActionInfo gameState)
     InProgress (displayInfo, nextActions)
 
