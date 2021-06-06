@@ -140,10 +140,6 @@ type AttackTargetInfo =
 | ActiveSingleTarget of PlayerID * LanePlayerActivePosition
 | ActivePairMemberTarget of PlayerID * LanePlayerPairPosition * PairUnitPosition
 
-type ActivationTarget =
-| KnownActivationTarget of Power * Health
-| UnknownActivationTarget of Health
-
 type TurnActionInfo =
 | Play of HandPosition * LaneID
 | Activate of PlayerID * LaneID * LanePlayerInactivePosition
