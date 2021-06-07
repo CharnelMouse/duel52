@@ -191,7 +191,7 @@ let private actionString action =
         "Play card " + string handPosition
         + " to lane " + string laneID
     | TurnActionInfo (Activate (_, laneID, position)) ->
-        "Activate active card " + string position
+        "Activate inactive card " + string position
         + " in lane " + string laneID
     | TurnActionInfo (SingleAttack (_, laneID, singleAttackerPosition, targetInfo)) ->
         let attackerText =

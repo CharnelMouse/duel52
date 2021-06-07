@@ -87,7 +87,7 @@ let private addCardPairPartnersToActiveUnits cardIDs (lane: Lane) =
             | false, true ->
                 [id1]
             | false, false ->
-                [id1; id2]
+                []
             )
     partners
     |> List.fold (fun ln id -> addCardToActiveUnits id ln) lane
