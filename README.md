@@ -5,10 +5,11 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Basic actions: play card, activate, attack, make pair. Cards ready at the end of the turn.
 - Players only see known information (except who's peeked at face-down cards).
 - Bases become activatable when the draw pile empties.
-- Lanes and lanes can be won, or tied.
-  - Lost/tied lanes can still be played into if a player has cards in their hands, making them contested again.
-  - "As long as you have cards in your hand, the lanes are still 'alive', and you can play cards into them."
-  - I'm not sure what the implication is if you win a lane, everyone (except you) has an empty hand, and you move your last card out of the lane.
+- After the draw pile runs out, lanes are counted as won once only one player has cards there.
+- A won lane stays won if it gets emptied by Move powers.
+- A won lane can become contested again, or instantly won by another player if an action ends with another player's card present.
+- Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
+  - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
 - Card abilities remaining to implement:
   - View
   - Trap
