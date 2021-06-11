@@ -324,8 +324,8 @@ let private updateLaneWins (gameState: GameStateDuringTurn) =
     match gameState.CardsState.GameStage with
     | Early _ ->
         gameState
-    | DrawPileEmpty {LaneWins = lw}
-    | HandsEmpty {LaneWins = lw} ->
+    | DrawPileEmpty gs ->
+        let lw = gs.LaneWins
         let lanes = gameState.CardsState.Board.Lanes
         let currentLanePresences =
             lanes
@@ -340,7 +340,27 @@ let private updateLaneWins (gameState: GameStateDuringTurn) =
                 | Won controller -> Map.add laneID controller state
                 | Empty -> state
                 ) lw
-        let newCardsState = {gameState.CardsState with GameStage = HandsEmpty {LaneWins = newWins}}
+        let newGameState = DrawPileEmpty {gs with LaneWins = newWins}
+        let newCardsState = {gameState.CardsState with GameStage = newGameState}
+        {gameState with CardsState = newCardsState}
+    | HandsEmpty gs ->
+        let lw = gs.LaneWins
+        let lanes = gameState.CardsState.Board.Lanes
+        let currentLanePresences =
+            lanes
+            |> List.zip (createIDs 1<LID> lanes)
+            |> Map.ofList
+            |> Map.map (fun _ lane -> laneSolePresence lane.UnitOwners)
+        let newWins =
+            currentLanePresences
+            |> Map.fold (fun state laneID presence ->
+                match presence with
+                | Contested -> Map.remove laneID state
+                | Won controller -> Map.add laneID controller state
+                | Empty -> state
+                ) lw
+        let newGameState = HandsEmpty {gs with LaneWins = newWins}
+        let newCardsState = {gameState.CardsState with GameStage = newGameState}
         {gameState with CardsState = newCardsState}
 let private checkForGameEnd gameState =
     match gameState with
