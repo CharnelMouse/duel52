@@ -24,19 +24,15 @@ type Power =
 
 [<Measure>] type health
 [<Measure>] type PID
-[<Measure>] type TID
-[<Measure>] type CID
 [<Measure>] type LID
 [<Measure>] type HP
 [<Measure>] type LPIP
 [<Measure>] type LPAP
 [<Measure>] type LPPP
 
-type PlayerID = int<PID>
-type TroopID = int<TID>
-type CardID = int<CID>
-type LaneID = int<LID>
 type Health = int<health>
+type PlayerID = int<PID>
+type LaneID = int<LID>
 type HandPosition = int<HP>
 type LanePlayerInactivePosition = int<LPIP>
 type LanePlayerActivePosition = int<LPAP>

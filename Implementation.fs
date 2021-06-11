@@ -7,6 +7,9 @@ let private createIDs start lst =
 let private createIDsToLength start len =
     [for i in 0..len - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
 
+[<Measure>] type private CID
+type private CardID = int<CID>
+
 type private CardPowers = Map<CardID, Power>
 
 type private HiddenCardKnownBys = (CardID * PlayerID) Set
@@ -247,12 +250,12 @@ let private removeCardFromHand cardID playerID (cardsState: CardsState) =
         failwithf "Shouldn't be here!"
 let private removeHandsIfAllEmpty (cardsState: CardsState) =
     match cardsState.GameStage with
-    | DrawPileEmpty gs when Map.forall (fun _ cards -> List.isEmpty cards) gs.HandCards ->
-        {cardsState with
-            GameStage = HandsEmpty {LaneWins = gs.LaneWins}
-            }
+    | DrawPileEmpty {HandCards = handCards; LaneWins = laneWins} ->
+        if Map.forall (fun _ cards -> List.isEmpty cards) handCards then
+            {cardsState with GameStage = HandsEmpty {LaneWins = laneWins}}
+        else
+            cardsState
     | Early _
-    | DrawPileEmpty _
     | HandsEmpty _ ->
         cardsState
 let private changeBoard cardsState newBoard =
@@ -1001,24 +1004,6 @@ let private executePairAttackAction playerID laneID attackerPairPosition targetI
     |> moveDeadCardsToDiscard laneID
     |> changeBoard cardsState
     |> changeCardsState gameState
-
-let private findPairee ownerID health power readiness cardPowers readinesses unitOwners unitHealths =
-    unitOwners
-    |> Map.toList
-    |> List.choose (fun (id, owner) ->
-        if owner = ownerID then
-            Some id
-        else
-            None
-        )
-    |> List.filter (fun id ->
-        match Map.tryFind id unitHealths with
-        | Some h -> h = health
-        | None -> false
-    )
-    |> List.filter (fun id -> Map.find id cardPowers = power)
-    |> List.filter (fun id -> Map.tryFind id readinesses = Some readiness)
-    |> List.head
 
 let private executeCreatePairAction playerID laneID position1 position2 gameState =
     let boardInfo = gameState.CardsState.Board
