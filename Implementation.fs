@@ -905,6 +905,50 @@ let private executePlayAction handPosition laneID gameState =
     |> removeHandsIfAllEmpty
     |> changeCardsState gameState
 
+let private healOwnUnitsInLane playerID amount (lane: Lane) =
+    let ownUnitIDs =
+        lane.UnitOwners
+        |> Map.toList
+        |> List.choose (fun (id, owner) ->
+            if owner = playerID then
+                Some id
+            else
+                None
+        )
+    let newDamages = 
+        ownUnitIDs
+        |> List.fold (fun damages id ->
+            Map.change id (fun maybeDamage ->
+                match maybeDamage with
+                | Some d ->
+                    if d <= amount then
+                        None
+                    else
+                        Some (d - amount)
+                | None -> None
+                ) damages
+            ) lane.UnitDamages
+    {lane with UnitDamages = newDamages}
+
+let private resolveActivationPower playerID cardID (powers: CardPowers) (board: Board) =
+    match Map.find cardID powers with
+    | ActivationPower View
+    | ActivationPower Trap
+    | ActivationPower Foresight
+    | ActivationPower Flip
+    | ActivationPower Freeze ->
+        board
+    | ActivationPower Heal ->
+        let newLanes =
+            board.Lanes
+            |> List.map (healOwnUnitsInLane playerID 2<health>)
+        {board with Lanes = newLanes}
+    | PassivePower _
+    | ActivationPower Move
+    | ActivationPower Empower
+    | ActivationPower Action ->
+        board
+
 let private executeActivateAction playerID laneID lanePlayerPosition gameState =
     let cardsState = gameState.CardsState
     let lanes = cardsState.Board.Lanes
@@ -921,6 +965,7 @@ let private executeActivateAction playerID laneID lanePlayerPosition gameState =
         )
     |> removeCardFromKnownBys cardID
     |> addCardToRevealedCards cardID
+    |> resolveActivationPower playerID cardID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 
