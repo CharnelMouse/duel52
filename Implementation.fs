@@ -18,7 +18,7 @@ type private HandCards = CardID list
 type private RevealedCards = CardID Set
 
 type private UnitOwners = Map<CardID, PlayerID>
-type private UnitHealths = Map<CardID, Health>
+type private UnitDamages = Map<CardID, Damage>
 
 type private InactiveUnits = CardID list
 type private ActiveUnits = CardID list
@@ -36,7 +36,7 @@ type private DrawPile = {
 
 type private Lane = {
     UnitOwners: UnitOwners
-    UnitHealths: UnitHealths
+    UnitDamages: UnitDamages
     InactiveUnits: InactiveUnits
     ActiveUnits: ActiveUnits
     Pairs: Pairs
@@ -46,7 +46,7 @@ type private Lane = {
 
 let private emptyLane = {
     UnitOwners = Map.empty
-    UnitHealths = Map.empty
+    UnitDamages = Map.empty
     InactiveUnits = List.empty
     ActiveUnits = List.empty
     Pairs = List.empty
@@ -77,8 +77,8 @@ let private addCardToReadinesses cardID (lane: Lane) =
     {lane with Readinesses = Map.add cardID Ready lane.Readinesses}
 let private removeCardsFromUnitOwners cardIDs lane =
     {lane with UnitOwners = Map.filter (fun id _ -> not (List.contains id cardIDs)) lane.UnitOwners}
-let private removeCardsFromUnitHealths cardIDs lane =
-    {lane with UnitHealths = Map.filter (fun id _ -> not (List.contains id cardIDs)) lane.UnitHealths}
+let private removeCardsFromUnitDamages cardIDs lane =
+    {lane with UnitDamages = Map.filter (fun id _ -> not (List.contains id cardIDs)) lane.UnitDamages}
 let private removeCardsFromInactiveUnits cardIDs (lane: Lane) =
     {lane with InactiveUnits = List.filter (fun id -> not (List.contains id cardIDs)) lane.InactiveUnits}
 let private removeCardsFromActiveUnits cardIDs (lane: Lane) =
@@ -125,9 +125,9 @@ let private exhaustCards cardIDs (lane: Lane) =
 let private damageCard cardID damage (lane: Lane) =
     {
         lane with
-            UnitHealths =
-                lane.UnitHealths
-                |> Map.change cardID (function | None -> None | Some health -> Some (health - damage))
+            UnitDamages =
+                lane.UnitDamages
+                |> Map.change cardID (function | None -> Some damage | Some prevDamage -> Some (prevDamage + damage))
         }
 
 type private Board = {
@@ -158,15 +158,15 @@ let private changeDiscard discard (board: Board) =
     {board with Discard = discard}
 let private findDeadCards (laneID: LaneID) (board: Board) =
     let lane = List.item (int laneID - 1) board.Lanes
-    lane.UnitHealths
+    lane.UnitDamages
     |> Map.toList
-    |> List.choose (fun (id, health) -> if health = 0<health> then Some id else None)
+    |> List.choose (fun (id, damage) -> if damage >= 2<health> then Some id else None)
 let private moveDeadCardsToDiscard laneID (board: Board) =
     let deadCards = findDeadCards laneID board
     board
     |> changeLaneWithFn laneID (
         removeCardsFromUnitOwners deadCards
-        >> removeCardsFromUnitHealths deadCards
+        >> removeCardsFromUnitDamages deadCards
         >> removeCardsFromInactiveUnits deadCards
         >> removeCardsFromActiveUnits deadCards
         >> addCardPairPartnersToActiveUnits deadCards
@@ -215,7 +215,6 @@ let private addCardToBoard cardID playerID laneID (cardsState: CardsState) =
                 {
                     lane with
                         UnitOwners = Map.add cardID playerID lane.UnitOwners
-                        UnitHealths = Map.add cardID 2<health> lane.UnitHealths
                         InactiveUnits = lane.InactiveUnits @ [cardID]
                 }
             else
@@ -264,13 +263,9 @@ let private flipBasesOnLane (bases: Bases, lane: Lane) =
     let newUnitOwners =
         bases
         |> Map.fold (fun table playerID cardID -> Map.add cardID playerID table) lane.UnitOwners
-    let newUnitHealths =
-        bases
-        |> Map.fold (fun table playerID cardID -> Map.add cardID 2<health> table) lane.UnitHealths
     {
         lane with
             UnitOwners = newUnitOwners
-            UnitHealths = newUnitHealths
         }
 let private flipBasesOnBoard bases lanes discard hiddenCardKnownBys revealedCards =
     {
@@ -486,13 +481,13 @@ let private getBaseKnowledge (playerID: PlayerID) (baseCard: PlayerID * Power * 
     else
         UnknownBaseCard ownerID
 
-let private getTroops viewerID ownerID (cardPowers: CardPowers) (unitOwners: UnitOwners) (unitHealths: UnitHealths) (revealedCards: RevealedCards) inactiveUnits activeUnits pairs readinesses (unitPairs: UnitPairs) (hiddenCardKnownBys: HiddenCardKnownBys) : InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list =
+let private getTroops viewerID ownerID (cardPowers: CardPowers) (unitOwners: UnitOwners) (unitDamages: UnitDamages) (revealedCards: RevealedCards) inactiveUnits activeUnits pairs readinesses (unitPairs: UnitPairs) (hiddenCardKnownBys: HiddenCardKnownBys) : InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list =
     let pairPowers =
         pairs
         |> List.map (fun (x, _) -> Map.find x cardPowers)
-    let pairHealths1, pairHealths2 =
+    let pairDamages1, pairDamages2 =
         pairs
-        |> List.map (fun (x, y) -> Map.find x unitHealths, Map.find y unitHealths)
+        |> List.map (fun (x, y) -> Map.find x unitDamages, Map.find y unitDamages)
         |> List.unzip
     let pairReadinesses =
         pairs
@@ -502,23 +497,31 @@ let private getTroops viewerID ownerID (cardPowers: CardPowers) (unitOwners: Uni
         |> List.map (fun (x, _) -> Map.find x unitOwners)
     let pairKnowledge =
         pairReadinesses
-        |> List.zip3 pairHealths1 pairHealths2
+        |> List.zip3 pairDamages1 pairDamages2
         |> List.zip pairPowers
-        |> List.map (fun (p, (h1, h2, r)) -> PairKnowledge (p, h1, h2, r))
+        |> List.map (fun (p, (d1, d2, r)) -> PairKnowledge (p, d1, d2, r))
         |> List.zip pairOwners
         |> List.filter (fun (owner, _) -> owner = ownerID)
     let nonPairedActiveUnitKnowledge =
         activeUnits
         |> List.filter (fun cardID -> not (Map.containsKey cardID unitPairs) && Map.find cardID unitOwners = ownerID)
         |> List.map (fun id ->
-            let owner, health = Map.find id unitOwners, Map.find id unitHealths
-            owner, ActiveUnitKnowledge (Map.find id cardPowers, health, Map.find id readinesses)
+            let owner = Map.find id unitOwners
+            let damage =
+                match Map.tryFind id unitDamages with
+                | Some d -> d
+                | None -> 0<health>
+            owner, ActiveUnitKnowledge (Map.find id cardPowers, damage, Map.find id readinesses)
             )
     let inactiveUnitKnowledge =
         inactiveUnits
         |> List.filter (fun cardID -> Map.find cardID unitOwners = ownerID)
         |> List.map (fun cardID ->
-            let owner, health = Map.find cardID unitOwners, Map.find cardID unitHealths
+            let owner = Map.find cardID unitOwners
+            let health =
+                match Map.tryFind cardID unitDamages with
+                | Some d -> d
+                | None -> 0<health>
             if Set.contains (cardID, viewerID) hiddenCardKnownBys then
                 let power = Map.find cardID cardPowers
                 owner, KnownInactiveCardKnowledge (power, health)
@@ -570,11 +573,11 @@ let private getDisplayInfo gameState =
             | Early {Bases = b; DrawPile = dp} ->
                 let lanesKnowledge =
                     List.zip b l
-                    |> List.map (fun (bases, {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
+                    |> List.map (fun (bases, {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
                         let troopKnowledge =
                             createIDsToLength 1<PID> gs.TurnState.NPlayers
                             |> List.map (fun playerID ->
-                                playerID, getTroops id playerID cardPowers unitOwners unitHealths rc inactiveUnits activeUnits pairs readinesses unitPairs kb
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses unitPairs kb
                                 )
                             |> Map.ofList
                         {
@@ -605,11 +608,11 @@ let private getDisplayInfo gameState =
                 let lanesKnowledge =
                     l
                     |> List.zip (createIDs 1<LID> l)
-                    |> List.map (fun (laneID, {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
+                    |> List.map (fun (laneID, {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
                         let troopKnowledge =
                             createIDsToLength 1<PID> gs.TurnState.NPlayers
                             |> List.map (fun playerID ->
-                                playerID, getTroops id playerID cardPowers unitOwners unitHealths rc inactiveUnits activeUnits pairs readinesses unitPairs kb
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses unitPairs kb
                                 )
                             |> Map.ofList
                         match Map.tryFind laneID laneWins with
@@ -634,11 +637,11 @@ let private getDisplayInfo gameState =
                 let lanesKnowledge =
                     l
                     |> List.zip (createIDs 1<LID> l)
-                    |> List.map (fun (laneID, {UnitOwners = unitOwners; UnitHealths = unitHealths; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
+                    |> List.map (fun (laneID, {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; UnitPairs = unitPairs}) ->
                         let troopKnowledge =
                             createIDsToLength 1<PID> gs.TurnState.NPlayers
                             |> List.map (fun playerID ->
-                                playerID, getTroops id playerID cardPowers unitOwners unitHealths rc inactiveUnits activeUnits pairs readinesses unitPairs kb
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses unitPairs kb
                                 )
                             |> Map.ofList
                         match Map.tryFind laneID laneWins with

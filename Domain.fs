@@ -30,7 +30,7 @@ type Power =
 [<Measure>] type LPAP
 [<Measure>] type LPPP
 
-type Health = int<health>
+type Damage = int<health>
 type PlayerID = int<PID>
 type LaneID = int<LID>
 type HandPosition = int<HP>
@@ -64,12 +64,12 @@ type DeadCardKnowledge =
 | KnownDeadCard of KnownDeadCard
 
 type InactiveUnitKnowledge =
-| UnknownInactiveCardKnowledge of Health
-| KnownInactiveCardKnowledge of Power * Health
+| UnknownInactiveCardKnowledge of Damage
+| KnownInactiveCardKnowledge of Power * Damage
 
-type ActiveUnitKnowledge = Power * Health * Readiness
+type ActiveUnitKnowledge = Power * Damage * Readiness
 
-type PairKnowledge = Power * Health * Health * Readiness
+type PairKnowledge = Power * Damage * Damage * Readiness
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 

@@ -28,25 +28,37 @@ let private displayBaseKnowledge baseKnowledge =
 
 let private displayInactiveUnitKnowledge inactiveUnitKnowledge =
     match inactiveUnitKnowledge with
-    | UnknownInactiveCardKnowledge health ->
-        printfn "Inactive, %i health" health
-    | KnownInactiveCardKnowledge (power, health) ->
-        printfn "Inactive %c, %i health" (deparsePower power) health
+    | UnknownInactiveCardKnowledge damage ->
+        match damage with
+        | 0<health> -> printfn "Inactive"
+        | d -> printfn "Inactive, %i damage" d
+    | KnownInactiveCardKnowledge (power, damage) ->
+        match damage with
+        | 0<health> -> printfn "Inactive %c" (deparsePower power)
+        | d -> printfn "Inactive %c, %i damage" (deparsePower power) d
     // later will need cases for active/pair when card is frozen
 
 let private displayActiveUnitKnowledge currentPlayer ownerID activeUnitKnowledge =
-    let (power, health, readiness) = activeUnitKnowledge
+    let (power, damage, readiness) = activeUnitKnowledge
     if ownerID = currentPlayer then
-        printfn "%A %c, %i health" readiness (deparsePower power) health
+        match damage with
+        | 0<health> -> printfn "%A %c" readiness (deparsePower power)
+        | d -> printfn "%A %c, %i damage" readiness (deparsePower power) d
     else
-        printfn "%c, %i health" (deparsePower power) health
+        match damage with
+        | 0<health> -> printfn "%c" (deparsePower power)
+        | d -> printfn "%c, %i damage" (deparsePower power) d
 
 let private displayPairKnowledge currentPlayer ownerID pairKnowledge =
-    let (power, health1, health2, readiness) = pairKnowledge
+    let (power, damage1, damage2, readiness) = pairKnowledge
     if ownerID = currentPlayer then
-        printfn "%A %c pair: health %i and %i" readiness (deparsePower power) health1 health2
+        match damage1, damage2 with
+        | 0<health>, 0<health> -> printfn "%A %c pair" readiness (deparsePower power)
+        | d1, d2 -> printfn "%A %c pair: damage %i and %i" readiness (deparsePower power) d1 d2
     else
-        printfn "%c pair: health %i and %i" (deparsePower power) health1 health2
+        match damage1, damage2 with
+        | 0<health>, 0<health> -> printfn "%c pair" (deparsePower power)
+        | d1, d2 -> printfn "%c pair: damage %i and %i" (deparsePower power) d1 d2
 
 let private displayTroopKnowledges currentPlayer (troops: TroopKnowledge) =
     if Map.forall (fun _ (inactiveUnits, activeUnits, pairs) ->
