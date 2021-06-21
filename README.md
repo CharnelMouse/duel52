@@ -18,9 +18,15 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Freeze [to implement]
   - Heal [implemented]
   - Retaliate [to implement]
-  - Nimble [to implement]
+  - Nimble
+    - Immune to Freeze [to implement]
+    - Immune to Retaliate [to implement]
+    - Can't be secondary target for Twinstrike [to implement]
+    - Extra damage to Taunt [implemented]
   - TwinStrike [to implement]
-  - Taunt [to implement]
+  - Taunt
+    - 3 maximum health instead of 2 [to implement]
+    - Must be primary target, non-Taunt allies can't be secondary target for Twinstrike [to implement]
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
   - Move [to implement]
   - Empower [to implement]
