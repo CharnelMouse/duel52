@@ -156,13 +156,24 @@ let private removeCardFromKnownBys cardID board =
         }
 let private changeDiscard discard (board: Board) =
     {board with Discard = discard}
-let private findDeadCards (laneID: LaneID) (board: Board) =
+let private findMaxHealth id cardPowers inactiveUnits =
+    let power = Map.find id cardPowers
+    let isInactive = List.contains id inactiveUnits
+    match power, isInactive with
+    | PassivePower Taunt, false ->
+        3<health>
+    | _ ->
+        2<health>
+let private findDeadCards (laneID: LaneID) (board: Board) (cardPowers: CardPowers) =
     let lane = List.item (int laneID - 1) board.Lanes
     lane.UnitDamages
     |> Map.toList
-    |> List.choose (fun (id, damage) -> if damage >= 2<health> then Some id else None)
-let private moveDeadCardsToDiscard laneID (board: Board) =
-    let deadCards = findDeadCards laneID board
+    |> List.choose (fun (id, damage) ->
+        let maxHealth = findMaxHealth id cardPowers lane.InactiveUnits
+        if damage >= maxHealth then Some id else None
+        )
+let private moveDeadCardsToDiscard laneID cardPowers (board: Board) =
+    let deadCards = findDeadCards laneID board cardPowers
     board
     |> changeLaneWithFn laneID (
         removeCardsFromUnitOwners deadCards
@@ -1036,7 +1047,7 @@ let private executeSingleAttackAction playerID laneID attackerLPAP targetInfo ga
         exhaustCards [attackerID]
         >> damageCard targetID damage
         )
-    |> moveDeadCardsToDiscard laneID
+    |> moveDeadCardsToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 
@@ -1050,7 +1061,7 @@ let private executePairAttackAction playerID laneID attackerPairPosition targetI
         exhaustCards attackerIDs
         >> damageCard targetID damage
         )
-    |> moveDeadCardsToDiscard laneID
+    |> moveDeadCardsToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 

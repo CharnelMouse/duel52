@@ -25,7 +25,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - Extra damage to Taunt [implemented]
   - TwinStrike [to implement]
   - Taunt
-    - 3 maximum health instead of 2 [to implement]
+    - 3 maximum health instead of 2 [implemented]
     - Must be primary target, non-Taunt allies can't be secondary target for Twinstrike [to implement]
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
   - Move [to implement]
