@@ -12,7 +12,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
 - Card ability implementation progress:
   - View [to implement]
-  - Trap [to implement]
+  - Trap [implemented]
   - Foresight [to implement]
   - Flip [to implement]
   - Freeze [to implement]
