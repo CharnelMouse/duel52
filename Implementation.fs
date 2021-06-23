@@ -1033,6 +1033,16 @@ let private getTargetIDFromTargetInfo targetInfo lane =
             | Two -> id2
             )
 
+let private getAttackerSelfDamage attackerPower targetPower targetInfo =
+    match attackerPower, targetPower, targetInfo with
+    | PassivePower Nimble, _, _ ->
+        0<health>
+    | _, PassivePower Retaliate, ActiveSingleTarget _
+    | _, PassivePower Retaliate, ActivePairMemberTarget _ ->
+        1<health>
+    | _ ->
+        0<health>
+
 let private getSingleAttackInfo lanes laneID playerID attackerLPAP targetInfo cardPowers =
     let lane = List.item (int laneID - 1) lanes
     let {UnitOwners = unitOwners; ActiveUnits = activeUnits} = lane
@@ -1045,7 +1055,8 @@ let private getSingleAttackInfo lanes laneID playerID attackerLPAP targetInfo ca
     let targetPower = Map.find targetID cardPowers
     let baseDefenderDamage = 1<health>
     let bonusDefenderDamage = getBonusDefenderDamage attackerPower targetPower targetInfo
-    attackerID, targetID, baseDefenderDamage + bonusDefenderDamage
+    let selfDamage = getAttackerSelfDamage attackerPower targetPower targetInfo
+    attackerID, targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
 let private getPairAttackInfo lanes laneID playerID attackerPairPosition targetInfo cardPowers =
     let lane = List.item (int laneID - 1) lanes
@@ -1059,17 +1070,19 @@ let private getPairAttackInfo lanes laneID playerID attackerPairPosition targetI
     let targetPower = Map.find targetID cardPowers
     let baseDefenderDamage = 2<health>
     let bonusDefenderDamage = getBonusDefenderDamage attackerPower targetPower targetInfo
-    [attackerID1; attackerID2], targetID, baseDefenderDamage + bonusDefenderDamage
+    let selfDamage = getAttackerSelfDamage attackerPower targetPower targetInfo
+    [attackerID1; attackerID2], targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
 let private executeSingleAttackAction playerID laneID attackerLPAP targetInfo gameState =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
-    let attackerID, targetID, damage =
+    let attackerID, targetID, damage, selfDamage =
         getSingleAttackInfo board.Lanes laneID playerID attackerLPAP targetInfo cardsState.CardPowers
     board
     |> changeLaneWithFn laneID (
         exhaustCards [attackerID]
         >> damageCard targetID damage
+        >> damageCard attackerID selfDamage
         )
     |> triggerTrapsAndMoveDeadCardsToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState
@@ -1078,12 +1091,13 @@ let private executeSingleAttackAction playerID laneID attackerLPAP targetInfo ga
 let private executePairAttackAction playerID laneID attackerPairPosition targetInfo gameState =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
-    let attackerIDs, targetID, damage =
+    let attackerIDs, targetID, damage, selfDamage =
         getPairAttackInfo board.Lanes laneID playerID attackerPairPosition targetInfo cardsState.CardPowers
     board
     |> changeLaneWithFn laneID (
         exhaustCards attackerIDs
         >> damageCard targetID damage
+        >> (fun state -> List.fold (fun s id -> damageCard id selfDamage s) state attackerIDs)
         )
     |> triggerTrapsAndMoveDeadCardsToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState

@@ -17,10 +17,10 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Flip [to implement]
   - Freeze [to implement]
   - Heal [implemented]
-  - Retaliate [to implement]
+  - Retaliate [implemented]
   - Nimble
     - Immune to Freeze [to implement]
-    - Immune to Retaliate [to implement]
+    - Immune to Retaliate [implemented]
     - Can't be secondary target for Twinstrike [to implement]
     - Extra damage to Taunt [implemented]
   - TwinStrike [to implement]
