@@ -43,6 +43,10 @@ type HandCard = HandCard of Power
 
 type Hand = HandCard list
 
+type Actionability =
+| Normal
+| Frozen
+
 type Readiness =
 | Ready
 | Exhausted
@@ -64,12 +68,12 @@ type DeadCardKnowledge =
 | KnownDeadCard of KnownDeadCard
 
 type InactiveUnitKnowledge =
-| UnknownInactiveCardKnowledge of Damage
-| KnownInactiveCardKnowledge of Power * Damage
+| UnknownInactiveCardKnowledge of Damage * Actionability
+| KnownInactiveCardKnowledge of Power * Damage * Actionability
 
-type ActiveUnitKnowledge = Power * Damage * Readiness
+type ActiveUnitKnowledge = Power * Damage * Readiness * Actionability
 
-type PairKnowledge = Power * Damage * Damage * Readiness
+type PairKnowledge = Power * Damage * Damage * Readiness * Actionability * Actionability
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 

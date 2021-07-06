@@ -26,20 +26,29 @@ let private displayBaseKnowledge baseKnowledge =
     | KnownBaseCard (playerID, power) ->
         printf "%c" (deparsePower power)
 
-let private displayInactiveUnitKnowledge inactiveUnitKnowledge =
+let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKnowledge) =
     match inactiveUnitKnowledge with
-    | UnknownInactiveCardKnowledge damage ->
+    | UnknownInactiveCardKnowledge (damage, actionability) ->
+        match actionability with
+        | Normal -> ()
+        | Frozen -> printf "Frozen "
         match damage with
         | 0<health> -> printfn "Inactive"
         | d -> printfn "Inactive, %i damage" d
-    | KnownInactiveCardKnowledge (power, damage) ->
+    | KnownInactiveCardKnowledge (power, damage, actionability) ->
+        match actionability with
+        | Normal -> ()
+        | Frozen -> printf "Frozen "
         match damage with
         | 0<health> -> printfn "Inactive %c" (deparsePower power)
         | d -> printfn "Inactive %c, %i damage" (deparsePower power) d
     // later will need cases for active/pair when card is frozen
 
-let private displayActiveUnitKnowledge currentPlayer ownerID activeUnitKnowledge =
-    let (power, damage, readiness) = activeUnitKnowledge
+let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledge: ActiveUnitKnowledge) =
+    let (power, damage, readiness, actionability) = activeUnitKnowledge
+    match actionability with
+    | Normal -> ()
+    | Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage with
         | 0<health> -> printfn "%A %c" readiness (deparsePower power)
@@ -49,8 +58,13 @@ let private displayActiveUnitKnowledge currentPlayer ownerID activeUnitKnowledge
         | 0<health> -> printfn "%c" (deparsePower power)
         | d -> printfn "%c, %i damage" (deparsePower power) d
 
-let private displayPairKnowledge currentPlayer ownerID pairKnowledge =
-    let (power, damage1, damage2, readiness) = pairKnowledge
+let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowledge) =
+    let (power, damage1, damage2, readiness, actionability1, actionability2) = pairKnowledge
+    match actionability1, actionability2 with
+    | Normal, Normal -> ()
+    | Normal, Frozen
+    | Frozen, Normal
+    | Frozen, Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage1, damage2 with
         | 0<health>, 0<health> -> printfn "%A %c pair" readiness (deparsePower power)
