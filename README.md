@@ -15,7 +15,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Trap [implemented]
   - Foresight [to implement]
   - Flip [to implement]
-  - Freeze [to implement]
+  - Freeze [implemented]
   - Heal [implemented]
   - Retaliate [implemented]
   - Nimble
