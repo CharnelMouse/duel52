@@ -977,16 +977,38 @@ let private healOwnUnitsInLane playerID amount (lane: Lane) =
             ) lane.UnitDamages
     {lane with UnitDamages = newDamages}
 
-let private resolveActivationPower playerID cardID (powers: CardPowers) (board: Board) =
+let private resolveActivationPower playerID laneID cardID (powers: CardPowers) (board: Board) =
     match Map.find cardID powers with
     | ActivationPower View ->
         board
     | ActivationPower Trap ->
         board
     | ActivationPower Foresight
-    | ActivationPower Flip
-    | ActivationPower Freeze ->
+    | ActivationPower Flip ->
         board
+    | ActivationPower Freeze ->
+        let newLanes =
+            board.Lanes
+            |> List.zip (createIDs 1<LID> board.Lanes)
+            |> List.map (fun (lid, lane) ->
+                if lid <> laneID then
+                    lane
+                else
+                    let nonPlayerOwnedUnits =
+                        lane.UnitOwners
+                        |> Map.toList
+                        |> List.choose (fun (unitID, unitOwnerID) ->
+                            if unitOwnerID <> playerID then
+                                Some unitID
+                            else
+                                None
+                            )
+                    let newFrozenUnits =
+                        nonPlayerOwnedUnits
+                        |> List.fold (fun fu id -> Map.add id playerID fu) lane.FrozenUnits
+                    {lane with FrozenUnits = newFrozenUnits}
+                )
+        {board with Lanes = newLanes}
     | ActivationPower Heal ->
         let newLanes =
             board.Lanes
@@ -1014,7 +1036,7 @@ let private executeActivateAction playerID laneID lanePlayerPosition gameState =
         )
     |> removeCardFromKnownBys cardID
     |> addCardToRevealedCards cardID
-    |> resolveActivationPower playerID cardID cardsState.CardPowers
+    |> resolveActivationPower playerID laneID cardID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 
