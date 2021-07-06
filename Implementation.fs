@@ -1197,6 +1197,18 @@ let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameSt
             }
         }
 
+let private timeoutOwnedFreezeStatesInLane playerID lane =
+    {lane with FrozenUnits = Map.filter (fun cardID _ -> Map.find cardID lane.UnitOwners <> playerID) lane.FrozenUnits}
+
+let private timeoutOwnedFreezeStates playerID (cardsState: CardsState): CardsState =
+    let board = cardsState.Board
+    let lanes = board.Lanes
+    let newLanes =
+        lanes
+        |> List.map (timeoutOwnedFreezeStatesInLane playerID)
+    {board with Lanes = newLanes}
+    |> changeBoard cardsState
+
 let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     match cardsState.GameStage with
@@ -1284,7 +1296,9 @@ let rec private makeNextActionInfo gameState action =
                 | [] -> 3, []
                 | h :: t -> h, t
             GameStateBetweenTurns {
-                CardsState = readyAllActiveCards gs.CardsState
+                CardsState =
+                    readyAllActiveCards gs.CardsState
+                    |> timeoutOwnedFreezeStates tip.CurrentPlayer
                 TurnState = {
                     Player = nextPlayer
                     NPlayers = tip.NPlayers
