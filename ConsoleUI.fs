@@ -5,7 +5,7 @@ open Domain
 let private deparsePower power =
     match power with
     | ActivationPower View -> '2'
-    | ActivationPower Trap -> '3'
+    | InactiveDeathPower Trap -> '3'
     | ActivationPower Foresight -> '4'
     | ActivationPower Flip -> '5'
     | ActivationPower Freeze -> '6'

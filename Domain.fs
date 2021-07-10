@@ -2,7 +2,6 @@ namespace Domain
 
 type ActivationPower =
 | View
-| Trap
 | Foresight
 | Flip
 | Freeze
@@ -18,9 +17,13 @@ type PassivePower =
 | Taunt
 | Vampiric // replaces Trap and Foresight in solo mode
 
+type InactiveDeathPower =
+| Trap
+
 type Power =
 | ActivationPower of ActivationPower
 | PassivePower of PassivePower
+| InactiveDeathPower of InactiveDeathPower
 
 [<Measure>] type health
 [<Measure>] type PID

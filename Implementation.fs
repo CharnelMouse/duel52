@@ -186,32 +186,41 @@ let private findDeadCards (laneID: LaneID) (board: Board) (cardPowers: CardPower
         let maxHealth = findMaxHealth id cardPowers lane.InactiveUnits
         if damage >= maxHealth then Some id else None
         )
-let private triggerTrapsAndMoveDeadCardsToDiscard laneID cardPowers (board: Board) =
-    let zeroHealthCards = findDeadCards laneID board cardPowers
-    let inactiveUnits = board.Lanes.[int laneID - 1].InactiveUnits
-    let inactiveZeroHealthTraps, deadCards =
-        zeroHealthCards
-        |> List.partition (fun id ->
-            match Map.find id cardPowers, List.contains id inactiveUnits with
-            | ActivationPower Trap, true -> true
-            | _ -> false
-            )
+let private moveDeadCardsInLaneToDiscard laneID cardPowers (board: Board) =
+    let deadCards = findDeadCards laneID board cardPowers
     board
     |> changeLaneWithFn laneID (
         removeCardsFromUnitOwners deadCards
-        >> removeCardsFromUnitDamages zeroHealthCards
-        >> removeCardsFromInactiveUnits zeroHealthCards
+        >> removeCardsFromUnitDamages deadCards
+        >> removeCardsFromInactiveUnits deadCards
         >> removeCardsFromActiveUnits deadCards
         >> addCardPairPartnersToActiveUnits deadCards
         >> removeCardsFromPairs deadCards
         >> removeCardsFromReadinesses deadCards
         >> removeCardsFromUnitPairs deadCards
-        >> addCardsToActiveUnits inactiveZeroHealthTraps
-        >> addCardsToReadinesses inactiveZeroHealthTraps
         )
-    |> removeCardsFromKnownBys inactiveZeroHealthTraps
-    |> addCardsToRevealedCards inactiveZeroHealthTraps
     |> changeDiscard (List.fold (fun discard id -> discard @ [id]) board.Discard deadCards)
+let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits (board: Board) =
+    board
+    |> changeLaneWithFn laneID (
+        removeCardsFromUnitDamages zeroHealthInactiveDeathPowerUnits
+        >> removeCardsFromInactiveUnits zeroHealthInactiveDeathPowerUnits
+        >> addCardsToActiveUnits zeroHealthInactiveDeathPowerUnits
+        >> addCardsToReadinesses zeroHealthInactiveDeathPowerUnits
+        )
+let private triggerTargetInactiveDeathPowers laneID cardPowers (board: Board) =
+    let inactiveUnits = board.Lanes.[int laneID - 1].InactiveUnits
+    let zeroHealthInactiveDeathPowerUnits =
+        findDeadCards laneID board cardPowers
+        |> List.filter (fun id ->
+            match Map.find id cardPowers, List.contains id inactiveUnits with
+            | InactiveDeathPower p, true -> true
+            | _ -> false
+            )
+    board
+    |> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits
+    |> removeCardsFromKnownBys zeroHealthInactiveDeathPowerUnits
+    |> addCardsToRevealedCards zeroHealthInactiveDeathPowerUnits
 
 type private EarlyGameInfo = {
     Bases: Bases list
@@ -457,7 +466,7 @@ let private shuffle lst =
 let private createUnshuffledPowerDeck () =
     [
         ActivationPower View
-        ActivationPower Trap
+        InactiveDeathPower Trap
         ActivationPower Foresight
         ActivationPower Flip
         ActivationPower Freeze
@@ -994,8 +1003,6 @@ let private resolveActivationPower playerID laneID cardID (powers: CardPowers) (
     match Map.find cardID powers with
     | ActivationPower View ->
         board
-    | ActivationPower Trap ->
-        board
     | ActivationPower Foresight
     | ActivationPower Flip ->
         board
@@ -1005,10 +1012,12 @@ let private resolveActivationPower playerID laneID cardID (powers: CardPowers) (
     | ActivationPower Heal ->
         board
         |> changeLanesWithFn (healOwnUnitsInLane playerID 2<health>)
-    | PassivePower _
     | ActivationPower Move
     | ActivationPower Empower
     | ActivationPower Action ->
+        board
+    | InactiveDeathPower _
+    | PassivePower _ ->
         board
 
 let private executeActivateAction playerID laneID lanePlayerPosition gameState =
@@ -1111,7 +1120,8 @@ let private executeSingleAttackAction playerID laneID attackerActivePosition tar
         >> damageCard targetID damage
         >> damageCard attackerID selfDamage
         )
-    |> triggerTrapsAndMoveDeadCardsToDiscard laneID cardsState.CardPowers
+    |> triggerTargetInactiveDeathPowers laneID cardsState.CardPowers
+    |> moveDeadCardsInLaneToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 
@@ -1128,7 +1138,8 @@ let private executePairAttackAction playerID laneID attackerPairPosition targetI
         >> damageCard attackerID1 selfDamage
         >> damageCard attackerID2 selfDamage
         )
-    |> triggerTrapsAndMoveDeadCardsToDiscard laneID cardsState.CardPowers
+    |> triggerTargetInactiveDeathPowers laneID cardsState.CardPowers
+    |> moveDeadCardsInLaneToDiscard laneID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
 
