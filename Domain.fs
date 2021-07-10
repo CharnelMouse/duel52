@@ -101,13 +101,13 @@ type PostBaseFlipLaneKnowledge =
 type DiscardKnowledge = DeadCardKnowledge list
 
 type PreBaseFlipBoardKnowledge = {
-    Lanes: PreBaseFlipLaneKnowledge list
+    Lanes: Map<LaneID, PreBaseFlipLaneKnowledge>
     DrawPileSize: int
     Discard: DiscardKnowledge
 }
 
 type PostBaseFlipBoardKnowledge = {
-    Lanes: PostBaseFlipLaneKnowledge list
+    Lanes: Map<LaneID, PostBaseFlipLaneKnowledge>
     Discard: DiscardKnowledge
 }
 

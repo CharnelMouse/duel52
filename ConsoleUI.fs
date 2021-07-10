@@ -91,23 +91,23 @@ let private displayTroopKnowledges currentPlayer (troops: TroopKnowledge) =
             List.iter (displayPairKnowledge currentPlayer owner) pairs
             )
 
-let private displayPreLaneKnowledge currentPlayer (n, (lane: PreBaseFlipLaneKnowledge)) =
+let private displayPreLaneKnowledge currentPlayer laneID (lane: PreBaseFlipLaneKnowledge) =
     let {Bases = baseKnowledges; Troops = troops} = lane
-    printfn "Lane %i" (n + 1)
+    printfn "Lane %i" laneID
     printf "Bases: "
     List.iter displayBaseKnowledge baseKnowledges
     printfn ""
     displayTroopKnowledges currentPlayer troops
     printfn ""
 
-let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKnowledge)) =
+let private displayPostLaneKnowledge currentPlayer laneID (lane: PostBaseFlipLaneKnowledge) =
     match lane with
     | ContestedLaneKnowledge {Troops = troops} ->
-        printfn "Lane %i" (n + 1)
+        printfn "Lane %i" laneID
         printfn "Troops"
         displayTroopKnowledges currentPlayer troops
     | WonLaneKnowledge {Controller = controller; Troops = troops} ->
-        printfn "Lane %i (won by player %i)" (n + 1) controller
+        printfn "Lane %i (won by player %i)" laneID controller
         if Map.forall (fun _ (inactiveUnits, activeUnits, pairs) ->
             List.isEmpty inactiveUnits
             && List.isEmpty activeUnits
@@ -121,13 +121,11 @@ let private displayPostLaneKnowledge currentPlayer (n, (lane: PostBaseFlipLaneKn
 
 let private displayPreLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
-    |> List.indexed
-    |> List.iter (displayPreLaneKnowledge currentPlayer)
+    |> Map.iter (displayPreLaneKnowledge currentPlayer)
 
 let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
-    |> List.indexed
-    |> List.iter (displayPostLaneKnowledge currentPlayer)
+    |> Map.iter (displayPostLaneKnowledge currentPlayer)
 
 let private displayHandCard (HandCard power) =
     printf "%c" (deparsePower power)
