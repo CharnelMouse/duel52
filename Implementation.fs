@@ -8,7 +8,7 @@ let private createIDsToLength start len =
     [for i in 0..len - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
 let private zipIDs start lst =
     let IDs = [for i in 0..List.length lst - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
-    List.zip IDs lst    
+    List.zip IDs lst
 let private createIDMap start lst =
     zipIDs start lst
     |> Map.ofList
@@ -797,7 +797,7 @@ let private getPairActionsInfoFromUnits powers playerID laneID ownActiveUnits =
         | [_] -> []
         | h::t -> List.allPairs [h] t @ distPairs t
     ownActiveUnits
-    |> List.zip (createIDs 1<LPAP> ownActiveUnits)
+    |> zipIDs 1<LPAP>
     |> distPairs
     |> List.choose (fun ((position1, id1), (position2, id2)) ->
         if Map.find id1 powers = Map.find id2 powers then
@@ -819,7 +819,7 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
                 activeUnits
                 |> List.filter (fun id -> Map.find id unitOwners = playerID)
             ownUnits
-            |> List.zip (createIDs 1<LPAP> ownUnits)
+            |> zipIDs 1<LPAP>
             |> List.choose (fun (lpap, id) ->
                 if Map.find id readinesses = Ready && not (Map.containsKey id frozenUnits) then
                     Some lpap
@@ -831,7 +831,7 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
                 pairs
                 |> List.filter (fun (id, _) -> Map.find id unitOwners = playerID)
             pairs
-            |> List.zip (createIDs 1<LPPP> pairs)
+            |> zipIDs 1<LPPP>
             |> List.choose (fun (lppp, (id1, id2)) ->
                 if Map.find id1 readinesses = Ready && Map.find id2 readinesses = Ready
                     && not (Map.containsKey id1 frozenUnits) && not (Map.containsKey id2 frozenUnits) then
