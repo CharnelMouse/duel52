@@ -972,8 +972,8 @@ let private healOwnUnitsInLane playerID amount (lane: Lane) =
             ) lane.UnitDamages
     {lane with UnitDamages = newDamages}
 
-let private freezeEnemyUnitsInLane playerID lane =
-    let nonPlayerOwnedUnits =
+let private freezeEnemyNonActiveNimbleUnitsInLane playerID cardPowers lane =
+    let nonPlayerOwnedNonActiveNimbleUnits =
         lane.UnitOwners
         |> Map.toList
         |> List.choose (fun (unitID, unitOwnerID) ->
@@ -982,8 +982,12 @@ let private freezeEnemyUnitsInLane playerID lane =
             else
                 None
             )
+        |> List.filter (fun id ->
+            Map.find id cardPowers <> PassivePower Nimble
+            || List.contains id lane.InactiveUnits
+            )
     let newFrozenUnits =
-        nonPlayerOwnedUnits
+        nonPlayerOwnedNonActiveNimbleUnits
         |> List.fold (fun fu id -> Map.add id playerID fu) lane.FrozenUnits
     {lane with FrozenUnits = newFrozenUnits}
 
@@ -996,7 +1000,7 @@ let private resolveActivationPower playerID laneID cardID (powers: CardPowers) (
         board
     | ActivationPower Freeze ->
         board
-        |> changeLaneWithFn laneID (freezeEnemyUnitsInLane playerID)
+        |> changeLaneWithFn laneID (freezeEnemyNonActiveNimbleUnitsInLane playerID powers)
     | ActivationPower Heal ->
         board
         |> changeLanesWithFn (healOwnUnitsInLane playerID 2<health>)
