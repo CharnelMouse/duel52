@@ -5,9 +5,8 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Basic actions: play card, activate, attack, make pair. Cards ready at the end of the turn.
 - Players only see known information (except who's peeked at face-down cards).
 - Bases become activatable when the draw pile empties.
-- After the draw pile runs out, lanes are counted as won once only one player has cards there.
-- A won lane stays won if it gets emptied by Move powers.
-- A won lane can become contested again, or instantly won by another player if an action ends with another player's card present.
+- After the draw pile runs out, lanes are counted as won while only one player has cards there.
+- Lanes have no "memory" WRT being won: a won lane is no longer won if it gets emptied by Move powers.
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
 - Card ability implementation progress:

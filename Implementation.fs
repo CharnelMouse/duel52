@@ -373,38 +373,34 @@ let private updateLaneWins (gameState: GameStateDuringTurn) =
     | Early _ ->
         gameState
     | DrawPileEmpty gs ->
-        let lw = gs.LaneWins
         let lanes = gameState.CardsState.Board.Lanes
-        let currentLanePresences =
+        let currentLaneWins =
             lanes
-            |> Map.map (fun _ lane -> laneSolePresence lane.UnitOwners)
-        let newWins =
-            currentLanePresences
-            |> Map.fold (fun state laneID presence ->
-                match presence with
-                | Contested -> Map.remove laneID state
-                | Won controller -> Map.add laneID controller state
-                | Empty -> state
-                ) lw
-        let newGameState = DrawPileEmpty {gs with LaneWins = newWins}
+            |> Map.toList
+            |> List.choose (fun (laneID, lane) ->
+                match laneSolePresence lane.UnitOwners with
+                | Contested
+                | Empty -> None
+                | Won controller -> Some (laneID, controller)
+                )
+            |> Map.ofList
+        let newGameState = DrawPileEmpty {gs with LaneWins = currentLaneWins}
         let newCardsState = {gameState.CardsState with GameStage = newGameState}
         newCardsState
         |> changeCardsState gameState
     | HandsEmpty gs ->
-        let lw = gs.LaneWins
         let lanes = gameState.CardsState.Board.Lanes
-        let currentLanePresences =
+        let currentLaneWins =
             lanes
-            |> Map.map (fun _ lane -> laneSolePresence lane.UnitOwners)
-        let newWins =
-            currentLanePresences
-            |> Map.fold (fun state laneID presence ->
-                match presence with
-                | Contested -> Map.remove laneID state
-                | Won controller -> Map.add laneID controller state
-                | Empty -> state
-                ) lw
-        let newGameState = HandsEmpty {gs with LaneWins = newWins}
+            |> Map.toList
+            |> List.choose (fun (laneID, lane) ->
+                match laneSolePresence lane.UnitOwners with
+                | Contested
+                | Empty -> None
+                | Won controller -> Some (laneID, controller)
+                )
+            |> Map.ofList
+        let newGameState = DrawPileEmpty {gs with LaneWins = currentLaneWins}
         let newCardsState = {gameState.CardsState with GameStage = newGameState}
         newCardsState
         |> changeCardsState gameState
