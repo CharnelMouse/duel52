@@ -400,7 +400,7 @@ let private updateLaneWins (gameState: GameStateDuringTurn) =
                 | Won controller -> Some (laneID, controller)
                 )
             |> Map.ofList
-        let newGameState = DrawPileEmpty {gs with LaneWins = currentLaneWins}
+        let newGameState = HandsEmpty {gs with LaneWins = currentLaneWins}
         let newCardsState = {gameState.CardsState with GameStage = newGameState}
         newCardsState
         |> changeCardsState gameState
