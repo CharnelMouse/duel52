@@ -15,7 +15,9 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - Choose a card to discard [to implement]
   - Trap [implemented]
   - Foresight [to implement]
-  - Flip [to implement]
+  - Flip
+    - Activate all inactive allied cards in lane [to implement]
+    - Choose order to resolve triggered activation powers [to implement]
   - Freeze [implemented]
   - Heal [implemented]
   - Retaliate [implemented]
@@ -32,7 +34,9 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
   - Move [to implement]
   - Empower [to implement]
-  - Action [to implement]
+  - Action
+    - Gain 1 action [to implement]
+    - This card has a maximum of 2 attacks this turn [to implement]
 
 Future extensions:
 
