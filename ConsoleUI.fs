@@ -28,14 +28,16 @@ let private displayBaseKnowledge baseKnowledge =
 
 let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKnowledge) =
     match inactiveUnitKnowledge with
-    | UnknownInactiveCardKnowledge (damage, actionability) ->
+    | UnknownInactiveCardKnowledge (cardID, damage, actionability) ->
+        printf "%i: " cardID
         match actionability with
         | Normal -> ()
         | Frozen -> printf "Frozen "
         match damage with
         | 0<health> -> printfn "Inactive"
         | d -> printfn "Inactive, %i damage" d
-    | KnownInactiveCardKnowledge (power, damage, actionability) ->
+    | KnownInactiveCardKnowledge (cardID, power, damage, actionability) ->
+        printf "%i: " cardID
         match actionability with
         | Normal -> ()
         | Frozen -> printf "Frozen "
@@ -45,7 +47,8 @@ let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKno
     // later will need cases for active/pair when card is frozen
 
 let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledge: ActiveUnitKnowledge) =
-    let (power, damage, readiness, actionability) = activeUnitKnowledge
+    let (cardID, power, damage, readiness, actionability) = activeUnitKnowledge
+    printf "%i: " cardID
     match actionability with
     | Normal -> ()
     | Frozen -> printf "Frozen "
@@ -59,7 +62,8 @@ let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledg
         | d -> printfn "%c, %i damage" (deparsePower power) d
 
 let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowledge) =
-    let (power, damage1, damage2, readiness, actionability1, actionability2) = pairKnowledge
+    let (cardID1, cardID2, power, damage1, damage2, readiness, actionability1, actionability2) = pairKnowledge
+    printf "%i, %i: " cardID1 cardID2
     match actionability1, actionability2 with
     | Normal, Normal -> ()
     | Normal, Frozen
@@ -127,8 +131,8 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
     |> Map.iter (displayPostLaneKnowledge currentPlayer)
 
-let private displayHandCard (HandCard power) =
-    printf "%c" (deparsePower power)
+let private displayHandCard (HandCard (cardID, power)) =
+    printf "%i:%c " (int cardID) (deparsePower power)
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -211,52 +215,52 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | TurnActionInfo (Play (handPosition, laneID)) ->
-        "Play card " + string handPosition
+    | TurnActionInfo (Play (_, cardID, laneID)) ->
+        "Play card " + string cardID
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, position)) ->
-        "Activate inactive card " + string position
+    | TurnActionInfo (Activate (_, laneID, cardID)) ->
+        "Activate inactive card " + string cardID
         + " in lane " + string laneID
-    | TurnActionInfo (SingleAttack (_, laneID, singleAttackerPosition, targetInfo)) ->
+    | TurnActionInfo (SingleAttack (_, laneID, attackerID, targetInfo)) ->
         let attackerText =
-            "Active card " + string singleAttackerPosition
+            "Active card " + string attackerID
         let targetText =
             match targetInfo with
-            | InactiveTarget (pid, pos) ->
+            | InactiveTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " inactive card " + string pos
+                + " inactive card " + string cardID
                 + " in lane " + string laneID
-            | ActiveSingleTarget (pid, pos) ->
+            | ActiveSingleTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " active card " + string pos
+                + " active card " + string cardID
                 + " in lane " + string laneID
-            | ActivePairMemberTarget (pid, pos, pairUnitPos) ->
+            | ActivePairMemberTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " pair " + string pos + " member " + string pairUnitPos
+                + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (PairAttack (_, laneID, attackerPairPosition, targetInfo)) ->
+    | TurnActionInfo (PairAttack (_, laneID, (attackerID1, attackerID2), targetInfo)) ->
         let attackerText =
-            "Pair " + string attackerPairPosition
+            "Paired cards " + string attackerID1 + " and " + string attackerID2
         let targetText =
             match targetInfo with
-            | InactiveTarget (pid, pos) ->
+            | InactiveTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " inactive card " + string pos
+                + " inactive card " + string cardID
                 + " in lane " + string laneID
-            | ActiveSingleTarget (pid, pos) ->
+            | ActiveSingleTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " active card " + string pos
+                + " active card " + string cardID
                 + " in lane " + string laneID
-            | ActivePairMemberTarget (pid, pos, pairUnitPos) ->
+            | ActivePairMemberTarget (pid, cardID) ->
                 "player " + string pid + "'s"
-                + " pair " + string pos + " member " + string pairUnitPos
+                + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (CreatePair (_, laneID, position1, position2)) ->
+    | TurnActionInfo (CreatePair (_, laneID, cardID1, cardID2)) ->
         "Create pair"
         + " in lane " + string laneID
-        + " from cards " + string position1 + " and " + string position2
+        + " from cards " + string cardID1 + " and " + string cardID2
     | EndTurn _ ->
         "End turn"
     | StartTurn _ ->
