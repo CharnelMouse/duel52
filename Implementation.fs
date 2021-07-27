@@ -924,7 +924,7 @@ let private getPossibleActionsInfo (gameState: GameState) =
     | GameStateTied _ ->
         List.empty
 
-let private executePlayAction handPosition laneID gameState =
+let private executePlayAction handPosition laneID (gameState: GameStateDuringTurn) =
     let playerID = gameState.TurnState.CurrentPlayer
     let cardsState = gameState.CardsState
     let cardID =
@@ -942,6 +942,61 @@ let private executePlayAction handPosition laneID gameState =
     |> removeCardFromHand cardID playerID
     |> removeHandsIfAllEmpty
     |> changeCardsState gameState
+
+let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
+    let cardsState = gameState.CardsState
+    match cardsState.GameStage with
+    | Early preInfo ->
+        let boardInfo = cardsState.Board
+        let hands = preInfo.HandCards
+        let drawPile = preInfo.DrawPile
+        match drawPile.Rest with
+        | [] ->
+            let newHandCards =
+                hands
+                |> Map.change playerID (function
+                    | Some hc ->
+                        Some (hc @ [drawPile.TopCard])
+                    | None ->
+                        failwithf "non-existent players can't draw cards"
+                    )
+            let newKnownBys =
+                boardInfo.HiddenCardKnownBys
+                |> Set.add (drawPile.TopCard, playerID)
+            let newCards = {
+                cardsState with
+                    Board = flipBasesOnBoard preInfo.Bases boardInfo.Lanes boardInfo.Discard newKnownBys boardInfo.RevealedCards
+                    GameStage = DrawPileEmpty {HandCards = newHandCards; LaneWins = Map.empty}
+                }
+            newCards
+            |> changeCardsState gameState
+        | newTopCard :: newRest ->
+            let newHandCards =
+                hands
+                |> Map.change playerID (function
+                    | Some hc ->
+                        Some (hc @ [drawPile.TopCard])
+                    | None ->
+                        failwithf "non-existent players can't draw cards"
+                    )
+            let newKnownBys =
+                boardInfo.HiddenCardKnownBys
+                |> Set.add (drawPile.TopCard, playerID)
+            let newCards =
+                {cardsState with
+                    GameStage =
+                        Early {
+                            preInfo with
+                                DrawPile = {TopCard = newTopCard; Rest = newRest}
+                                HandCards = newHandCards
+                            }
+                    Board = {boardInfo with HiddenCardKnownBys = newKnownBys}
+                }
+            newCards
+            |> changeCardsState gameState
+    | DrawPileEmpty _
+    | HandsEmpty _ ->
+        gameState
 
 let private healOwnUnitsInLane playerID amount (lane: Lane) =
     let ownUnitIDs =
@@ -987,28 +1042,35 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID cardPowers lane =
         |> List.fold (fun fu id -> Map.add id playerID fu) lane.FrozenUnits
     {lane with FrozenUnits = newFrozenUnits}
 
-let private resolveActivationPower playerID laneID cardID (powers: CardPowers) (board: Board) =
+let private resolveActivationPower playerID laneID cardID (gameState: GameStateDuringTurn) =
+    let cardsState = gameState.CardsState
+    let {Board = board; CardPowers = powers} = cardsState
     match Map.find cardID powers with
     | ActivationPower View ->
-        board
+        gameState
+        |> tryDrawCard playerID
     | ActivationPower Foresight
     | ActivationPower Flip ->
-        board
+        gameState
     | ActivationPower Freeze ->
         board
         |> changeLaneWithFn laneID (freezeEnemyNonActiveNimbleUnitsInLane playerID powers)
+        |> changeBoard cardsState
+        |> changeCardsState gameState
     | ActivationPower Heal ->
         board
         |> changeLanesWithFn (healOwnUnitsInLane playerID 2<health>)
+        |> changeBoard cardsState
+        |> changeCardsState gameState
     | ActivationPower Move
     | ActivationPower Empower
     | ActivationPower Action ->
-        board
+        gameState
     | InactiveDeathPower _
     | PassivePower _ ->
-        board
+        gameState
 
-let private executeActivateAction playerID laneID lanePlayerPosition gameState =
+let private executeActivateAction playerID laneID lanePlayerPosition (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let lanes = cardsState.Board.Lanes
     let lane = Map.find laneID lanes
@@ -1024,9 +1086,9 @@ let private executeActivateAction playerID laneID lanePlayerPosition gameState =
         )
     |> removeCardFromKnownBys cardID
     |> addCardToRevealedCards cardID
-    |> resolveActivationPower playerID laneID cardID cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
+    |> resolveActivationPower playerID laneID cardID
 
 let private getBonusDefenderDamage attackerPower targetPower targetInfo =
     match attackerPower, targetPower, targetInfo with
@@ -1097,7 +1159,7 @@ let private getPairAttackInfo lanes laneID playerID attackerPairPosition targetI
     let selfDamage = getAttackerSelfDamage attackerPower targetPower targetInfo
     (attackerID1, attackerID2), targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
-let private executeSingleAttackAction playerID laneID attackerActivePosition targetInfo gameState =
+let private executeSingleAttackAction playerID laneID attackerActivePosition targetInfo (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let attackerID, targetID, damage, selfDamage =
@@ -1113,7 +1175,7 @@ let private executeSingleAttackAction playerID laneID attackerActivePosition tar
     |> changeBoard cardsState
     |> changeCardsState gameState
 
-let private executePairAttackAction playerID laneID attackerPairPosition targetInfo gameState =
+let private executePairAttackAction playerID laneID attackerPairPosition targetInfo (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let (attackerID1, attackerID2), targetID, damage, selfDamage =
@@ -1131,7 +1193,7 @@ let private executePairAttackAction playerID laneID attackerPairPosition targetI
     |> changeBoard cardsState
     |> changeCardsState gameState
 
-let private executeCreatePairAction playerID laneID position1 position2 gameState =
+let private executeCreatePairAction playerID laneID position1 position2 (gameState: GameStateDuringTurn) =
     let boardInfo = gameState.CardsState.Board
     let lane = Map.find laneID boardInfo.Lanes
     let ownActiveUnits =
@@ -1194,61 +1256,6 @@ let private timeoutOwnedFreezeStates playerID (cardsState: CardsState): CardsSta
     cardsState.Board
     |> changeLanesWithFn (timeoutOwnedFreezeStatesInLane playerID)
     |> changeBoard cardsState
-
-let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
-    let cardsState = gameState.CardsState
-    match cardsState.GameStage with
-    | Early preInfo ->
-        let boardInfo = cardsState.Board
-        let hands = preInfo.HandCards
-        let drawPile = preInfo.DrawPile
-        match drawPile.Rest with
-        | [] ->
-            let newHandCards =
-                hands
-                |> Map.change playerID (function
-                    | Some hc ->
-                        Some (hc @ [drawPile.TopCard])
-                    | None ->
-                        failwithf "non-existent players can't draw cards"
-                    )
-            let newKnownBys =
-                boardInfo.HiddenCardKnownBys
-                |> Set.add (drawPile.TopCard, playerID)
-            let newCards = {
-                cardsState with
-                    Board = flipBasesOnBoard preInfo.Bases boardInfo.Lanes boardInfo.Discard newKnownBys boardInfo.RevealedCards
-                    GameStage = DrawPileEmpty {HandCards = newHandCards; LaneWins = Map.empty}
-                }
-            newCards
-            |> changeCardsState gameState
-        | newTopCard :: newRest ->
-            let newHandCards =
-                hands
-                |> Map.change playerID (function
-                    | Some hc ->
-                        Some (hc @ [drawPile.TopCard])
-                    | None ->
-                        failwithf "non-existent players can't draw cards"
-                    )
-            let newKnownBys =
-                boardInfo.HiddenCardKnownBys
-                |> Set.add (drawPile.TopCard, playerID)
-            let newCards =
-                {cardsState with
-                    GameStage =
-                        Early {
-                            preInfo with
-                                DrawPile = {TopCard = newTopCard; Rest = newRest}
-                                HandCards = newHandCards
-                            }
-                    Board = {boardInfo with HiddenCardKnownBys = newKnownBys}
-                }
-            newCards
-            |> changeCardsState gameState
-    | DrawPileEmpty _
-    | HandsEmpty _ ->
-        gameState
 
 let private readyActiveUnits activeUnits =
     activeUnits

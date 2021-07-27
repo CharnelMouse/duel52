@@ -10,7 +10,9 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
 - Card ability implementation progress:
-  - View [to implement]
+  - View
+    - Draw a card [implemented]
+    - Choose a card to discard [to implement]
   - Trap [implemented]
   - Foresight [to implement]
   - Flip [to implement]
