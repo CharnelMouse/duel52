@@ -342,6 +342,12 @@ type private GameStateBetweenTurns = {
     TurnState: PlayerReady
 }
 
+type private GameStateDuringMidActionChoice = {
+    CardsState: CardsState
+    TurnState: TurnInProgress
+    ChoiceContext: MidActionChoiceContext
+}
+
 type private GameStateDuringTurn = {
     CardsState: CardsState
     TurnState: TurnInProgress
@@ -359,6 +365,7 @@ type private GameStateTied = {
 }
 
 type private GameState =
+| GameStateDuringMidActionChoice of GameStateDuringMidActionChoice
 | GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateDuringTurn of GameStateDuringTurn
 | GameStateWon of GameStateWon
@@ -439,6 +446,7 @@ let private checkForGameEnd gameState =
                         GameStateTied {Lanes = lanes; LaneWins = laneWins}
                     else
                         gameState
+    | GameStateDuringMidActionChoice _
     | GameStateBetweenTurns _
     | GameStateWon _
     | GameStateTied _ ->
@@ -597,6 +605,136 @@ let private getDeadCardKnowledge (playerID: PlayerID) (cardPowers: CardPowers) k
 
 let private getDisplayInfo gameState =
     match gameState with
+    | GameStateDuringMidActionChoice gs ->
+        let id = gs.TurnState.CurrentPlayer
+        let (playerHandInfo, opponentHandsInfo) =
+            match gs.CardsState.GameStage with
+            | Early {HandCards = hco} ->
+                hco
+                |> Map.partition (fun owner _ -> owner = id)
+            | DrawPileEmpty {HandCards= hco} ->
+                hco
+                |> Map.partition (fun owner _ -> owner = id)
+            | HandsEmpty _ ->
+                Map.empty, Map.empty
+        let playerHand =
+            playerHandInfo
+            |> Map.toList
+            |> List.collect (fun (_, cards) -> cards)
+        let cardPowers = gs.CardsState.CardPowers
+        let getBase = getBaseKnowledge id
+        let getDeadCard = getDeadCardKnowledge id
+        let boardKnowledge =
+            let {Lanes = l; Discard = d; HiddenCardKnownBys = kb; RevealedCards = rc} = gs.CardsState.Board
+            match gs.CardsState.GameStage with
+            | Early {Bases = b; DrawPile = dp} ->
+                let lanesKnowledge =
+                    joinMaps b l
+                    |> Map.map (fun _ (bases, {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; FrozenUnits = frozenUnits; UnitPairs = unitPairs}) ->
+                        let troopKnowledge =
+                            createIDsToLength 1<PID> gs.TurnState.NPlayers
+                            |> List.map (fun playerID ->
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses frozenUnits unitPairs kb
+                                )
+                            |> Map.ofList
+                        {
+                            Bases =
+                                bases
+                                |> Map.toList
+                                |> List.map (fun (owner, cardID) ->
+                                    owner,
+                                    Map.find cardID gs.CardsState.CardPowers,
+                                    kb
+                                    |> Set.filter (fun (key, _) -> key = cardID)
+                                    |> Set.map (fun (_, pid) -> pid)
+                                    )
+                                |> List.map getBase
+                            Troops = troopKnowledge
+                            } : PreBaseFlipLaneKnowledge
+                        )
+                let drawPileSize = 1 + List.length dp.Rest
+                let discardKnowledge =
+                    d
+                    |> List.map (fun cardID -> getDeadCard gs.CardsState.CardPowers kb rc cardID)
+                PreBaseFlipBoardKnowledge {
+                    Lanes = lanesKnowledge
+                    DrawPileSize = drawPileSize
+                    Discard = discardKnowledge
+                    }
+            | DrawPileEmpty {LaneWins = laneWins} ->
+                let lanesKnowledge =
+                    l
+                    |> Map.map (fun laneID {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; FrozenUnits = frozenUnits; UnitPairs = unitPairs} ->
+                        let troopKnowledge =
+                            createIDsToLength 1<PID> gs.TurnState.NPlayers
+                            |> List.map (fun playerID ->
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses frozenUnits unitPairs kb
+                                )
+                            |> Map.ofList
+                        match Map.tryFind laneID laneWins with
+                        | None ->
+                            ContestedLaneKnowledge {
+                                Troops = troopKnowledge
+                                }
+                        | Some c ->
+                            WonLaneKnowledge {
+                                Controller = c
+                                Troops = troopKnowledge
+                                }
+                        )
+                let discardKnowledge =
+                    d
+                    |> List.map (fun cardID -> getDeadCard gs.CardsState.CardPowers kb rc cardID)
+                PostBaseFlipBoardKnowledge {
+                    Lanes = lanesKnowledge
+                    Discard = discardKnowledge
+                    }
+            | HandsEmpty {LaneWins = laneWins} ->
+                let lanesKnowledge =
+                    l
+                    |> Map.map (fun laneID {UnitOwners = unitOwners; UnitDamages = unitDamages; InactiveUnits = inactiveUnits; ActiveUnits = activeUnits; Pairs = pairs; Readinesses = readinesses; FrozenUnits = frozenUnits; UnitPairs = unitPairs} ->
+                        let troopKnowledge =
+                            createIDsToLength 1<PID> gs.TurnState.NPlayers
+                            |> List.map (fun playerID ->
+                                playerID, getTroops id playerID cardPowers unitOwners unitDamages rc inactiveUnits activeUnits pairs readinesses frozenUnits unitPairs kb
+                                )
+                            |> Map.ofList
+                        match Map.tryFind laneID laneWins with
+                        | None ->
+                            ContestedLaneKnowledge {
+                                Troops = troopKnowledge
+                                }
+                        | Some c ->
+                            WonLaneKnowledge {
+                                Controller = c
+                                Troops = troopKnowledge
+                                }
+                        )
+                let discardKnowledge =
+                    d
+                    |> List.map (fun cardID -> getDeadCard gs.CardsState.CardPowers kb rc cardID)
+                PostBaseFlipBoardKnowledge {
+                    Lanes = lanesKnowledge
+                    Discard = discardKnowledge
+                    }
+        MidActionChoiceDisplayInfo {
+            CurrentPlayer = id
+            ActionsLeft = gs.TurnState.ActionsLeft
+            BoardKnowledge = boardKnowledge
+            PlayerHand =
+                playerHand
+                |> List.map (fun card ->
+                    let power =
+                        gs.CardsState.CardPowers
+                        |> Map.find card
+                    HandCard (card, power)
+                    )
+            OpponentHandSizes =
+                opponentHandsInfo
+                |> Map.map (fun _ cards -> List.length cards)
+                |> Map.toList
+            ChoiceContext = gs.ChoiceContext
+        }
     | GameStateDuringTurn gs ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandsInfo) =
@@ -906,9 +1044,63 @@ let private getPossibleActionsInfo (gameState: GameState) =
                     |> List.singleton
                 else
                     actions
+    | GameStateDuringMidActionChoice gs ->
+        match gs.ChoiceContext with
+        | DiscardChoiceContext (playerID, powerCardID) ->
+            match gs.CardsState.GameStage with
+            | Early {HandCards = hc}
+            | DrawPileEmpty {HandCards = hc} ->
+                hc
+                |> Map.find playerID
+                |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidActionChoiceInfo)
+            | HandsEmpty _ ->
+                failwithf "Can't discard from an empty hand"
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
+
+let private removeMidActionChoiceContext (gameState: GameStateDuringMidActionChoice) =
+    {
+        CardsState = gameState.CardsState
+        TurnState = gameState.TurnState
+    }
+
+let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMidActionChoice) =
+    match midActionChoice with
+    | DiscardChoice (playerID, _, discardeeCardID) ->
+        let cs = gameState.CardsState
+        match cs.GameStage with
+        | Early gs ->
+            let currentHand = Map.find playerID gs.HandCards
+            let newStage = Early {
+                gs with
+                    HandCards =
+                        gs.HandCards
+                        |> Map.add playerID (currentHand |> List.filter ((<>) discardeeCardID))
+                }
+            let newCardsState = {
+                cs with
+                    GameStage = newStage
+                    Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
+                }
+            {gameState with CardsState = newCardsState}
+        | DrawPileEmpty gs ->
+            let currentHand = Map.find playerID gs.HandCards
+            let newStage = DrawPileEmpty {
+                gs with
+                    HandCards =
+                        gs.HandCards
+                        |> Map.add playerID (currentHand |> List.filter ((<>) discardeeCardID))
+                }
+            let newCardsState = {
+                cs with
+                    GameStage = newStage
+                    Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
+                }
+            {gameState with CardsState = newCardsState}
+        | HandsEmpty _ ->
+            failwithf "Can't discard from an empty hand"
+    |> removeMidActionChoiceContext
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
     let playerID = gameState.TurnState.CurrentPlayer
@@ -1018,6 +1210,13 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID cardPowers lane =
         |> List.fold (fun fu id -> Map.add id playerID fu) lane.FrozenUnits
     {lane with FrozenUnits = newFrozenUnits}
 
+let private addMidActionChoiceContext context (gameState: GameStateDuringTurn) =
+    {
+        CardsState = gameState.CardsState
+        TurnState = gameState.TurnState
+        ChoiceContext = context
+    }
+
 let private resolveActivationPower playerID laneID cardID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let {Board = board; CardPowers = powers} = cardsState
@@ -1025,26 +1224,33 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
     | ActivationPower View ->
         gameState
         |> tryDrawCard playerID
+        |> addMidActionChoiceContext (DiscardChoiceContext (playerID, cardID))
+        |> GameStateDuringMidActionChoice
     | ActivationPower Foresight
     | ActivationPower Flip ->
         gameState
+        |> GameStateDuringTurn
     | ActivationPower Freeze ->
         board
         |> changeLaneWithFn laneID (freezeEnemyNonActiveNimbleUnitsInLane playerID powers)
         |> changeBoard cardsState
         |> changeCardsState gameState
+        |> GameStateDuringTurn
     | ActivationPower Heal ->
         board
         |> changeLanesWithFn (healOwnUnitsInLane playerID 2<health>)
         |> changeBoard cardsState
         |> changeCardsState gameState
+        |> GameStateDuringTurn
     | ActivationPower Move
     | ActivationPower Empower
     | ActivationPower Action ->
         gameState
+        |> GameStateDuringTurn
     | InactiveDeathPower _
     | PassivePower _ ->
         gameState
+        |> GameStateDuringTurn
 
 let private executeActivateAction playerID laneID cardID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
@@ -1155,19 +1361,33 @@ let private decrementActionsLeft (gameState: GameStateDuringTurn) =
         }
 
 let private executeTurnAction action gameState =
-    match action with
-    | Play (playerID, cardID, laneID) ->
-        executePlayAction cardID laneID gameState
-    | Activate (playerID, laneID, cardID) ->
-        executeActivateAction playerID laneID cardID gameState
-    | SingleAttack (playerID, laneID, attackerID, targetInfo) ->
-        executeSingleAttackAction laneID attackerID targetInfo gameState
-    | PairAttack (playerID, laneID, (attackerID1, attackerID2), targetInfo) ->
-        executePairAttackAction laneID (attackerID1, attackerID2) targetInfo gameState
-    | CreatePair (playerID, laneID, cardID1, cardID2) ->
-        executeCreatePairAction laneID cardID1 cardID2 gameState
-    |> decrementActionsLeft
-    |> updateLaneWins
+    let gs = decrementActionsLeft gameState
+    let postAction =
+        match action with
+        | Play (playerID, cardID, laneID) ->
+            executePlayAction cardID laneID gs
+            |> GameStateDuringTurn
+        | Activate (playerID, laneID, cardID) ->
+            executeActivateAction playerID laneID cardID gs
+        | SingleAttack (playerID, laneID, attackerID, targetInfo) ->
+            executeSingleAttackAction laneID attackerID targetInfo gs
+            |> GameStateDuringTurn
+        | PairAttack (playerID, laneID, (attackerID1, attackerID2), targetInfo) ->
+            executePairAttackAction laneID (attackerID1, attackerID2) targetInfo gs
+            |> GameStateDuringTurn
+        | CreatePair (playerID, laneID, cardID1, cardID2) ->
+            executeCreatePairAction laneID cardID1 cardID2 gs
+            |> GameStateDuringTurn
+    match postAction with
+    | GameStateDuringMidActionChoice _ ->
+        postAction
+    | GameStateDuringTurn pa ->
+        updateLaneWins pa
+        |> GameStateDuringTurn
+    | GameStateBetweenTurns _
+    | GameStateWon _
+    | GameStateTied _ ->
+        failwithf "Shouldn't be here!"
 
 let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameStateDuringTurn =
     let ts = gameState.TurnState
@@ -1203,9 +1423,12 @@ let private readyAllActiveCards cardsState =
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match gameState, action with
+        | GameStateDuringMidActionChoice gs, MidActionChoiceInfo maci ->
+            executeMidActionChoice maci gs
+            |> GameStateDuringTurn
+            |> checkForGameEnd
         | GameStateDuringTurn gs, TurnActionInfo tai ->
             executeTurnAction tai gs
-            |> GameStateDuringTurn
             |> checkForGameEnd
         | GameStateDuringTurn gs, EndTurn _ ->
             let tip = gs.TurnState
@@ -1234,7 +1457,17 @@ let rec private makeNextActionInfo gameState action =
             |> startPlayerTurn id
             |> tryDrawCard id
             |> GameStateDuringTurn
-        | _ ->
+        | GameStateDuringMidActionChoice _, TurnActionInfo _
+        | GameStateDuringMidActionChoice _, StartTurn _
+        | GameStateDuringMidActionChoice _, EndTurn _
+        | GameStateDuringTurn _, MidActionChoiceInfo _
+        | GameStateDuringTurn _, StartTurn _
+        | GameStateDuringTurn _, EndTurn _
+        | GameStateBetweenTurns _, MidActionChoiceInfo _
+        | GameStateBetweenTurns _, TurnActionInfo _
+        | GameStateBetweenTurns _, EndTurn _
+        | GameStateWon _, _
+        | GameStateTied _, _ ->
             failwithf "action incompatible with game state"
     let newDisplayInfo = getDisplayInfo newGameState
     // Generation of next action's resulting capabilities is part of the

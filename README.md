@@ -12,7 +12,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Card ability implementation progress:
   - View
     - Draw a card [implemented]
-    - Choose a card to discard [to implement]
+    - Choose a card to discard [implemented]
   - Trap [implemented]
   - Foresight [to implement]
   - Flip
