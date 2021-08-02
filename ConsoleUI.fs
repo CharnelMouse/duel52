@@ -154,37 +154,64 @@ let private displayDiscardKnowledge discardKnowledge =
         discardKnowledge
         |> List.iter displayDeadCard
 
+let private displayMidActionChoiceContext context =
+    printf "Current choice: "
+    match context with
+    | DiscardChoiceContext (_, cardID) ->
+        printfn "card %i: discard a card" cardID
+
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
     match displayInfo with
-    | TurnDisplayInfo tdi ->
-        let {
-            CurrentPlayer = currentPlayer
-            ActionsLeft = actionsLeft
-            BoardKnowledge = boardKnowledge
-            PlayerHand = playerHand
-            OpponentHandSizes = opponentHandSizes
-            } = tdi
-        match boardKnowledge with
+    | MidActionChoiceDisplayInfo macdi ->
+        match macdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPreLaneKnowledges currentPlayer lanes
+            displayPreLaneKnowledges macdi.CurrentPlayer lanes
         | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPostLaneKnowledges currentPlayer lanes
-        printfn "Player %i's turn, %i actions left\n" currentPlayer actionsLeft
-        if List.isEmpty playerHand then
+            displayPostLaneKnowledges macdi.CurrentPlayer lanes
+        printfn "Player %i's turn, %i actions left\n" macdi.CurrentPlayer macdi.ActionsLeft
+        if List.isEmpty macdi.PlayerHand then
             printfn "Hand is empty"
         else
             printf "Hand: "
-            List.iter displayHandCard playerHand
+            List.iter displayHandCard macdi.PlayerHand
         printfn ""
-        match opponentHandSizes with
+        match macdi.OpponentHandSizes with
         | [] -> ()
         | [h] -> displayOpponentHandSize h
         | _ ->
             printfn "Opponent hand sizes"
-            List.iter displayOpponentHandSize opponentHandSizes
+            List.iter displayOpponentHandSize macdi.OpponentHandSizes
         printfn ""
-        match boardKnowledge with
+        match macdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
+            printfn "Draw pile: %i" dps
+            displayDiscardKnowledge dk
+        | PostBaseFlipBoardKnowledge {Discard = dk} ->
+            displayDiscardKnowledge dk
+        printfn ""
+        displayMidActionChoiceContext macdi.ChoiceContext
+    | TurnDisplayInfo tdi ->
+        match tdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPreLaneKnowledges tdi.CurrentPlayer lanes
+        | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPostLaneKnowledges tdi.CurrentPlayer lanes
+        printfn "Player %i's turn, %i actions left\n" tdi.CurrentPlayer tdi.ActionsLeft
+        if List.isEmpty tdi.PlayerHand then
+            printfn "Hand is empty"
+        else
+            printf "Hand: "
+            List.iter displayHandCard tdi.PlayerHand
+        printfn ""
+        match tdi.OpponentHandSizes with
+        | [] -> ()
+        | [h] -> displayOpponentHandSize h
+        | _ ->
+            printfn "Opponent hand sizes"
+            List.iter displayOpponentHandSize tdi.OpponentHandSizes
+        printfn ""
+        match tdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
             printfn "Draw pile: %i" dps
             displayDiscardKnowledge dk
@@ -215,6 +242,8 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
+    | MidActionChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
+        string powerCardID + ": discard card " + string discardeeCardID
     | TurnActionInfo (Play (_, cardID, laneID)) ->
         "Play card " + string cardID
         + " to lane " + string laneID

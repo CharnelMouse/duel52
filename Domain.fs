@@ -108,6 +108,18 @@ type BoardKnowledge =
 | PreBaseFlipBoardKnowledge of PreBaseFlipBoardKnowledge
 | PostBaseFlipBoardKnowledge of PostBaseFlipBoardKnowledge
 
+type MidActionChoiceContext =
+| DiscardChoiceContext of PlayerID * CardID
+
+type MidActionChoiceDisplayInfo = {
+    CurrentPlayer: PlayerID
+    ActionsLeft: int
+    BoardKnowledge: BoardKnowledge
+    PlayerHand: Hand
+    OpponentHandSizes: (PlayerID * int) list
+    ChoiceContext: MidActionChoiceContext
+}
+
 type TurnDisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
@@ -126,6 +138,7 @@ type TiedGameDisplayInfo = {
 }
 
 type DisplayInfo =
+| MidActionChoiceDisplayInfo of MidActionChoiceDisplayInfo
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
 | WonGameDisplayInfo of WonGameDisplayInfo
@@ -136,6 +149,9 @@ type AttackTargetInfo =
 | ActiveSingleTarget of PlayerID * CardID
 | ActivePairMemberTarget of PlayerID * CardID
 
+type MidActionChoiceInfo =
+| DiscardChoice of PlayerID * CardID * CardID
+
 type TurnActionInfo =
 | Play of PlayerID * CardID * LaneID
 | Activate of PlayerID * LaneID * CardID
@@ -144,6 +160,7 @@ type TurnActionInfo =
 | CreatePair of PlayerID * LaneID * CardID * CardID
 
 type ActionInfo =
+| MidActionChoiceInfo of MidActionChoiceInfo
 | TurnActionInfo of TurnActionInfo
 | EndTurn of PlayerID
 | StartTurn of PlayerID
