@@ -1055,6 +1055,16 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidActionChoiceInfo)
             | HandsEmpty _ ->
                 failwithf "Can't discard from an empty hand"
+        | TwinStrikeChoiceContext (playerID, laneID, powerCardID) ->
+            let lane = Map.find laneID gs.CardsState.Board.Lanes
+            lane.UnitOwners
+            |> Map.toList
+            |> List.choose (fun (cardID, ownerID) ->
+                if ownerID = playerID then
+                    None
+                else
+                    Some (TwinStrikeChoice (playerID, laneID, powerCardID, cardID) |> MidActionChoiceInfo)
+                )
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
@@ -1100,6 +1110,15 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
             {gameState with CardsState = newCardsState}
         | HandsEmpty _ ->
             failwithf "Can't discard from an empty hand"
+    | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
+        let newCardsState =
+            gameState.CardsState.Board
+            |> changeLaneWithFn laneID (damageCard targetCardID 1<health>)
+            |> moveDeadCardsInLaneToDiscard laneID gameState.CardsState.CardPowers
+            |> changeBoard gameState.CardsState
+        {gameState with
+            CardsState = newCardsState
+            }
     |> removeMidActionChoiceContext
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =

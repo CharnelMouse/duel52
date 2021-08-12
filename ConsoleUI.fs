@@ -159,6 +159,8 @@ let private displayMidActionChoiceContext context =
     match context with
     | DiscardChoiceContext (_, cardID) ->
         printfn "card %i: discard a card" cardID
+    | TwinStrikeChoiceContext (_, laneID, cardID) ->
+        printfn "card %i: damage a card in lane %i" cardID laneID
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
@@ -244,6 +246,8 @@ let private actionString action =
     match action with
     | MidActionChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
+    | MidActionChoiceInfo (TwinStrikeChoice (_, _, powerCardID, targetCardID)) ->
+        string powerCardID + ": damage card " + string targetCardID
     | TurnActionInfo (Play (_, cardID, laneID)) ->
         "Play card " + string cardID
         + " to lane " + string laneID
