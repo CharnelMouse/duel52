@@ -1058,12 +1058,12 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidActionChoiceInfo)
             | HandsEmpty _ ->
                 failwithf "Can't discard from an empty hand"
-        | TwinStrikeChoiceContext (playerID, laneID, powerCardID) ->
+        | TwinStrikeChoiceContext (playerID, laneID, powerCardID, originalTargetCardID) ->
             let lane = Map.find laneID gs.CardsState.Board.Lanes
             lane.UnitOwners
             |> Map.toList
             |> List.choose (fun (cardID, ownerID) ->
-                if ownerID = playerID then
+                if ownerID = playerID || cardID = originalTargetCardID then
                     None
                 else
                     Some (TwinStrikeChoice (playerID, laneID, powerCardID, cardID) |> MidActionChoiceInfo)
@@ -1274,7 +1274,7 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         gameState
         |> GameStateDuringTurn
 
-let private resolvePassivePower playerID laneID cardID (gameState: GameStateDuringTurn) =
+let private resolveAttackerPassivePower playerID laneID cardID attackedCardID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     match Map.find cardID cardsState.CardPowers with
     | PassivePower Retaliate
@@ -1286,7 +1286,7 @@ let private resolvePassivePower playerID laneID cardID (gameState: GameStateDuri
         {
             CardsState = cardsState
             TurnState = gameState.TurnState
-            ChoiceContext = TwinStrikeChoiceContext (playerID, laneID, cardID)
+            ChoiceContext = TwinStrikeChoiceContext (playerID, laneID, cardID, attackedCardID)
         }
         |> GameStateDuringMidActionChoice
     | PassivePower Vampiric ->
@@ -1368,7 +1368,7 @@ let private executeSingleAttackAction playerID laneID attackerID targetInfo (gam
     |> moveDeadCardsToDiscard cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
-    |> resolvePassivePower playerID laneID attackerID
+    |> resolveAttackerPassivePower playerID laneID attackerID targetID
 
 let private executePairAttackAction laneID (attackerID1, attackerID2) targetInfo (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState

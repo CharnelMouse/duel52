@@ -159,7 +159,7 @@ let private displayMidActionChoiceContext context =
     match context with
     | DiscardChoiceContext (_, cardID) ->
         printfn "card %i: discard a card" cardID
-    | TwinStrikeChoiceContext (_, laneID, cardID) ->
+    | TwinStrikeChoiceContext (_, laneID, cardID, _) ->
         printfn "card %i: damage a card in lane %i" cardID laneID
 
 let private displayOngoingGameInfo displayInfo =

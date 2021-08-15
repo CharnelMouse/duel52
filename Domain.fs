@@ -110,7 +110,7 @@ type BoardKnowledge =
 
 type MidActionChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
-| TwinStrikeChoiceContext of PlayerID * LaneID * CardID
+| TwinStrikeChoiceContext of PlayerID * LaneID * CardID * CardID
 
 type MidActionChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
