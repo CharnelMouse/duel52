@@ -34,6 +34,9 @@ type Damage = int<health>
 type PlayerID = int<PID>
 type LaneID = int<LID>
 type CardID = int<CID>
+type UnitIDs =
+| SingleCardID of CardID
+| PairIDs of CardID * CardID
 
 type HandCard = HandCard of CardID * Power
 
@@ -110,7 +113,7 @@ type BoardKnowledge =
 
 type MidActionChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
-| TwinStrikeChoiceContext of PlayerID * LaneID * CardID * CardID
+| TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
 
 type MidActionChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
@@ -152,7 +155,7 @@ type AttackTargetInfo =
 
 type MidActionChoiceInfo =
 | DiscardChoice of PlayerID * CardID * CardID
-| TwinStrikeChoice of PlayerID * LaneID * CardID * CardID
+| TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
 
 type TurnActionInfo =
 | Play of PlayerID * CardID * LaneID

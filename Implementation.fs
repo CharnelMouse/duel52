@@ -1274,8 +1274,12 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         gameState
         |> GameStateDuringTurn
 
-let private resolveAttackerPassivePower playerID laneID cardID attackedCardID (gameState: GameStateDuringTurn) =
+let private resolveAttackerPassivePower playerID laneID unitCardIDs attackedCardID (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
+    let cardID =
+        match unitCardIDs with
+        | SingleCardID id -> id
+        | PairIDs (id, _) -> id
     match Map.find cardID cardsState.CardPowers with
     | PassivePower Retaliate
     | PassivePower Nimble
@@ -1286,7 +1290,7 @@ let private resolveAttackerPassivePower playerID laneID cardID attackedCardID (g
         {
             CardsState = cardsState
             TurnState = gameState.TurnState
-            ChoiceContext = TwinStrikeChoiceContext (playerID, laneID, cardID, attackedCardID)
+            ChoiceContext = TwinStrikeChoiceContext (playerID, laneID, unitCardIDs, attackedCardID)
         }
         |> GameStateDuringMidActionChoice
     | PassivePower Vampiric ->
@@ -1368,9 +1372,9 @@ let private executeSingleAttackAction playerID laneID attackerID targetInfo (gam
     |> moveDeadCardsToDiscard cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
-    |> resolveAttackerPassivePower playerID laneID attackerID targetID
+    |> resolveAttackerPassivePower playerID laneID (SingleCardID attackerID) targetID
 
-let private executePairAttackAction laneID (attackerID1, attackerID2) targetInfo (gameState: GameStateDuringTurn) =
+let private executePairAttackAction playerID laneID (attackerID1, attackerID2) targetInfo (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let targetID, damage, selfDamage =
@@ -1387,6 +1391,7 @@ let private executePairAttackAction laneID (attackerID1, attackerID2) targetInfo
     |> moveDeadCardsToDiscard cardsState.CardPowers
     |> changeBoard cardsState
     |> changeCardsState gameState
+    |> resolveAttackerPassivePower playerID laneID (PairIDs (attackerID1, attackerID2)) targetID
 
 let private executeCreatePairAction laneID cardID1 cardID2 (gameState: GameStateDuringTurn) =
     gameState.CardsState.Board
@@ -1418,8 +1423,7 @@ let private executeTurnAction action gameState =
         | SingleAttack (playerID, laneID, attackerID, targetInfo) ->
             executeSingleAttackAction playerID laneID attackerID targetInfo gs
         | PairAttack (playerID, laneID, (attackerID1, attackerID2), targetInfo) ->
-            executePairAttackAction laneID (attackerID1, attackerID2) targetInfo gs
-            |> GameStateDuringTurn
+            executePairAttackAction playerID laneID (attackerID1, attackerID2) targetInfo gs
         | CreatePair (playerID, laneID, cardID1, cardID2) ->
             executeCreatePairAction laneID cardID1 cardID2 gs
             |> GameStateDuringTurn
