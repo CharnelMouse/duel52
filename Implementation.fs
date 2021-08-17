@@ -1518,15 +1518,23 @@ let rec private makeNextActionInfo gameState action =
         | GameStateWon _, _
         | GameStateTied _, _ ->
             failwithf "action incompatible with game state"
-    let newDisplayInfo = getDisplayInfo newGameState
+    let possibleActionsInfo = getPossibleActionsInfo newGameState
+    let checkedGameState, checkedPossibleActionsInfo =
+        match newGameState, possibleActionsInfo with
+        | GameStateDuringMidActionChoice gs, [] ->
+            let state = removeMidActionChoiceContext gs |> GameStateDuringTurn
+            state, getPossibleActionsInfo state
+        | _ ->
+            newGameState, possibleActionsInfo
+    let newDisplayInfo = getDisplayInfo checkedGameState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
     // generating the entire game space, blowing the stack
     let capability() =
         InProgress (
             newDisplayInfo,
-            getPossibleActionsInfo newGameState
-            |> List.map (makeNextActionInfo newGameState)
+            checkedPossibleActionsInfo
+            |> List.map (makeNextActionInfo checkedGameState)
             )
     {
         Action = action

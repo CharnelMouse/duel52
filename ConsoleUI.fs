@@ -250,8 +250,12 @@ let private actionString action =
     match action with
     | MidActionChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
-    | MidActionChoiceInfo (TwinStrikeChoice (_, _, powerCardID, targetCardID)) ->
-        string powerCardID + ": damage card " + string targetCardID
+    | MidActionChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
+        let powerCardsString =
+            match powerCardIDs with
+            | SingleCardID id -> string id
+            | PairIDs (id1, id2) -> string id1 + ", " + string id2
+        powerCardsString + ": damage card " + string targetCardID
     | TurnActionInfo (Play (_, cardID, laneID)) ->
         "Play card " + string cardID
         + " to lane " + string laneID

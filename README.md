@@ -26,7 +26,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - Immune to Retaliate [implemented]
     - Can't be secondary target for Twinstrike [to implement]
     - Extra damage to Taunt [implemented]
-  - TwinStrike [to implement]
+  - TwinStrike [Implemented]
   - Taunt
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [to implement]
