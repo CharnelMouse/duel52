@@ -1058,7 +1058,8 @@ let private getPossibleActionsInfo (gameState: GameState) =
             lane.UnitOwners
             |> Map.toList
             |> List.choose (fun (cardID, ownerID) ->
-                if ownerID = playerID || cardID = originalTargetCardID then
+                let power = Map.find cardID gs.CardsState.CardPowers
+                if ownerID = playerID || cardID = originalTargetCardID || power = PassivePower Nimble then
                     None
                 else
                     Some (TwinStrikeChoice (playerID, laneID, powerCardID, cardID) |> MidActionChoiceInfo)

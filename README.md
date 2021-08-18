@@ -25,7 +25,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Nimble
     - Immune to Freeze [implemented]
     - Immune to Retaliate [implemented]
-    - Can't be secondary target for Twinstrike [to implement]
+    - Can't be secondary target for Twinstrike [implemented]
     - Extra damage to Taunt [implemented]
   - TwinStrike [implemented]
   - Taunt
