@@ -376,6 +376,8 @@ type private GameState =
 
 let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
     {gameState with CardsState = newCardsState}
+let private changeMidActionCardsState (gameState: GameStateDuringMidActionChoice) newCardsState =
+    {gameState with CardsState = newCardsState}
 let private addMidActionChoiceContext context (gameState: GameStateDuringTurn) =
     {
         CardsState = gameState.CardsState
@@ -1083,7 +1085,7 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
                     GameStage = newStage
                     Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
                 }
-            {gameState with CardsState = newCardsState}
+            changeMidActionCardsState gameState newCardsState
         | DrawPileEmpty gs ->
             let currentHand = Map.find playerID gs.HandCards
             let newStage = DrawPileEmpty {
@@ -1097,7 +1099,7 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
                     GameStage = newStage
                     Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
                 }
-            {gameState with CardsState = newCardsState}
+            changeMidActionCardsState gameState newCardsState
         | HandsEmpty _ ->
             failwithf "Can't discard from an empty hand"
     | ForesightChoice (playerID, powerCardID, targetCardID) ->
@@ -1105,19 +1107,15 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
             gameState.CardsState.Board.HiddenCardKnownBys
             |> Set.add (targetCardID, playerID)
         let newBoard = {gameState.CardsState.Board with HiddenCardKnownBys = newKnownBy}
-        let newCardsState =
-            newBoard
-            |> changeBoard gameState.CardsState
-        {gameState with CardsState = newCardsState}
+        newBoard
+        |> changeBoard gameState.CardsState
+        |> changeMidActionCardsState gameState
     | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
-        let newCardsState =
-            gameState.CardsState.Board
-            |> changeLaneWithFn laneID (damageCard targetCardID 1<health>)
-            |> moveDeadCardsToDiscard gameState.CardsState.CardPowers
-            |> changeBoard gameState.CardsState
-        {gameState with
-            CardsState = newCardsState
-            }
+        gameState.CardsState.Board
+        |> changeLaneWithFn laneID (damageCard targetCardID 1<health>)
+        |> moveDeadCardsToDiscard gameState.CardsState.CardPowers
+        |> changeBoard gameState.CardsState
+        |> changeMidActionCardsState gameState
     |> removeMidActionChoiceContext
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
