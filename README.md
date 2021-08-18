@@ -7,6 +7,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
 - Bases become activatable when the draw pile empties.
 - After the draw pile runs out, lanes are counted as won while only one player has cards there.
 - Lanes have no "memory" WRT being won: a won lane is no longer won if it gets emptied by Move powers.
+- A Vampiric card on 1 health killing a Retaliate survives, and dying Taunt cards still protect non-Taunt cards in that lane, so current working model is that we only check for deaths after resolving all triggered abilities.
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
 - Card ability implementation progress:
