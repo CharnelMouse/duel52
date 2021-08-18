@@ -1028,6 +1028,29 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidActionChoiceInfo)
             | HandsEmpty _ ->
                 failwithf "Can't discard from an empty hand"
+        | ForesightChoiceContext (playerID, powerCardID) ->
+            let inactiveUnits =
+                gs.CardsState.Board.Lanes
+                |> Map.toList
+                |> List.collect (fun (laneID, lane) -> lane.InactiveUnits)
+            let faceDownCards =
+                match gs.CardsState.GameStage with
+                | Early {Bases = bases} ->
+                    let baseIDs =
+                        bases
+                        |> Map.toList
+                        |> List.collect (fun (laneID, b) ->
+                            b
+                            |> Map.toList
+                            |> List.map (fun (playerID, d) -> d)
+                            )
+                    baseIDs @ inactiveUnits
+                | DrawPileEmpty _
+                | HandsEmpty _ ->
+                    inactiveUnits
+            faceDownCards
+            |> List.filter (fun id -> not (Set.contains (id, playerID) gs.CardsState.Board.HiddenCardKnownBys))
+            |> List.map (fun id -> ForesightChoice (playerID, powerCardID, id) |> MidActionChoiceInfo)
         | TwinStrikeChoiceContext (playerID, laneID, powerCardID, originalTargetCardID) ->
             let lane = Map.find laneID gs.CardsState.Board.Lanes
             lane.UnitOwners
@@ -1077,6 +1100,15 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
             {gameState with CardsState = newCardsState}
         | HandsEmpty _ ->
             failwithf "Can't discard from an empty hand"
+    | ForesightChoice (playerID, powerCardID, targetCardID) ->
+        let newKnownBy =
+            gameState.CardsState.Board.HiddenCardKnownBys
+            |> Set.add (targetCardID, playerID)
+        let newBoard = {gameState.CardsState.Board with HiddenCardKnownBys = newKnownBy}
+        let newCardsState =
+            newBoard
+            |> changeBoard gameState.CardsState
+        {gameState with CardsState = newCardsState}
     | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
         let newCardsState =
             gameState.CardsState.Board
@@ -1205,7 +1237,10 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         |> tryDrawCard playerID
         |> addMidActionChoiceContext (DiscardChoiceContext (playerID, cardID))
         |> GameStateDuringMidActionChoice
-    | ActivationPower Foresight
+    | ActivationPower Foresight ->
+        gameState
+        |> addMidActionChoiceContext (ForesightChoiceContext (playerID, cardID))
+        |> GameStateDuringMidActionChoice
     | ActivationPower Flip ->
         gameState
         |> GameStateDuringTurn

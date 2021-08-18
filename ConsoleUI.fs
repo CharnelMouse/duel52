@@ -159,6 +159,8 @@ let private displayMidActionChoiceContext context =
     match context with
     | DiscardChoiceContext (_, cardID) ->
         printfn "card %i: discard a card" cardID
+    | ForesightChoiceContext (_, cardID) ->
+        printfn "card %i: view a face-down card" cardID
     | TwinStrikeChoiceContext (_, laneID, unitCardIDs, _) ->
         match unitCardIDs with
         | SingleCardID cardID ->
@@ -250,6 +252,8 @@ let private actionString action =
     match action with
     | MidActionChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
+    | MidActionChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
+        string powerCardID + ": view card " + string hiddenCardID
     | MidActionChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
         let powerCardsString =
             match powerCardIDs with

@@ -113,6 +113,7 @@ type BoardKnowledge =
 
 type MidActionChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
+| ForesightChoiceContext of PlayerID * CardID
 | TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
 
 type MidActionChoiceDisplayInfo = {
@@ -155,6 +156,7 @@ type AttackTargetInfo =
 
 type MidActionChoiceInfo =
 | DiscardChoice of PlayerID * CardID * CardID
+| ForesightChoice of PlayerID * CardID * CardID
 | TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
 
 type TurnActionInfo =

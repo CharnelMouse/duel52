@@ -14,7 +14,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - Draw a card [implemented]
     - Choose a card to discard [implemented]
   - Trap [implemented]
-  - Foresight [to implement]
+  - Foresight [implemented]
   - Flip
     - Activate all inactive allied cards in lane [to implement]
     - Choose order to resolve triggered activation powers [to implement]
