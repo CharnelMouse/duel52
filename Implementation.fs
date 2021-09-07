@@ -968,18 +968,52 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
         let possiblePairTargets = possiblePairTypeTargets ActivePairMemberTarget lane.Pairs
         let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
 
+        let tauntTargets =
+            allTargets
+            |> List.filter (fun target ->
+                match target with
+                | InactiveTarget _ ->
+                    false
+                | ActiveSingleTarget (_, cardID)
+                | ActivePairMemberTarget (_, cardID) ->
+                    let power = Map.find cardID gameState.CardsState.CardPowers
+                    power = PassivePower Taunt
+            )
+
         let singleAttacks =
-            List.allPairs possibleUnitAttackers allTargets
-            |> List.map (fun (attacker, target) ->
-                SingleAttack (playerID, laneID, attacker, target)
-                |> TurnActionInfo
-                )
+            possibleUnitAttackers
+            |> List.collect (fun attacker ->
+                let power = Map.find attacker gameState.CardsState.CardPowers
+                if power = PassivePower Nimble || List.isEmpty tauntTargets then
+                    allTargets
+                    |> List.map (fun target ->
+                        SingleAttack (playerID, laneID, attacker, target)
+                        |> TurnActionInfo
+                    )
+                else
+                    tauntTargets
+                    |> List.map (fun target ->
+                        SingleAttack (playerID, laneID, attacker, target)
+                        |> TurnActionInfo
+                    )
+            )
         let pairAttacks =
-            List.allPairs possiblePairAttackers allTargets
-            |> List.map (fun ((attackerID1, attackerID2), target) ->
-                PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                |> TurnActionInfo
-                )
+            possiblePairAttackers
+            |> List.collect (fun (attacker1, attacker2) ->
+                let power = Map.find attacker1 gameState.CardsState.CardPowers
+                if power = PassivePower Nimble || List.isEmpty tauntTargets then
+                    allTargets
+                    |> List.map (fun target ->
+                        PairAttack (playerID, laneID, (attacker1, attacker2), target)
+                        |> TurnActionInfo
+                    )
+                else
+                    tauntTargets
+                    |> List.map (fun target ->
+                        PairAttack (playerID, laneID, (attacker1, attacker2), target)
+                        |> TurnActionInfo
+                    )
+            )
         singleAttacks @ pairAttacks
         )
 
