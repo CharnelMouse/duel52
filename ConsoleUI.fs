@@ -2,6 +2,12 @@ module ConsoleUI
 open System
 open Domain
 
+let private readiness (actions: CardActions) =
+    if actions <= 0 then
+        Exhausted
+    else
+        Ready
+
 let private deparsePower power =
     match power with
     | ActivationPower View -> '2'
@@ -47,22 +53,22 @@ let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKno
     // later will need cases for active/pair when card is frozen
 
 let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledge: ActiveUnitKnowledge) =
-    let (cardID, power, damage, readiness, actionability) = activeUnitKnowledge
+    let (cardID, power, damage, actionsLeft, actionability) = activeUnitKnowledge
     printf "%i: " cardID
     match actionability with
     | Normal -> ()
     | Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage with
-        | 0<health> -> printfn "%A %c" readiness (deparsePower power)
-        | d -> printfn "%A %c, %i damage" readiness (deparsePower power) d
+        | 0<health> -> printfn "%A %c" (readiness actionsLeft) (deparsePower power)
+        | d -> printfn "%A %c, %i damage" (readiness actionsLeft) (deparsePower power) d
     else
         match damage with
         | 0<health> -> printfn "%c" (deparsePower power)
         | d -> printfn "%c, %i damage" (deparsePower power) d
 
 let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowledge) =
-    let (cardID1, cardID2, power, damage1, damage2, readiness, actionability1, actionability2) = pairKnowledge
+    let (cardID1, cardID2, power, damage1, damage2, actionsLeft, actionability1, actionability2) = pairKnowledge
     printf "%i, %i: " cardID1 cardID2
     match actionability1, actionability2 with
     | Normal, Normal -> ()
@@ -71,8 +77,8 @@ let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowl
     | Frozen, Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage1, damage2 with
-        | 0<health>, 0<health> -> printfn "%A %c pair" readiness (deparsePower power)
-        | d1, d2 -> printfn "%A %c pair: damage %i and %i" readiness (deparsePower power) d1 d2
+        | 0<health>, 0<health> -> printfn "%A %c pair" (readiness actionsLeft) (deparsePower power)
+        | d1, d2 -> printfn "%A %c pair: damage %i and %i" (readiness actionsLeft) (deparsePower power) d1 d2
     else
         match damage1, damage2 with
         | 0<health>, 0<health> -> printfn "%c pair" (deparsePower power)

@@ -34,6 +34,7 @@ type Damage = int<health>
 type PlayerID = int<PID>
 type LaneID = int<LID>
 type CardID = int<CID>
+type CardActions = int
 type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
@@ -70,9 +71,9 @@ type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Damage * Actionability
 | KnownInactiveCardKnowledge of CardID * Power * Damage * Actionability
 
-type ActiveUnitKnowledge = CardID * Power * Damage * Readiness * Actionability
+type ActiveUnitKnowledge = CardID * Power * Damage * CardActions * Actionability
 
-type PairKnowledge = CardID * CardID * Power * Damage * Damage * Readiness * Actionability * Actionability
+type PairKnowledge = CardID * CardID * Power * Damage * Damage * CardActions * Actionability * Actionability
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 
