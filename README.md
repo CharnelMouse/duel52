@@ -31,7 +31,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Taunt
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
-    - If present, non-Taunt allies can't be secondary target for Twinstrike either [implement]
+    - If present, non-Taunt allies can't be secondary target for Twinstrike either [implemented]
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
   - Move [to implement]
   - Empower [to implement]
