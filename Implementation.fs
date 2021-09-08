@@ -1089,15 +1089,31 @@ let private getPossibleActionsInfo (gameState: GameState) =
             |> List.map (fun id -> ForesightChoice (playerID, powerCardID, id) |> MidActionChoiceInfo)
         | TwinStrikeChoiceContext (playerID, laneID, powerCardID, originalTargetCardID) ->
             let lane = Map.find laneID gs.CardsState.Board.Lanes
-            lane.UnitOwners
-            |> Map.toList
-            |> List.choose (fun (cardID, ownerID) ->
-                let power = Map.find cardID gs.CardsState.CardPowers
-                if ownerID = playerID || cardID = originalTargetCardID || power = PassivePower Nimble then
-                    None
+            let isActiveTaunt id =
+                let power = Map.find id gs.CardsState.CardPowers
+                power = PassivePower Taunt && not (List.contains id lane.InactiveUnits)
+            let activeTauntCheckTargets, nonActiveTauntCheckTargets =
+                lane.UnitOwners
+                |> Map.toList
+                |> List.choose (fun (cardID, ownerID) ->
+                    let power = Map.find cardID gs.CardsState.CardPowers
+                    if ownerID = playerID || cardID = originalTargetCardID || power = PassivePower Nimble then
+                        None
+                    else
+                        Some cardID
+                    )
+                |> List.partition isActiveTaunt
+            let legalTargets =
+                if List.isEmpty activeTauntCheckTargets && not (isActiveTaunt originalTargetCardID)
+                then
+                    nonActiveTauntCheckTargets
                 else
-                    Some (TwinStrikeChoice (playerID, laneID, powerCardID, cardID) |> MidActionChoiceInfo)
-                )
+                    activeTauntCheckTargets
+            legalTargets
+            |> List.map (fun cardID ->
+                TwinStrikeChoice (playerID, laneID, powerCardID, cardID)
+                |> MidActionChoiceInfo
+            )
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
