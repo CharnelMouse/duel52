@@ -137,7 +137,7 @@ let private addCardsToUnitPairs cardID1 cardID2 lane =
 let private incrementCardActionsLeft cardID (lane: Lane) =
     {lane with CardActionsLeft = Map.change cardID (Option.map ((+) 1)) lane.CardActionsLeft}
 let private decrementCardActionsLeft cardID (lane: Lane) =
-    {lane with CardActionsLeft = Map.change cardID (Option.map ((-) 1)) lane.CardActionsLeft}
+    {lane with CardActionsLeft = Map.change cardID (Option.map (fun x -> x - 1)) lane.CardActionsLeft}
 let private damageCard cardID damage (lane: Lane) =
     {
         lane with
@@ -1329,7 +1329,10 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         gameState
         |> GameStateDuringTurn
     | ActivationPower Action ->
-        gameState
+        gameState.CardsState.Board
+        |> changeLaneWithFn laneID (incrementCardActionsLeft cardID)
+        |> changeBoard gameState.CardsState
+        |> changeCardsState gameState
         |> incrementActionsLeft
         |> GameStateDuringTurn
     | InactiveDeathPower _
