@@ -36,7 +36,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
   - Move [to implement]
   - Empower [to implement]
   - Action
-    - Gain 1 action [to implement]
+    - Gain 1 action [implemented]
     - This card has a maximum of 2 attacks this turn [to implement]
 
 Future extensions:

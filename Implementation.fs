@@ -374,6 +374,14 @@ type private GameState =
 | GameStateWon of GameStateWon
 | GameStateTied of GameStateTied
 
+let private incrementActionsLeft (gameState: GameStateDuringTurn) =
+    {gameState with
+        TurnState = {
+            gameState.TurnState with
+                ActionsLeft = gameState.TurnState.ActionsLeft + 1
+        }
+    }
+
 let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
     {gameState with CardsState = newCardsState}
 let private changeMidActionCardsState (gameState: GameStateDuringMidActionChoice) newCardsState =
@@ -1306,9 +1314,12 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         |> changeCardsState gameState
         |> GameStateDuringTurn
     | ActivationPower Move
-    | ActivationPower Empower
+    | ActivationPower Empower ->
+        gameState
+        |> GameStateDuringTurn
     | ActivationPower Action ->
         gameState
+        |> incrementActionsLeft
         |> GameStateDuringTurn
     | InactiveDeathPower _
     | PassivePower _ ->
