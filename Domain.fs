@@ -116,6 +116,7 @@ type MidActionChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
 | ForesightChoiceContext of PlayerID * CardID
 | TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
+| MoveChoiceContext of PlayerID * LaneID * CardID
 
 type MidActionChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
@@ -159,6 +160,7 @@ type MidActionChoiceInfo =
 | DiscardChoice of PlayerID * CardID * CardID
 | ForesightChoice of PlayerID * CardID * CardID
 | TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
+| MoveChoice of (PlayerID * LaneID * CardID * LaneID * CardID) option
 
 type TurnActionInfo =
 | Play of PlayerID * CardID * LaneID

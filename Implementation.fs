@@ -198,6 +198,39 @@ let private findMaxHealth id cardPowers inactiveUnits =
         3<health>
     | _ ->
         2<health>
+let private tryAddFromList cardID fromList toList =
+    if List.contains cardID fromList then
+        toList @ [cardID]
+    else
+        toList
+let private tryAddFromMap cardID fromMap toMap =
+    match Map.tryFind cardID fromMap with
+    | Some value -> Map.add cardID value toMap
+    | None -> toMap
+let private removeCardsFromLane cardIDs =
+    removeCardsFromUnitOwners cardIDs
+    >> removeCardsFromUnitDamages cardIDs
+    >> removeCardsFromInactiveUnits cardIDs
+    >> removeCardsFromActiveUnits cardIDs
+    >> addCardPairPartnersToActiveUnits cardIDs
+    >> removeCardsFromPairs cardIDs
+    >> removeCardsFromCardActionsUsed cardIDs
+    >> removeCardsFromMaxCardActions cardIDs
+    >> removeCardsFromUnitPairs cardIDs
+let private changeCardLane cardID fromLaneID toLaneID (board: Board) =
+    let fromLane = Map.find fromLaneID board.Lanes
+    board
+    |> changeLaneWithFn toLaneID (fun toLane -> {
+        toLane with
+            UnitOwners = Map.add cardID (Map.find cardID fromLane.UnitOwners) toLane.UnitOwners
+            UnitDamages = tryAddFromMap cardID fromLane.UnitDamages toLane.UnitDamages
+            InactiveUnits = tryAddFromList cardID fromLane.InactiveUnits toLane.InactiveUnits
+            ActiveUnits = tryAddFromList cardID fromLane.ActiveUnits toLane.ActiveUnits
+            CardActionsUsed = tryAddFromMap cardID fromLane.CardActionsUsed toLane.CardActionsUsed
+            MaxCardActions = tryAddFromMap cardID fromLane.MaxCardActions toLane.MaxCardActions
+            FrozenUnits = tryAddFromMap cardID fromLane.FrozenUnits toLane.FrozenUnits
+        })
+    |> changeLaneWithFn fromLaneID (removeCardsFromLane [cardID])    
 let private findDeadCardsInLane laneID board (cardPowers: CardPowers) =
     let lane = Map.find laneID board.Lanes
     lane.UnitDamages
@@ -213,16 +246,7 @@ let private findDeadCards board cardPowers =
 let private moveDeadCardsToDiscard cardPowers board =
     let deadCards = findDeadCards board cardPowers
     board
-    |> changeLanesWithFn (
-        removeCardsFromUnitOwners deadCards
-        >> removeCardsFromInactiveUnits deadCards
-        >> removeCardsFromActiveUnits deadCards
-        >> addCardPairPartnersToActiveUnits deadCards
-        >> removeCardsFromPairs deadCards
-        >> removeCardsFromCardActionsUsed deadCards
-        >> removeCardsFromMaxCardActions deadCards
-        >> removeCardsFromUnitPairs deadCards
-    )
+    |> changeLanesWithFn (removeCardsFromLane deadCards)
     |> changeDiscard (List.fold (fun discard id -> discard @ [id]) board.Discard deadCards)
 let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits (board: Board) =
     board
@@ -1145,6 +1169,29 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 TwinStrikeChoice (playerID, laneID, powerCardID, cardID)
                 |> MidActionChoiceInfo
             )
+        | MoveChoiceContext (playerID, laneID, powerCardID) ->
+            let moves =
+                gs.CardsState.Board.Lanes
+                    |> Map.filter (fun targetLaneID _ -> targetLaneID <> laneID)
+                |> Map.toList
+                |> List.collect (fun (targetLaneID, lane) ->
+                    lane.UnitOwners
+                    |> Map.toList
+                    |> List.choose (fun (targetCardID, targetOwnerID) ->
+                        if targetOwnerID = playerID then
+                            Some (targetLaneID, targetCardID)
+                        else
+                            None
+                    )
+                )
+                |> List.map (fun (targetLaneID, targetCardID) ->
+                    MoveChoice (Some (playerID, laneID, powerCardID, targetLaneID, targetCardID))
+                    |> MidActionChoiceInfo
+                )
+            if List.isEmpty moves then
+                moves
+            else
+                MidActionChoiceInfo (MoveChoice (None)) :: moves
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
@@ -1198,6 +1245,15 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
         |> moveDeadCardsToDiscard gameState.CardsState.CardPowers
         |> changeBoard gameState.CardsState
         |> changeMidActionCardsState gameState
+    | MoveChoice maybeMove ->
+        match maybeMove with
+        | Some (playerID, laneID, powerCardID, targetLaneID, targetCardID) ->
+            gameState.CardsState.Board
+            |> changeCardLane targetCardID targetLaneID laneID
+            |> changeBoard gameState.CardsState
+            |> changeMidActionCardsState gameState
+        | None ->
+            gameState
     |> removeMidActionChoiceContext
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
@@ -1336,7 +1392,10 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         |> changeBoard cardsState
         |> changeCardsState gameState
         |> GameStateDuringTurn
-    | ActivationPower Move
+    | ActivationPower Move ->
+        gameState
+        |> addMidActionChoiceContext (MoveChoiceContext (playerID, laneID, cardID))
+        |> GameStateDuringMidActionChoice
     | ActivationPower Empower ->
         gameState
         |> GameStateDuringTurn

@@ -173,6 +173,8 @@ let private displayMidActionChoiceContext context =
             printfn "card %i: damage a card in lane %i" cardID laneID
         | PairIDs (cardID1, cardID2) ->
             printfn "pair %i, %i: damage a card in lane %i" cardID1 cardID2 laneID
+    | MoveChoiceContext (_, laneID, cardID) ->
+        printfn "card %i: move a card to lane %i" cardID laneID
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
@@ -266,6 +268,12 @@ let private actionString action =
             | SingleCardID id -> string id
             | PairIDs (id1, id2) -> string id1 + ", " + string id2
         powerCardsString + ": damage card " + string targetCardID
+    | MidActionChoiceInfo (MoveChoice maybeMove) ->
+        match maybeMove with
+        | Some (_, toLaneID, powerCardID, _, targetCardID) ->
+            string powerCardID + ": move card " + string targetCardID + " to lane " + string toLaneID
+        | None ->
+            "Move nothing"
     | TurnActionInfo (Play (_, cardID, laneID)) ->
         "Play card " + string cardID
         + " to lane " + string laneID

@@ -33,7 +33,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
     - If present, non-Taunt allies can't be secondary target for Twinstrike either [implemented]
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
-  - Move [to implement]
+  - Move [implemented]
   - Empower [to implement]
   - Action
     - Gain 1 action [implemented]
