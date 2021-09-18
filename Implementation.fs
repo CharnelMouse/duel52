@@ -388,10 +388,10 @@ type private GameStateBetweenTurns = {
     TurnState: PlayerReady
 }
 
-type private GameStateDuringMidActionChoice = {
+type private GameStateDuringMidPowerChoice = {
     CardsState: CardsState
     TurnState: TurnInProgress
-    ChoiceContext: MidActionChoiceContext
+    ChoiceContext: MidPowerChoiceContext
 }
 
 type private GameStateDuringTurn = {
@@ -411,7 +411,7 @@ type private GameStateTied = {
 }
 
 type private GameState =
-| GameStateDuringMidActionChoice of GameStateDuringMidActionChoice
+| GameStateDuringMidPowerChoice of GameStateDuringMidPowerChoice
 | GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateDuringTurn of GameStateDuringTurn
 | GameStateWon of GameStateWon
@@ -427,16 +427,16 @@ let private incrementActionsLeft (gameState: GameStateDuringTurn) =
 
 let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
     {gameState with CardsState = newCardsState}
-let private changeMidActionCardsState (gameState: GameStateDuringMidActionChoice) newCardsState =
+let private changeMidPowerCardsState (gameState: GameStateDuringMidPowerChoice) newCardsState =
     {gameState with CardsState = newCardsState}
-let private addMidActionChoiceContext context (gameState: GameStateDuringTurn) =
+let private addMidPowerChoiceContext context (gameState: GameStateDuringTurn) =
     {
         CardsState = gameState.CardsState
         TurnState = gameState.TurnState
         ChoiceContext = context
     }
 
-let private removeMidActionChoiceContext (gameState: GameStateDuringMidActionChoice) =
+let private removeMidPowerChoiceContext (gameState: GameStateDuringMidPowerChoice) =
     {
         CardsState = gameState.CardsState
         TurnState = gameState.TurnState
@@ -514,7 +514,7 @@ let private checkForGameEnd gameState =
                         GameStateTied {Lanes = lanes; LaneWins = laneWins}
                     else
                         gameState
-    | GameStateDuringMidActionChoice _
+    | GameStateDuringMidPowerChoice _
     | GameStateBetweenTurns _
     | GameStateWon _
     | GameStateTied _ ->
@@ -683,7 +683,7 @@ let private getPlayerLaneWins (laneWins: LaneWins) =
 
 let private getDisplayInfo gameState =
     match gameState with
-    | GameStateDuringMidActionChoice gs ->
+    | GameStateDuringMidPowerChoice gs ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandsInfo) =
             match gs.CardsState.GameStage with
@@ -786,7 +786,7 @@ let private getDisplayInfo gameState =
                     Lanes = lanesKnowledge
                     Discard = List.map getDeadCard d
                     }
-        MidActionChoiceDisplayInfo {
+        MidPowerChoiceDisplayInfo {
             CurrentPlayer = id
             ActionsLeft = gs.TurnState.ActionsLeft
             BoardKnowledge = boardKnowledge
@@ -1108,7 +1108,7 @@ let private getPossibleActionsInfo (gameState: GameState) =
                     |> List.singleton
                 else
                     actions
-    | GameStateDuringMidActionChoice gs ->
+    | GameStateDuringMidPowerChoice gs ->
         match gs.ChoiceContext with
         | DiscardChoiceContext (playerID, powerCardID) ->
             match gs.CardsState.GameStage with
@@ -1116,7 +1116,7 @@ let private getPossibleActionsInfo (gameState: GameState) =
             | DrawPileEmpty {HandCards = hc} ->
                 hc
                 |> Map.find playerID
-                |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidActionChoiceInfo)
+                |> List.map (fun cardID -> DiscardChoice (playerID, powerCardID, cardID) |> MidPowerChoiceInfo)
             | HandsEmpty _ ->
                 failwithf "Can't discard from an empty hand"
         | ForesightChoiceContext (playerID, powerCardID) ->
@@ -1141,7 +1141,7 @@ let private getPossibleActionsInfo (gameState: GameState) =
                     inactiveUnits
             faceDownCards
             |> List.filter (fun id -> not (Set.contains (id, playerID) gs.CardsState.Board.HiddenCardKnownBys))
-            |> List.map (fun id -> ForesightChoice (playerID, powerCardID, id) |> MidActionChoiceInfo)
+            |> List.map (fun id -> ForesightChoice (playerID, powerCardID, id) |> MidPowerChoiceInfo)
         | TwinStrikeChoiceContext (playerID, laneID, powerCardID, originalTargetCardID) ->
             let lane = Map.find laneID gs.CardsState.Board.Lanes
             let isActiveTaunt id =
@@ -1167,7 +1167,7 @@ let private getPossibleActionsInfo (gameState: GameState) =
             legalTargets
             |> List.map (fun cardID ->
                 TwinStrikeChoice (playerID, laneID, powerCardID, cardID)
-                |> MidActionChoiceInfo
+                |> MidPowerChoiceInfo
             )
         | MoveChoiceContext (playerID, laneID, powerCardID) ->
             let moves =
@@ -1186,18 +1186,18 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 )
                 |> List.map (fun (targetLaneID, targetCardID) ->
                     MoveChoice (Some (playerID, laneID, powerCardID, targetLaneID, targetCardID))
-                    |> MidActionChoiceInfo
+                    |> MidPowerChoiceInfo
                 )
             if List.isEmpty moves then
                 moves
             else
-                MidActionChoiceInfo (MoveChoice (None)) :: moves
+                MidPowerChoiceInfo (MoveChoice (None)) :: moves
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
 
-let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMidActionChoice) =
-    match midActionChoice with
+let private executeMidPowerChoice midPowerChoice (gameState: GameStateDuringMidPowerChoice) =
+    match midPowerChoice with
     | DiscardChoice (playerID, _, discardeeCardID) ->
         let cs = gameState.CardsState
         match cs.GameStage with
@@ -1214,7 +1214,7 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
                     GameStage = newStage
                     Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
                 }
-            changeMidActionCardsState gameState newCardsState
+            changeMidPowerCardsState gameState newCardsState
         | DrawPileEmpty gs ->
             let currentHand = Map.find playerID gs.HandCards
             let newStage = DrawPileEmpty {
@@ -1228,7 +1228,7 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
                     GameStage = newStage
                     Board = {cs.Board with Discard = cs.Board.Discard @ [discardeeCardID]}
                 }
-            changeMidActionCardsState gameState newCardsState
+            changeMidPowerCardsState gameState newCardsState
         | HandsEmpty _ ->
             failwithf "Can't discard from an empty hand"
     | ForesightChoice (playerID, powerCardID, targetCardID) ->
@@ -1238,23 +1238,23 @@ let private executeMidActionChoice midActionChoice (gameState: GameStateDuringMi
         let newBoard = {gameState.CardsState.Board with HiddenCardKnownBys = newKnownBy}
         newBoard
         |> changeBoard gameState.CardsState
-        |> changeMidActionCardsState gameState
+        |> changeMidPowerCardsState gameState
     | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
         gameState.CardsState.Board
         |> changeLaneWithFn laneID (damageCard targetCardID 1<health>)
         |> moveDeadCardsToDiscard gameState.CardsState.CardPowers
         |> changeBoard gameState.CardsState
-        |> changeMidActionCardsState gameState
+        |> changeMidPowerCardsState gameState
     | MoveChoice maybeMove ->
         match maybeMove with
         | Some (playerID, laneID, powerCardID, targetLaneID, targetCardID) ->
             gameState.CardsState.Board
             |> changeCardLane targetCardID targetLaneID laneID
             |> changeBoard gameState.CardsState
-            |> changeMidActionCardsState gameState
+            |> changeMidPowerCardsState gameState
         | None ->
             gameState
-    |> removeMidActionChoiceContext
+    |> removeMidPowerChoiceContext
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
     let playerID = gameState.TurnState.CurrentPlayer
@@ -1371,12 +1371,12 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
     | ActivationPower View ->
         gameState
         |> tryDrawCard playerID
-        |> addMidActionChoiceContext (DiscardChoiceContext (playerID, cardID))
-        |> GameStateDuringMidActionChoice
+        |> addMidPowerChoiceContext (DiscardChoiceContext (playerID, cardID))
+        |> GameStateDuringMidPowerChoice
     | ActivationPower Foresight ->
         gameState
-        |> addMidActionChoiceContext (ForesightChoiceContext (playerID, cardID))
-        |> GameStateDuringMidActionChoice
+        |> addMidPowerChoiceContext (ForesightChoiceContext (playerID, cardID))
+        |> GameStateDuringMidPowerChoice
     | ActivationPower Flip ->
         gameState
         |> GameStateDuringTurn
@@ -1394,8 +1394,8 @@ let private resolveActivationPower playerID laneID cardID (gameState: GameStateD
         |> GameStateDuringTurn
     | ActivationPower Move ->
         gameState
-        |> addMidActionChoiceContext (MoveChoiceContext (playerID, laneID, cardID))
-        |> GameStateDuringMidActionChoice
+        |> addMidPowerChoiceContext (MoveChoiceContext (playerID, laneID, cardID))
+        |> GameStateDuringMidPowerChoice
     | ActivationPower Empower ->
         gameState
         |> GameStateDuringTurn
@@ -1429,7 +1429,7 @@ let private resolveAttackerPassivePower playerID laneID unitCardIDs attackedCard
             TurnState = gameState.TurnState
             ChoiceContext = TwinStrikeChoiceContext (playerID, laneID, unitCardIDs, attackedCardID)
         }
-        |> GameStateDuringMidActionChoice
+        |> GameStateDuringMidPowerChoice
     | PassivePower Vampiric ->
         gameState
         |> GameStateDuringTurn
@@ -1566,7 +1566,7 @@ let private executeTurnAction action gameState =
             executeCreatePairAction laneID cardID1 cardID2 gs
             |> GameStateDuringTurn
     match postAction with
-    | GameStateDuringMidActionChoice _ ->
+    | GameStateDuringMidPowerChoice _ ->
         postAction
     | GameStateDuringTurn pa ->
         updateLaneWins pa
@@ -1621,8 +1621,8 @@ let private resetAllActiveMaxCardActions cardsState =
 let rec private makeNextActionInfo gameState action =
     let newGameState =
         match gameState, action with
-        | GameStateDuringMidActionChoice gs, MidActionChoiceInfo maci ->
-            executeMidActionChoice maci gs
+        | GameStateDuringMidPowerChoice gs, MidPowerChoiceInfo mpci ->
+            executeMidPowerChoice mpci gs
             |> GameStateDuringTurn
             |> checkForGameEnd
         | GameStateDuringTurn gs, TurnActionInfo tai ->
@@ -1657,13 +1657,13 @@ let rec private makeNextActionInfo gameState action =
             |> startPlayerTurn id
             |> tryDrawCard id
             |> GameStateDuringTurn
-        | GameStateDuringMidActionChoice _, TurnActionInfo _
-        | GameStateDuringMidActionChoice _, StartTurn _
-        | GameStateDuringMidActionChoice _, EndTurn _
-        | GameStateDuringTurn _, MidActionChoiceInfo _
+        | GameStateDuringMidPowerChoice _, TurnActionInfo _
+        | GameStateDuringMidPowerChoice _, StartTurn _
+        | GameStateDuringMidPowerChoice _, EndTurn _
+        | GameStateDuringTurn _, MidPowerChoiceInfo _
         | GameStateDuringTurn _, StartTurn _
         | GameStateDuringTurn _, EndTurn _
-        | GameStateBetweenTurns _, MidActionChoiceInfo _
+        | GameStateBetweenTurns _, MidPowerChoiceInfo _
         | GameStateBetweenTurns _, TurnActionInfo _
         | GameStateBetweenTurns _, EndTurn _
         | GameStateWon _, _
@@ -1672,8 +1672,8 @@ let rec private makeNextActionInfo gameState action =
     let possibleActionsInfo = getPossibleActionsInfo newGameState
     let checkedGameState, checkedPossibleActionsInfo =
         match newGameState, possibleActionsInfo with
-        | GameStateDuringMidActionChoice gs, [] ->
-            let state = removeMidActionChoiceContext gs |> GameStateDuringTurn
+        | GameStateDuringMidPowerChoice gs, [] ->
+            let state = removeMidPowerChoiceContext gs |> GameStateDuringTurn
             state, getPossibleActionsInfo state
         | _ ->
             newGameState, possibleActionsInfo

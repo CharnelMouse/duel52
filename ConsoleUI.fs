@@ -160,7 +160,7 @@ let private displayDiscardKnowledge discardKnowledge =
         discardKnowledge
         |> List.iter displayDeadCard
 
-let private displayMidActionChoiceContext context =
+let private displayMidPowerChoiceContext context =
     printf "Current choice: "
     match context with
     | DiscardChoiceContext (_, cardID) ->
@@ -179,7 +179,7 @@ let private displayMidActionChoiceContext context =
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
     match displayInfo with
-    | MidActionChoiceDisplayInfo macdi ->
+    | MidPowerChoiceDisplayInfo macdi ->
         match macdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
             displayPreLaneKnowledges macdi.CurrentPlayer lanes
@@ -206,7 +206,7 @@ let private displayOngoingGameInfo displayInfo =
         | PostBaseFlipBoardKnowledge {Discard = dk} ->
             displayDiscardKnowledge dk
         printfn ""
-        displayMidActionChoiceContext macdi.ChoiceContext
+        displayMidPowerChoiceContext macdi.ChoiceContext
     | TurnDisplayInfo tdi ->
         match tdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
@@ -258,17 +258,17 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | MidActionChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
+    | MidPowerChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
-    | MidActionChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
+    | MidPowerChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
         string powerCardID + ": view card " + string hiddenCardID
-    | MidActionChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
+    | MidPowerChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
         let powerCardsString =
             match powerCardIDs with
             | SingleCardID id -> string id
             | PairIDs (id1, id2) -> string id1 + ", " + string id2
         powerCardsString + ": damage card " + string targetCardID
-    | MidActionChoiceInfo (MoveChoice maybeMove) ->
+    | MidPowerChoiceInfo (MoveChoice maybeMove) ->
         match maybeMove with
         | Some (_, toLaneID, powerCardID, _, targetCardID) ->
             string powerCardID + ": move card " + string targetCardID + " to lane " + string toLaneID
