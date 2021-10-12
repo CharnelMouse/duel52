@@ -160,26 +160,30 @@ let private displayDiscardKnowledge discardKnowledge =
         discardKnowledge
         |> List.iter displayDeadCard
 
-let private displayMidPowerChoiceContext context =
+let private displayMidActivationPowerChoiceContext context =
     printf "Current choice: "
     match context with
     | DiscardChoiceContext (_, cardID) ->
         printfn "card %i: discard a card" cardID
     | ForesightChoiceContext (_, cardID) ->
         printfn "card %i: view a face-down card" cardID
+    | MoveChoiceContext (_, laneID, cardID) ->
+        printfn "card %i: move a card to lane %i" cardID laneID
+
+let private displayMidPassivePowerChoiceContext context =
+    printf "Current choice: "
+    match context with
     | TwinStrikeChoiceContext (_, laneID, unitCardIDs, _) ->
         match unitCardIDs with
         | SingleCardID cardID ->
             printfn "card %i: damage a card in lane %i" cardID laneID
         | PairIDs (cardID1, cardID2) ->
             printfn "pair %i, %i: damage a card in lane %i" cardID1 cardID2 laneID
-    | MoveChoiceContext (_, laneID, cardID) ->
-        printfn "card %i: move a card to lane %i" cardID laneID
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
     match displayInfo with
-    | MidPowerChoiceDisplayInfo macdi ->
+    | MidActivationPowerChoiceDisplayInfo macdi ->
         match macdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
             displayPreLaneKnowledges macdi.CurrentPlayer lanes
@@ -206,7 +210,61 @@ let private displayOngoingGameInfo displayInfo =
         | PostBaseFlipBoardKnowledge {Discard = dk} ->
             displayDiscardKnowledge dk
         printfn ""
-        displayMidPowerChoiceContext macdi.ChoiceContext
+        displayMidActivationPowerChoiceContext macdi.ChoiceContext
+    | MidPassivePowerChoiceDisplayInfo macdi ->
+        match macdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPreLaneKnowledges macdi.CurrentPlayer lanes
+        | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPostLaneKnowledges macdi.CurrentPlayer lanes
+        printfn "Player %i's turn, %i actions left\n" macdi.CurrentPlayer macdi.ActionsLeft
+        if List.isEmpty macdi.PlayerHand then
+            printfn "Hand is empty"
+        else
+            printf "Hand: "
+            List.iter displayHandCard macdi.PlayerHand
+        printfn ""
+        match macdi.OpponentHandSizes with
+        | [] -> ()
+        | [h] -> displayOpponentHandSize h
+        | _ ->
+            printfn "Opponent hand sizes"
+            List.iter displayOpponentHandSize macdi.OpponentHandSizes
+        printfn ""
+        match macdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
+            printfn "Draw pile: %i" dps
+            displayDiscardKnowledge dk
+        | PostBaseFlipBoardKnowledge {Discard = dk} ->
+            displayDiscardKnowledge dk
+        printfn ""
+        displayMidPassivePowerChoiceContext macdi.ChoiceContext
+    | StackChoiceDisplayInfo scdi ->
+        match scdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPreLaneKnowledges scdi.CurrentPlayer lanes
+        | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
+            displayPostLaneKnowledges scdi.CurrentPlayer lanes
+        printfn "Player %i's turn, %i actions left\n" scdi.CurrentPlayer scdi.ActionsLeft
+        if List.isEmpty scdi.PlayerHand then
+            printfn "Hand is empty"
+        else
+            printf "Hand: "
+            List.iter displayHandCard scdi.PlayerHand
+        printfn ""
+        match scdi.OpponentHandSizes with
+        | [] -> ()
+        | [h] -> displayOpponentHandSize h
+        | _ ->
+            printfn "Opponent hand sizes"
+            List.iter displayOpponentHandSize scdi.OpponentHandSizes
+        printfn ""
+        match scdi.BoardKnowledge with
+        | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
+            printfn "Draw pile: %i" dps
+            displayDiscardKnowledge dk
+        | PostBaseFlipBoardKnowledge {Discard = dk} ->
+            displayDiscardKnowledge dk
     | TurnDisplayInfo tdi ->
         match tdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
@@ -258,22 +316,28 @@ let private displayOngoingGameInfo displayInfo =
 
 let private actionString action =
     match action with
-    | MidPowerChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
+    | MidActivationPowerChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
-    | MidPowerChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
+    | MidActivationPowerChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
         string powerCardID + ": view card " + string hiddenCardID
-    | MidPowerChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
-        let powerCardsString =
-            match powerCardIDs with
-            | SingleCardID id -> string id
-            | PairIDs (id1, id2) -> string id1 + ", " + string id2
-        powerCardsString + ": damage card " + string targetCardID
-    | MidPowerChoiceInfo (MoveChoice maybeMove) ->
+    | MidActivationPowerChoiceInfo (MoveChoice maybeMove) ->
         match maybeMove with
         | Some (_, toLaneID, powerCardID, _, targetCardID) ->
             string powerCardID + ": move card " + string targetCardID + " to lane " + string toLaneID
         | None ->
             "Move nothing"
+    | MidPassivePowerChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
+        let powerCardsString =
+            match powerCardIDs with
+            | SingleCardID id -> string id
+            | PairIDs (id1, id2) -> string id1 + ", " + string id2
+        powerCardsString + ": damage card " + string targetCardID
+    | StackChoiceInfo (_, _, action) ->
+        match action with
+        | ViewPowerContext (_, cardID) ->
+            string cardID + ": View"
+        | ForesightPowerContext (_, cardID) -> string cardID + ": Foresight"
+        | MovePowerContext (_, laneID, cardID) -> string cardID + ": Move to lane " + string laneID
     | TurnActionInfo (Play (_, cardID, laneID)) ->
         "Play card " + string cardID
         + " to lane " + string laneID

@@ -1,4 +1,5 @@
 namespace Domain
+open EventStack
 
 type ActivationPower =
 | View
@@ -29,11 +30,13 @@ type Power =
 [<Measure>] type PID
 [<Measure>] type LID
 [<Measure>] type CID
-
+[<Measure>] type EID
+ 
 type Damage = int<health>
 type PlayerID = int<PID>
 type LaneID = int<LID>
 type CardID = int<CID>
+type EventID = int<EID>
 type CardActions = int
 type UnitIDs =
 | SingleCardID of CardID
@@ -112,19 +115,47 @@ type BoardKnowledge =
 | PreBaseFlipBoardKnowledge of PreBaseFlipBoardKnowledge
 | PostBaseFlipBoardKnowledge of PostBaseFlipBoardKnowledge
 
-type MidPowerChoiceContext =
+type MidPassivePowerChoiceContext =
+| TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
+
+type MidActivationPowerChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
 | ForesightChoiceContext of PlayerID * CardID
-| TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
 | MoveChoiceContext of PlayerID * LaneID * CardID
 
-type MidPowerChoiceDisplayInfo = {
+type PassivePowerWithDecisionContext =
+| TwinStrikePowerContext of PlayerID * LaneID * CardID
+
+type ActivationPowerContext =
+| ViewPowerContext of PlayerID * CardID
+| ForesightPowerContext of PlayerID * CardID
+| MovePowerContext of PlayerID * LaneID * CardID
+
+type MidActivationPowerChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: int
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
-    ChoiceContext: MidPowerChoiceContext
+    ChoiceContext: MidActivationPowerChoiceContext
+}
+
+type MidPassivePowerChoiceDisplayInfo = {
+    CurrentPlayer: PlayerID
+    ActionsLeft: int
+    BoardKnowledge: BoardKnowledge
+    PlayerHand: Hand
+    OpponentHandSizes: (PlayerID * int) list
+    ChoiceContext: MidPassivePowerChoiceContext
+}
+
+type StackChoiceDisplayInfo = {
+    CurrentPlayer: PlayerID
+    ActionsLeft: int
+    BoardKnowledge: BoardKnowledge
+    PlayerHand: Hand
+    OpponentHandSizes: (PlayerID * int) list
+    Stack: ActivationPowerContext stack
 }
 
 type TurnDisplayInfo = {
@@ -145,7 +176,9 @@ type TiedGameDisplayInfo = {
 }
 
 type DisplayInfo =
-| MidPowerChoiceDisplayInfo of MidPowerChoiceDisplayInfo
+| MidActivationPowerChoiceDisplayInfo of MidActivationPowerChoiceDisplayInfo
+| MidPassivePowerChoiceDisplayInfo of MidPassivePowerChoiceDisplayInfo
+| StackChoiceDisplayInfo of StackChoiceDisplayInfo
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
 | WonGameDisplayInfo of WonGameDisplayInfo
@@ -156,11 +189,15 @@ type AttackTargetInfo =
 | ActiveSingleTarget of PlayerID * CardID
 | ActivePairMemberTarget of PlayerID * CardID
 
-type MidPowerChoiceInfo =
+type MidActivationPowerChoiceInfo =
 | DiscardChoice of PlayerID * CardID * CardID
 | ForesightChoice of PlayerID * CardID * CardID
-| TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
 | MoveChoice of (PlayerID * LaneID * CardID * LaneID * CardID) option
+
+type MidPassivePowerChoiceInfo =
+| TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
+
+type StackChoiceInfo = PlayerID * EventID * ActivationPowerContext
 
 type TurnActionInfo =
 | Play of PlayerID * CardID * LaneID
@@ -170,7 +207,9 @@ type TurnActionInfo =
 | CreatePair of PlayerID * LaneID * CardID * CardID
 
 type ActionInfo =
-| MidPowerChoiceInfo of MidPowerChoiceInfo
+| MidActivationPowerChoiceInfo of MidActivationPowerChoiceInfo
+| MidPassivePowerChoiceInfo of MidPassivePowerChoiceInfo
+| StackChoiceInfo of StackChoiceInfo
 | TurnActionInfo of TurnActionInfo
 | EndTurn of PlayerID
 | StartTurn of PlayerID

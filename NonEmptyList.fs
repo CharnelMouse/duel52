@@ -16,6 +16,8 @@ let fromList lst =
     | [] -> failwith "List is empty"
     | h :: t -> {Head = h; Tail = t}    
 
+let create head tail = {Head = head; Tail = tail}
+
 let cons h nel = {
     Head = h
     Tail = toList nel
@@ -31,6 +33,7 @@ let collect mapping = toList >> List.collect mapping
 let contains value = toList >> List.contains value
 let choose chooser = toList >> List.choose chooser
 let filter predicate = toList >> List.filter predicate
+let indexed nel = toList nel |> List.indexed
 let map mapping nel = {
     Head = mapping nel.Head
     Tail = List.map mapping nel.Tail
