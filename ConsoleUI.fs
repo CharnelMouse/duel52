@@ -2,8 +2,8 @@ module ConsoleUI
 open System
 open Domain
 
-let private readiness (actions: CardActions) =
-    if actions <= 0 then
+let private readiness (actions: Actions) =
+    if actions <= 0<action> then
         Exhausted
     else
         Ready
@@ -137,7 +137,7 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
     |> Map.iter (displayPostLaneKnowledge currentPlayer)
 
-let private displayHandCard (HandCard (cardID, power)) =
+let private displayHandCard (HandCardInfo (cardID, power)) =
     printf "%i:%c " (int cardID) (deparsePower power)
 
 let private displayOpponentHandSize (id, size) =

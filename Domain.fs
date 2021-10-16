@@ -31,20 +31,21 @@ type Power =
 [<Measure>] type LID
 [<Measure>] type CID
 [<Measure>] type EID
+[<Measure>] type action
  
 type Damage = int<health>
 type PlayerID = int<PID>
 type LaneID = int<LID>
 type CardID = int<CID>
 type EventID = int<EID>
-type CardActions = int
+type Actions = int<action>
 type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
 
-type HandCard = HandCard of CardID * Power
+type HandCardInfo = HandCardInfo of CardID * Power
 
-type Hand = HandCard list
+type Hand = HandCardInfo list
 
 type Actionability =
 | Normal
@@ -74,9 +75,9 @@ type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Damage * Actionability
 | KnownInactiveCardKnowledge of CardID * Power * Damage * Actionability
 
-type ActiveUnitKnowledge = CardID * Power * Damage * CardActions * Actionability
+type ActiveUnitKnowledge = CardID * Power * Damage * Actions * Actionability
 
-type PairKnowledge = CardID * CardID * Power * Damage * Damage * CardActions * Actionability * Actionability
+type PairKnowledge = CardID * CardID * Power * Damage * Damage * Actions * Actionability * Actionability
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 

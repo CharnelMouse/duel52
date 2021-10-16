@@ -34,6 +34,7 @@ let contains value = toList >> List.contains value
 let choose chooser = toList >> List.choose chooser
 let filter predicate = toList >> List.filter predicate
 let indexed nel = toList nel |> List.indexed
+let length nel = 1 + List.length nel.Tail
 let map mapping nel = {
     Head = mapping nel.Head
     Tail = List.map mapping nel.Tail
