@@ -134,7 +134,7 @@ type ActivationPowerContext =
 
 type MidActivationPowerChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
-    ActionsLeft: int
+    ActionsLeft: Actions
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
@@ -143,7 +143,7 @@ type MidActivationPowerChoiceDisplayInfo = {
 
 type MidPassivePowerChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
-    ActionsLeft: int
+    ActionsLeft: Actions
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
@@ -152,7 +152,7 @@ type MidPassivePowerChoiceDisplayInfo = {
 
 type StackChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
-    ActionsLeft: int
+    ActionsLeft: Actions
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
@@ -161,7 +161,7 @@ type StackChoiceDisplayInfo = {
 
 type TurnDisplayInfo = {
     CurrentPlayer: PlayerID
-    ActionsLeft: int
+    ActionsLeft: Actions
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
