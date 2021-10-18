@@ -107,6 +107,14 @@ type private DiscardedCard =
 | FaceDownDiscardedCard of FaceDownDiscardedCard
 | FaceUpDiscardedCard of FaceUpDiscardedCard
 
+let private maxHealth card =
+    match card with
+    | InactiveUnit _ -> 2<health>
+    | ActiveUnit {Power = power} ->
+        match power with
+        | PassivePower Taunt -> 3<health>
+        | _ -> 2<health>
+
 type private CardConverter<'From, 'To> = 'From -> 'To
 
 let private deckToHandCard playerID : CardConverter<DeckCard, HandCard> = fun deckCard ->
@@ -199,210 +207,6 @@ type private Board = {
     Discard: DiscardedCard list
 }
 
-type private CardRemover<'T, 'TID> = 'TID -> LaneID -> Board -> 'T * Board
-type private CardsRemover<'T, 'TID> = 'TID list -> LaneID -> Board -> 'T list * Board
-type private CardAdder<'T> = 'T -> LaneID -> Board -> Board
-type private CardsAdder<'T> = 'T list -> LaneID -> Board -> Board
-
-let private removeCardFromInactiveUnits: CardRemover<InactiveUnit, InactiveUnitID> = fun (InactiveUnitID cardID) laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let removedCards, newInactiveUnits =
-        lane.InactiveUnits
-        |> List.partition (fun {InactiveUnitID = InactiveUnitID id} -> id = cardID)
-    let newLane = {lane with InactiveUnits = newInactiveUnits}
-    removedCards.Head,
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private removeCardsFromInactiveUnits: CardsRemover<InactiveUnit, InactiveUnitID> = fun cardIDs laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let removed, newInactiveUnits =
-        lane.InactiveUnits
-        |> List.partition (fun {InactiveUnitID = id} -> List.contains id cardIDs)
-    let newLane = {lane with InactiveUnits = newInactiveUnits}
-    removed, {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private removeCardsFromActiveUnits: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let removed, newActiveUnits =
-        lane.ActiveUnits
-        |> List.partition (fun {ActiveUnitID = id} -> List.contains id cardIDs)
-    let newLane = {lane with ActiveUnits = newActiveUnits}
-    removed, {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private removeCardsFromPairs: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let removed, newPairs =
-        lane.Pairs
-        |> List.partition (fun ({ActiveUnitID = id1}, {ActiveUnitID = id2}) ->
-            List.contains id1 cardIDs || List.contains id2 cardIDs
-            )
-    let flatRemoved = List.collect (fun (c1, c2) -> [c1; c2]) removed
-    let newLane = {lane with Pairs = newPairs}
-    flatRemoved, {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardToInactiveUnits: CardAdder<InactiveUnit> = fun card laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let newLane = {lane with InactiveUnits = lane.InactiveUnits @ [card]}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardsToInactiveUnits: CardsAdder<InactiveUnit> = fun cards laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let newLane = {lane with InactiveUnits = lane.InactiveUnits @ cards}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardToActiveUnits: CardAdder<ActiveUnit> = fun cardID laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let newLane = {lane with ActiveUnits = lane.ActiveUnits @ [cardID]}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardsToActiveUnits: CardsAdder<ActiveUnit> = fun cards laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let newLane = {lane with ActiveUnits = lane.ActiveUnits @ cards}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardsToPairs: CardAdder<ActiveUnit*ActiveUnit> = fun (card1, card2) laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let newLane = {lane with Pairs = lane.Pairs @ [card1, card2]}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private addCardPairPartnersToActiveUnits: CardsAdder<ActiveUnitID> = fun cardIDs laneID board ->
-    let lane = Map.find laneID board.Lanes
-    let partners =
-        lane.Pairs
-        |> List.collect (fun (card1, card2) ->
-            let {ActiveUnitID = id1} = card1
-            let {ActiveUnitID = id2} = card1
-            match List.contains id1 cardIDs, List.contains id2 cardIDs with
-            | true, true ->
-                []
-            | true, false ->
-                [card2]
-            | false, true ->
-                [card1]
-            | false, false ->
-                []
-            )
-    addCardsToActiveUnits partners laneID board
-
-let private incrementCardActionsUsed cardID laneID board =
-    let lane = Map.find laneID board.Lanes
-    let newLane = {
-        lane with
-            ActiveUnits =
-                lane.ActiveUnits
-                |> List.map (fun card ->
-                    let {ActiveUnitID = ActiveUnitID id} = card
-                    if id = cardID then
-                        {card with ActionsSpent = card.ActionsSpent + 1<action>}
-                    else
-                        card
-                    )
-            Pairs =
-                lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    if id1 = cardID then
-                        {card1 with ActionsSpent = card1.ActionsSpent + 1<action>}, card2
-                    elif id2 = cardID then
-                        card1, {card2 with ActionsSpent = card2.ActionsSpent + 1<action>}
-                    else
-                        card1, card2
-                    )
-        }
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-let private damageCard (UnitID cardID) damage laneID board =
-    let lane = Map.find laneID board.Lanes
-    let newLane = {
-        lane with
-            InactiveUnits =
-                lane.InactiveUnits
-                |> List.map (fun card ->
-                    let {InactiveUnitID = InactiveUnitID id} = card
-                    if id = cardID then {card with Damage = card.Damage + damage} else card
-                    )
-            ActiveUnits =
-                lane.ActiveUnits
-                |> List.map (fun card ->
-                    let {ActiveUnitID = ActiveUnitID id} = card
-                    if id = cardID then {card with Damage = card.Damage + damage} else card
-                    )
-            Pairs =
-                lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    (if id1 = cardID then {card1 with Damage = card1.Damage + damage} else card1),
-                    (if id2 = cardID then {card2 with Damage = card2.Damage + damage} else card2)
-                    )
-        }
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-
-let private setMaxCardActions cardID left laneID (board: Board) =
-    let lane = Map.find laneID board.Lanes
-    let newLane = {
-        lane with
-            ActiveUnits =
-                lane.ActiveUnits
-                |> List.map (fun card ->
-                    let {ActiveUnitID = ActiveUnitID id} = card
-                    if id = cardID then
-                        {card with MaxActions = left}
-                    else
-                        card
-                    )
-            Pairs =
-                lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    if id1 = cardID then
-                        {card1 with MaxActions = left}, card2
-                    elif id2 = cardID then
-                        card1, {card2 with MaxActions = left}
-                    else
-                        card1, card2
-                    )
-            }
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
-
-let private changeDiscard discard (board: Board) =
-    {board with Discard = discard}
-let private maxHealth card =
-    match card with
-    | InactiveUnit _ -> 2<health>
-    | ActiveUnit {Power = power} ->
-        match power with
-        | PassivePower Taunt -> 3<health>
-        | _ -> 2<health>
-let private removeCardsFromLane: CardsRemover<UnitCard, UnitID> = fun cardIDs laneID board ->
-    let removedInactive, b1 =
-        board
-        |> removeCardsFromInactiveUnits (cardIDs |> List.map (fun (UnitID id) -> InactiveUnitID id)) laneID
-    let removedActive, b2 =
-        b1
-        |> removeCardsFromActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
-    let b3 =
-        b2
-        |> addCardPairPartnersToActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
-    let removedPaired, b4 =
-        b3
-        |> removeCardsFromPairs (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
-    let removed =
-        (List.map InactiveUnit removedInactive)
-        @ (List.map ActiveUnit removedActive)
-        @ (List.map ActiveUnit removedPaired)
-    removed, b4
-let private changeCardLane cardID fromLaneID toLaneID (board: Board) =
-    let moved, b1 =
-        board
-        |> removeCardsFromLane [cardID] fromLaneID
-    let movedInactive =
-        moved
-        |> List.choose (function
-            | InactiveUnit c -> Some c
-            | ActiveUnit _ -> None
-            )
-    let movedActive =
-        moved
-        |> List.choose (function
-            | InactiveUnit _ -> None
-            | ActiveUnit c -> Some c
-            )
-    b1
-    |> addCardsToInactiveUnits movedInactive toLaneID
-    |> addCardsToActiveUnits movedActive toLaneID
 let private findDeadCardsInLane laneID board =
     let lane = Map.find laneID board.Lanes
     (lane.InactiveUnits |> List.choose (fun card -> if card.Damage >= maxHealth (InactiveUnit card) then Some (InactiveUnit card) else None))
@@ -433,48 +237,6 @@ let private findDeadCardIDsInLane laneID board =
         | false, true -> [UnitID id2]
         | false, false -> []
         ))
-let private moveDeadCardsToDiscard board =
-    let laneIDs =
-        board.Lanes
-        |> Map.toList
-        |> List.map (fun (id, _) -> id)
-    let removed, newBoard =
-        laneIDs
-        |> List.fold (fun (removed, b) id ->
-            let deadCardIDs = findDeadCardIDsInLane id b
-            let newRemoved, newB = removeCardsFromLane deadCardIDs id b
-            (removed @ newRemoved), newB
-            ) ([], board)
-    let discardCards = List.map unitToDiscardedCard removed
-    changeDiscard (newBoard.Discard @ discardCards) newBoard
-let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits (board: Board) =
-    let inactiveIDs =
-        zeroHealthInactiveDeathPowerUnits
-        |> List.choose (fun card ->
-            match card with
-            | InactiveUnit {InactiveUnitID = cid} -> Some cid
-            | ActiveUnit _ -> None
-            )
-    let removedCards, b1 =
-        board
-        |> removeCardsFromInactiveUnits inactiveIDs laneID
-    let newCards = List.map inactiveToActiveUnit removedCards
-    addCardsToActiveUnits newCards laneID b1
-let private triggerTargetInactiveDeathPowers laneID (board: Board) =
-    let inactiveUnits = (Map.find laneID board.Lanes).InactiveUnits
-    let zeroHealthInactiveDeathPowerUnits =
-        findDeadCardsInLane laneID board
-        |> List.filter (fun card ->
-            let power =
-                match card with
-                | InactiveUnit {Power = p}
-                | ActiveUnit {Power = p} -> p
-            match power, List.contains card (inactiveUnits |> List.map (fun c -> InactiveUnit c)) with
-            | InactiveDeathPower p, true -> true
-            | _ -> false
-            )
-    board
-    |> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits
 
 type private EarlyGameInfo = {
     Bases: Map<LaneID, BaseCard list>
@@ -502,11 +264,266 @@ type private CardsState = {
     Removed: RemovedCard Set
 }
 
-let private changeBoard cardsState newBoard =
-    {cardsState with Board = newBoard}
-let private addCardToBoard (card: InactiveUnit) laneID (cardsState: CardsState) =
-    addCardToInactiveUnits card laneID cardsState.Board
-    |> changeBoard cardsState
+type private CardRemover<'T, 'TID> = 'TID -> LaneID -> CardsState -> 'T * CardsState
+type private CardsRemover<'T, 'TID> = 'TID list -> LaneID -> CardsState -> 'T list * CardsState
+type private CardAdder<'T> = 'T -> LaneID -> CardsState -> CardsState
+type private CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
+
+let private removeCardFromInactiveUnits: CardRemover<InactiveUnit, InactiveUnitID> = fun (InactiveUnitID cardID) laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let removedCards, newInactiveUnits =
+        lane.InactiveUnits
+        |> List.partition (fun {InactiveUnitID = InactiveUnitID id} -> id = cardID)
+    let newLane = {lane with InactiveUnits = newInactiveUnits}
+    removedCards.Head,
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private removeCardsFromInactiveUnits: CardsRemover<InactiveUnit, InactiveUnitID> = fun cardIDs laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let removed, newInactiveUnits =
+        lane.InactiveUnits
+        |> List.partition (fun {InactiveUnitID = id} -> List.contains id cardIDs)
+    let newLane = {lane with InactiveUnits = newInactiveUnits}
+    removed,
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private removeCardsFromActiveUnits: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let removed, newActiveUnits =
+        lane.ActiveUnits
+        |> List.partition (fun {ActiveUnitID = id} -> List.contains id cardIDs)
+    let newLane = {lane with ActiveUnits = newActiveUnits}
+    removed,
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private removeCardsFromPairs: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let removed, newPairs =
+        lane.Pairs
+        |> List.partition (fun ({ActiveUnitID = id1}, {ActiveUnitID = id2}) ->
+            List.contains id1 cardIDs || List.contains id2 cardIDs
+            )
+    let flatRemoved = List.collect (fun (c1, c2) -> [c1; c2]) removed
+    let newLane = {lane with Pairs = newPairs}
+    flatRemoved,
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardToInactiveUnits: CardAdder<InactiveUnit> = fun card laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {lane with InactiveUnits = lane.InactiveUnits @ [card]}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardsToInactiveUnits: CardsAdder<InactiveUnit> = fun cards laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {lane with InactiveUnits = lane.InactiveUnits @ cards}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardToActiveUnits: CardAdder<ActiveUnit> = fun cardID laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {lane with ActiveUnits = lane.ActiveUnits @ [cardID]}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardsToActiveUnits: CardsAdder<ActiveUnit> = fun cards laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {lane with ActiveUnits = lane.ActiveUnits @ cards}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardsToPairs: CardAdder<ActiveUnit*ActiveUnit> = fun (card1, card2) laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {lane with Pairs = lane.Pairs @ [card1, card2]}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private addCardPairPartnersToActiveUnits: CardsAdder<ActiveUnitID> = fun cardIDs laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let partners =
+        lane.Pairs
+        |> List.collect (fun (card1, card2) ->
+            let {ActiveUnitID = id1} = card1
+            let {ActiveUnitID = id2} = card1
+            match List.contains id1 cardIDs, List.contains id2 cardIDs with
+            | true, true ->
+                []
+            | true, false ->
+                [card2]
+            | false, true ->
+                [card1]
+            | false, false ->
+                []
+            )
+    addCardsToActiveUnits partners laneID cardsState
+
+let private removeCardsFromLane: CardsRemover<UnitCard, UnitID> = fun cardIDs laneID cardsState ->
+    let removedInactive, cs1 =
+        cardsState
+        |> removeCardsFromInactiveUnits (cardIDs |> List.map (fun (UnitID id) -> InactiveUnitID id)) laneID
+    let removedActive, cs2 =
+        cs1
+        |> removeCardsFromActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
+    let cs3 =
+        cs2
+        |> addCardPairPartnersToActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
+    let removedPaired, cs4 =
+        cs3
+        |> removeCardsFromPairs (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
+    let removed =
+        (List.map InactiveUnit removedInactive)
+        @ (List.map ActiveUnit removedActive)
+        @ (List.map ActiveUnit removedPaired)
+    removed, cs4
+let private changeCardLane cardID fromLaneID toLaneID cardsState =
+    let moved, cs1 =
+        cardsState
+        |> removeCardsFromLane [cardID] fromLaneID
+    let movedInactive =
+        moved
+        |> List.choose (function
+            | InactiveUnit c -> Some c
+            | ActiveUnit _ -> None
+            )
+    let movedActive =
+        moved
+        |> List.choose (function
+            | InactiveUnit _ -> None
+            | ActiveUnit c -> Some c
+            )
+    cs1
+    |> addCardsToInactiveUnits movedInactive toLaneID
+    |> addCardsToActiveUnits movedActive toLaneID
+
+let private moveDeadCardsToDiscard cardsState =
+    let board = cardsState.Board
+    let laneIDs =
+        board.Lanes
+        |> Map.toList
+        |> List.map (fun (id, _) -> id)
+    let removed, newCardsState =
+        laneIDs
+        |> List.fold (fun (removed, cs) id ->
+            let deadCardIDs = findDeadCardIDsInLane id cs.Board
+            let newRemoved, newCS = removeCardsFromLane deadCardIDs id cs
+            (removed @ newRemoved), newCS
+            ) ([], cardsState)
+    let discardCards = List.map unitToDiscardedCard removed
+    let newDiscard = {newCardsState.Board with Discard = (newCardsState.Board.Discard @ discardCards)}
+    {cardsState with Board = newDiscard}
+let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cardsState =
+    let inactiveIDs =
+        zeroHealthInactiveDeathPowerUnits
+        |> List.choose (fun card ->
+            match card with
+            | InactiveUnit {InactiveUnitID = cid} -> Some cid
+            | ActiveUnit _ -> None
+            )
+    let removedCards, cs1 =
+        cardsState
+        |> removeCardsFromInactiveUnits inactiveIDs laneID
+    let newCards = List.map inactiveToActiveUnit removedCards
+    addCardsToActiveUnits newCards laneID cs1
+
+let private triggerTargetInactiveDeathPowers laneID cardsState =
+    let board = cardsState.Board
+    let inactiveUnits = (Map.find laneID board.Lanes).InactiveUnits
+    let zeroHealthInactiveDeathPowerUnits =
+        findDeadCardsInLane laneID board
+        |> List.filter (fun card ->
+            let power =
+                match card with
+                | InactiveUnit {Power = p}
+                | ActiveUnit {Power = p} -> p
+            match power, List.contains card (inactiveUnits |> List.map (fun c -> InactiveUnit c)) with
+            | InactiveDeathPower p, true -> true
+            | _ -> false
+            )
+    cardsState
+    |> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits
+
+let private damageCard (UnitID cardID) damage laneID cardsState =
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {
+        lane with
+            InactiveUnits =
+                lane.InactiveUnits
+                |> List.map (fun card ->
+                    let {InactiveUnitID = InactiveUnitID id} = card
+                    if id = cardID then {card with Damage = card.Damage + damage} else card
+                    )
+            ActiveUnits =
+                lane.ActiveUnits
+                |> List.map (fun card ->
+                    let {ActiveUnitID = ActiveUnitID id} = card
+                    if id = cardID then {card with Damage = card.Damage + damage} else card
+                    )
+            Pairs =
+                lane.Pairs
+                |> List.map (fun (card1, card2) ->
+                    let {ActiveUnitID = ActiveUnitID id1} = card1
+                    let {ActiveUnitID = ActiveUnitID id2} = card2
+                    (if id1 = cardID then {card1 with Damage = card1.Damage + damage} else card1),
+                    (if id2 = cardID then {card2 with Damage = card2.Damage + damage} else card2)
+                    )
+        }
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+
+let private incrementCardActionsUsed cardID laneID cardsState =
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {
+        lane with
+            ActiveUnits =
+                lane.ActiveUnits
+                |> List.map (fun card ->
+                    let {ActiveUnitID = ActiveUnitID id} = card
+                    if id = cardID then
+                        {card with ActionsSpent = card.ActionsSpent + 1<action>}
+                    else
+                        card
+                    )
+            Pairs =
+                lane.Pairs
+                |> List.map (fun (card1, card2) ->
+                    let {ActiveUnitID = ActiveUnitID id1} = card1
+                    let {ActiveUnitID = ActiveUnitID id2} = card2
+                    if id1 = cardID then
+                        {card1 with ActionsSpent = card1.ActionsSpent + 1<action>}, card2
+                    elif id2 = cardID then
+                        card1, {card2 with ActionsSpent = card2.ActionsSpent + 1<action>}
+                    else
+                        card1, card2
+                    )
+        }
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+
+let private setMaxCardActions cardID left laneID cardsState =
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let newLane = {
+        lane with
+            ActiveUnits =
+                lane.ActiveUnits
+                |> List.map (fun card ->
+                    let {ActiveUnitID = ActiveUnitID id} = card
+                    if id = cardID then
+                        {card with MaxActions = left}
+                    else
+                        card
+                    )
+            Pairs =
+                lane.Pairs
+                |> List.map (fun (card1, card2) ->
+                    let {ActiveUnitID = ActiveUnitID id1} = card1
+                    let {ActiveUnitID = ActiveUnitID id2} = card2
+                    if id1 = cardID then
+                        {card1 with MaxActions = left}, card2
+                    elif id2 = cardID then
+                        card1, {card2 with MaxActions = left}
+                    else
+                        card1, card2
+                    )
+            }
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+
 let private removeCardFromHand (HandCardID cardID) playerID (cardsState: CardsState) =
     match cardsState.GameStage with
     | Early gs ->
@@ -1345,15 +1362,13 @@ let private executeMidActivationPowerChoice midPowerChoice (gameState: GameState
             }
         changeMidActivationPowerCardsState gameState newCardsState
     | ForesightChoice (playerID, powerCardID, targetCardID) ->
-        gameState.CardsState.Board
-        |> changeBoard gameState.CardsState
+        gameState.CardsState
         |> changeMidActivationPowerCardsState gameState
     | MoveChoice maybeMove ->
         match maybeMove with
         | Some (playerID, laneID, powerCardID, targetLaneID, targetCardID) ->
-            gameState.CardsState.Board
+            gameState.CardsState
             |> changeCardLane (UnitID targetCardID) targetLaneID laneID
-            |> changeBoard gameState.CardsState
             |> changeMidActivationPowerCardsState gameState
         | None ->
             gameState
@@ -1362,10 +1377,9 @@ let private executeMidActivationPowerChoice midPowerChoice (gameState: GameState
 let private executeMidPassivePowerChoice midPowerChoice (gameState: GameStateDuringMidPassivePowerChoice) =
     match midPowerChoice with
     | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
-        gameState.CardsState.Board
+        gameState.CardsState
         |> damageCard (UnitID targetCardID) 1<health> laneID
         |> moveDeadCardsToDiscard
-        |> changeBoard gameState.CardsState
         |> changeMidPassivePowerCardsState gameState
     |> removeMidPassivePowerChoiceContext
 
@@ -1375,7 +1389,7 @@ let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
     let newCard = handToInactiveUnit playedCard
     newCardsState
-    |> addCardToBoard newCard laneID
+    |> addCardToInactiveUnits newCard laneID
     |> removeHandsIfAllEmpty
     |> changeCardsState gameState
 
@@ -1455,10 +1469,15 @@ let private healOwnUnitsInLane playerID amount (lane: Lane) =
                     card1, card2
                 )
         }
-let private healOwnUnits playerID amount (board: Board) =
-    {board with Lanes = board.Lanes |> Map.map (fun _ lane -> healOwnUnitsInLane playerID amount lane)}
+let private healOwnUnits playerID amount cardsState =
+    let board = cardsState.Board
+    let newLanes =
+        board.Lanes
+        |> Map.map (fun _ lane -> healOwnUnitsInLane playerID amount lane)
+    {cardsState with Board = {board with Lanes = newLanes}}
 
-let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID (board : Board) =
+let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
+    let board = cardsState.Board
     let lane = Map.find laneID board.Lanes
     let newInactiveUnits =
         lane.InactiveUnits
@@ -1485,7 +1504,7 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID (board : Board
                 c1, c2
             )
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
-    {board with Lanes = board.Lanes |> Map.add laneID newLane}
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 
 let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
@@ -1506,15 +1525,13 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameSt
         gameState
         |> GameStateDuringTurn
     | ActivationPower Freeze ->
-        board
+        cardsState
         |> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID
-        |> changeBoard cardsState
         |> changeCardsState gameState
         |> GameStateDuringTurn
     | ActivationPower Heal ->
-        board
+        cardsState
         |> healOwnUnits playerID 2<health>
-        |> changeBoard cardsState
         |> changeCardsState gameState
         |> GameStateDuringTurn
     | ActivationPower Move ->
@@ -1525,9 +1542,8 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameSt
         gameState
         |> GameStateDuringTurn
     | ActivationPower Action ->
-        gameState.CardsState.Board
+        gameState.CardsState
         |> setMaxCardActions cardID 2<action> laneID
-        |> changeBoard gameState.CardsState
         |> changeCardsState gameState
         |> incrementActionsLeft
         |> GameStateDuringTurn
@@ -1567,10 +1583,9 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
 
 let private executeActivateAction playerID laneID (InactiveUnitID cardID) (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
-    let removedCard, b1 = removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState.Board
+    let removedCard, cs1 = removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
     let newCard = inactiveToActiveUnit removedCard
-    addCardToActiveUnits newCard laneID b1
-    |> changeBoard cardsState
+    addCardToActiveUnits newCard laneID cs1
     |> changeCardsState gameState
     |> resolveActivationPower playerID laneID (ActiveUnitID cardID)
 
@@ -1662,13 +1677,12 @@ let private executeSingleAttackAction playerID laneID (ActiveUnitID attackerID) 
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getSingleAttackInfo attackerID targetInfo (Map.find laneID board.Lanes)
-    board
+    cardsState
     |> incrementCardActionsUsed attackerID laneID
     |> damageCard targetID damage laneID
     |> damageCard (UnitID attackerID) selfDamage laneID
     |> triggerTargetInactiveDeathPowers laneID
     |> moveDeadCardsToDiscard
-    |> changeBoard cardsState
     |> changeCardsState gameState
     |> resolveAttackerPassivePower playerID laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID
 
@@ -1677,7 +1691,7 @@ let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, A
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getPairAttackInfo attackerID1 targetInfo (Map.find laneID board.Lanes)
-    board
+    cardsState
     |> incrementCardActionsUsed attackerID1 laneID
     |> incrementCardActionsUsed attackerID2 laneID
     |> damageCard targetID damage laneID
@@ -1685,19 +1699,17 @@ let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, A
     |> damageCard (UnitID attackerID2) selfDamage laneID
     |> triggerTargetInactiveDeathPowers laneID
     |> moveDeadCardsToDiscard
-    |> changeBoard cardsState
     |> changeCardsState gameState
     |> resolveAttackerPassivePower playerID laneID (PairAttackerIDs (ActiveUnitID attackerID1, ActiveUnitID attackerID2)) targetID
 
 let private executeCreatePairAction laneID cardID1 cardID2 (gameState: GameStateDuringTurn) =
-    let removedUnits, newBoard =
-        gameState.CardsState.Board
+    let removedUnits, newCardsState =
+        gameState.CardsState
         |> removeCardsFromActiveUnits [cardID1; cardID2] laneID
     let card1 = removedUnits.[0]
     let card2 = removedUnits.[1]
-    newBoard
+    newCardsState
     |> addCardsToPairs (card1, card2) laneID
-    |> changeBoard gameState.CardsState
     |> changeCardsState gameState
 
 let private decrementActionsLeft (gameState: GameStateDuringTurn) =
@@ -1784,17 +1796,21 @@ let private timeoutOwnedFreezeStatesInLane playerID lane =
                     newC1, newC2
                 )
     }
-let private timeoutOwnedFreezeStates playerID (cardsState: CardsState): CardsState =
+let private timeoutOwnedFreezeStates playerID cardsState =
     let board = cardsState.Board
-    {board with Lanes = board.Lanes |> Map.map (fun _ lane -> timeoutOwnedFreezeStatesInLane playerID lane)}
-    |> changeBoard cardsState
+    let newLanes =
+        board.Lanes
+        |> Map.map (fun _ lane -> timeoutOwnedFreezeStatesInLane playerID lane)
+    {cardsState with Board = {board with Lanes = newLanes}}
 
 let private resetAllActiveCardActionsUsedInLane lane =
     {lane with ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0<action>})}
 let private resetAllActiveCardActionsUsed cardsState =
     let board = cardsState.Board
-    {board with Lanes = board.Lanes |> Map.map (fun _ lane -> resetAllActiveCardActionsUsedInLane lane)}
-    |> changeBoard cardsState
+    let newLanes =
+        board.Lanes
+        |> Map.map (fun _ lane -> resetAllActiveCardActionsUsedInLane lane)
+    {cardsState with Board = {board with Lanes = newLanes}}
 
 let private resetMaxActions activeUnit =
     {activeUnit with MaxActions = 1<action>}
@@ -1802,8 +1818,10 @@ let private resetMaxActionsInLane lane =
     {lane with ActiveUnits = lane.ActiveUnits |> List.map resetMaxActions}
 let private resetAllActiveMaxCardActions cardsState =
     let board = cardsState.Board
-    {board with Lanes = board.Lanes |> Map.map (fun _ lane -> resetMaxActionsInLane lane)}
-    |> changeBoard cardsState
+    let newLanes =
+        board.Lanes
+        |> Map.map (fun _ lane -> resetMaxActionsInLane lane)
+    {cardsState with Board = {board with Lanes = newLanes}}
 
 let rec private makeNextActionInfo gameState action =
     let newGameState =
