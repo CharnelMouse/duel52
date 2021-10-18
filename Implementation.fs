@@ -771,12 +771,10 @@ let private getDeadCardKnowledge (playerID: PlayerID) (card: DiscardedCard) =
     | FaceDownDiscardedCard {Power = p; KnownBy = kb} ->
         if Set.contains playerID kb then
             KnownFaceDownDeadCard p
-            |> KnownDeadCard
         else
             UnknownDeadCard
     | FaceUpDiscardedCard {Power = p} ->
         KnownFaceUpDeadCard p
-        |> KnownDeadCard
 
 let private getPlayerLaneWins (laneWins: Map<LaneID, PlayerID>) =
     laneWins

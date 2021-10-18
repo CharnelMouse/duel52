@@ -63,13 +63,10 @@ type BaseKnowledge =
 | UnknownBaseCard of PlayerID
 | KnownBaseCard of PlayerID * Power
 
-type KnownDeadCard =
-| KnownFaceDownDeadCard of Power
-| KnownFaceUpDeadCard of Power
-
 type DeadCardKnowledge =
 | UnknownDeadCard
-| KnownDeadCard of KnownDeadCard
+| KnownFaceDownDeadCard of Power
+| KnownFaceUpDeadCard of Power
 
 type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Damage * Actionability

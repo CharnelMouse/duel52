@@ -149,8 +149,8 @@ let private displayOpponentHandSize (id, size) =
 let private displayDeadCard deadCard =
     match deadCard with
     | UnknownDeadCard -> printfn "unknown card"
-    | KnownDeadCard (KnownFaceDownDeadCard power) -> printfn "%c, face-down" (deparsePower power)
-    | KnownDeadCard (KnownFaceUpDeadCard power) -> printfn "%c, face-up" (deparsePower power)
+    | KnownFaceDownDeadCard power -> printfn "%c, face-down" (deparsePower power)
+    | KnownFaceUpDeadCard power -> printfn "%c, face-up" (deparsePower power)
 
 let private displayDiscardKnowledge discardKnowledge =
     if List.isEmpty discardKnowledge then
