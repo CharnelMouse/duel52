@@ -16,6 +16,7 @@ let private createIDMap start lst =
     |> Map.ofList
 
 type private RemovedCardID = RemovedCardID of CardID
+type private DeckCardID = DeckCardID of CardID
 type private HandCardID = HandCardID of CardID
 type private BaseCardID = BaseCardID of CardID
 type private InactiveUnitID = InactiveUnitID of CardID
@@ -37,9 +38,15 @@ type private RemovedCard = {
     Power: Power
 }
 
+type private DeckCard = {
+    DeckCardID: DeckCardID
+    Power: Power
+}
+
 type private HandCard = {
     HandCardID: HandCardID
     Power: Power
+    Owner: PlayerID
 }
 let private getHandCardInfo {HandCardID = HandCardID id; Power = p} =
     HandCardInfo (id, p)
@@ -99,6 +106,57 @@ type private FaceUpDiscardedCard = {
 type private DiscardedCard =
 | FaceDownDiscardedCard of FaceDownDiscardedCard
 | FaceUpDiscardedCard of FaceUpDiscardedCard
+
+type private CardConverter<'From, 'To> = 'From -> 'To
+
+let private deckToHandCard playerID : CardConverter<DeckCard, HandCard> = fun deckCard ->
+    let {DeckCardID = DeckCardID id} = deckCard
+    {
+        HandCardID = HandCardID id
+        Power = deckCard.Power
+        Owner = playerID
+    }
+let private handToDiscardedCard: CardConverter<HandCard, DiscardedCard> = fun handCard ->
+    let {HandCardID = HandCardID id} = handCard
+    FaceDownDiscardedCard {
+        DiscardedCardID = DiscardedCardID id
+        Power = handCard.Power
+        KnownBy = Set.singleton handCard.Owner
+    }
+let private handToInactiveUnit: CardConverter<HandCard, InactiveUnit> = fun handCard ->
+    let {HandCardID = HandCardID id} = handCard
+    {
+        InactiveUnitID = InactiveUnitID id
+        Power = handCard.Power
+        Owner = handCard.Owner
+        KnownBy = Set.singleton handCard.Owner
+        Damage = 0<health>
+        FreezeStatus = NotFrozen
+    }
+let private inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun inactiveUnit ->
+    let {InactiveUnitID = InactiveUnitID id} = inactiveUnit
+    {
+        ActiveUnitID = ActiveUnitID id
+        Power = inactiveUnit.Power
+        Owner = inactiveUnit.Owner
+        Damage = inactiveUnit.Damage
+        ActionsSpent = 0<action>
+        MaxActions = 1<action>
+        FreezeStatus = inactiveUnit.FreezeStatus
+    }
+let private unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = fun unitCard ->
+    match unitCard with
+    | InactiveUnit {InactiveUnitID = InactiveUnitID id; Power = power; KnownBy = knownBy} ->
+        FaceDownDiscardedCard {
+            DiscardedCardID = DiscardedCardID id
+            Power = power
+            KnownBy = knownBy
+        }
+    | ActiveUnit {ActiveUnitID = ActiveUnitID id; Power = power} ->
+        FaceUpDiscardedCard {
+            DiscardedCardID = DiscardedCardID id
+            Power = power
+        }
 
 let private (|Exhausted|Ready|) (card: ActiveUnit) =
     if card.ActionsSpent >= card.MaxActions then
@@ -387,14 +445,7 @@ let private moveDeadCardsToDiscard board =
             let newRemoved, newB = removeCardsFromLane deadCardIDs id b
             (removed @ newRemoved), newB
             ) ([], board)
-    let discardCards =
-        removed
-        |> List.map (function
-            | InactiveUnit {InactiveUnitID = InactiveUnitID cid; Power = p; KnownBy = kb} ->
-                FaceDownDiscardedCard {DiscardedCardID = DiscardedCardID cid; Power = p; KnownBy = kb}
-            | ActiveUnit {ActiveUnitID = ActiveUnitID cid; Power = p} ->
-                FaceUpDiscardedCard {DiscardedCardID = DiscardedCardID cid; Power = p}
-            )
+    let discardCards = List.map unitToDiscardedCard removed
     changeDiscard (newBoard.Discard @ discardCards) newBoard
 let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits (board: Board) =
     let inactiveIDs =
@@ -407,20 +458,7 @@ let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDe
     let removedCards, b1 =
         board
         |> removeCardsFromInactiveUnits inactiveIDs laneID
-    let newCards =
-        removedCards
-        |> List.map (fun (c: InactiveUnit) ->
-            let {InactiveUnitID = InactiveUnitID id} = c
-            {
-                ActiveUnitID = ActiveUnitID id
-                Power = c.Power
-                Owner = c.Owner
-                Damage = c.Damage
-                ActionsSpent = 0<action>
-                MaxActions = 1<action>
-                FreezeStatus = c.FreezeStatus
-                }
-        )
+    let newCards = List.map inactiveToActiveUnit removedCards
     addCardsToActiveUnits newCards laneID b1
 let private triggerTargetInactiveDeathPowers laneID (board: Board) =
     let inactiveUnits = (Map.find laneID board.Lanes).InactiveUnits
@@ -440,7 +478,7 @@ let private triggerTargetInactiveDeathPowers laneID (board: Board) =
 
 type private EarlyGameInfo = {
     Bases: Map<LaneID, BaseCard list>
-    DrawPile: HandCard NonEmptyList
+    DrawPile: DeckCard NonEmptyList
     HandCards: Map<PlayerID, HandCard list>
 }
 
@@ -498,7 +536,7 @@ let private removeCardFromHand (HandCardID cardID) playerID (cardsState: CardsSt
             GameStage = DrawPileEmpty {gs with HandCards = newHands}
             }
     | HandsEmpty _ ->
-        failwithf "Shouldn't be here!"
+        failwithf "Can't remove card when hands are empty"
 let private removeHandsIfAllEmpty (cardsState: CardsState) =
     match cardsState.GameStage with
     | DrawPileEmpty {HandCards = handCards; LaneWins = laneWins} ->
@@ -1299,50 +1337,13 @@ let private executeMidActivationPowerChoice midPowerChoice (gameState: GameState
     match midPowerChoice with
     | DiscardChoice (playerID, _, discardeeCardID) ->
         let cs = gameState.CardsState
-        match cs.GameStage with
-        | Early gs ->
-            let currentHand = Map.find playerID gs.HandCards
-            let discardeeCard = List.find (fun {HandCardID = HandCardID id} -> id = discardeeCardID) currentHand
-            let convertedCard = FaceDownDiscardedCard {
-                DiscardedCardID = DiscardedCardID discardeeCardID
-                Power = discardeeCard.Power
-                KnownBy = Set.singleton playerID
+        let (discardeeCard, cs) = removeCardFromHand (HandCardID discardeeCardID) playerID cs
+        let convertedCard = handToDiscardedCard discardeeCard
+        let newCardsState = {
+            cs with
+                Board = {cs.Board with Discard = cs.Board.Discard @ [convertedCard]}
             }
-            let newStage = Early {
-                gs with
-                    HandCards =
-                        gs.HandCards
-                        |> Map.add playerID (currentHand |> List.filter (fun {HandCardID = HandCardID id} -> id <> discardeeCardID))
-                }
-            let newCardsState = {
-                cs with
-                    GameStage = newStage
-                    Board = {cs.Board with Discard = cs.Board.Discard @ [convertedCard]}
-                }
-            changeMidActivationPowerCardsState gameState newCardsState
-        | DrawPileEmpty gs ->
-            let currentHand = Map.find playerID gs.HandCards
-            let discardeeCard = List.find (fun {HandCardID = HandCardID id} -> id = discardeeCardID) currentHand
-            let {HandCardID = HandCardID discardeeCardID} = discardeeCard
-            let convertedCard = FaceDownDiscardedCard {
-                DiscardedCardID = DiscardedCardID discardeeCardID
-                Power = discardeeCard.Power
-                KnownBy = Set.singleton playerID
-            }
-            let newStage = DrawPileEmpty {
-                gs with
-                    HandCards =
-                        gs.HandCards
-                        |> Map.add playerID (currentHand |> List.filter (fun {HandCardID = HandCardID id} -> id <> discardeeCardID))
-                }
-            let newCardsState = {
-                cs with
-                    GameStage = newStage
-                    Board = {cs.Board with Discard = cs.Board.Discard @ [convertedCard]}
-                }
-            changeMidActivationPowerCardsState gameState newCardsState
-        | HandsEmpty _ ->
-            failwithf "Can't discard from an empty hand"
+        changeMidActivationPowerCardsState gameState newCardsState
     | ForesightChoice (playerID, powerCardID, targetCardID) ->
         gameState.CardsState.Board
         |> changeBoard gameState.CardsState
@@ -1372,15 +1373,7 @@ let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
     let playerID = gameState.TurnState.CurrentPlayer
     let cardsState = gameState.CardsState
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
-    let {HandCardID = HandCardID playedCardID; Power = playedCardPower} = playedCard
-    let newCard = {
-        InactiveUnitID = InactiveUnitID playedCardID
-        Power =  playedCardPower
-        Owner = playerID
-        KnownBy = Set.singleton playerID
-        Damage = 0<health>
-        FreezeStatus = NotFrozen
-    }
+    let newCard = handToInactiveUnit playedCard
     newCardsState
     |> addCardToBoard newCard laneID
     |> removeHandsIfAllEmpty
@@ -1399,7 +1392,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                 hands
                 |> Map.change playerID (function
                     | Some hc ->
-                        Some (hc @ [drawPile.Head])
+                        Some (hc @ [deckToHandCard playerID drawPile.Head])
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
@@ -1415,7 +1408,7 @@ let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
                 hands
                 |> Map.change playerID (function
                     | Some hc ->
-                        Some (hc @ [drawPile.Head])
+                        Some (hc @ [deckToHandCard playerID drawPile.Head])
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
@@ -1575,16 +1568,7 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
 let private executeActivateAction playerID laneID (InactiveUnitID cardID) (gameState: GameStateDuringTurn) =
     let cardsState = gameState.CardsState
     let removedCard, b1 = removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState.Board
-    let {InactiveUnitID = InactiveUnitID id} = removedCard
-    let newCard = {
-        ActiveUnitID = ActiveUnitID id
-        Power = removedCard.Power
-        Owner = removedCard.Owner
-        Damage = removedCard.Damage
-        ActionsSpent = 0<action>
-        MaxActions = 1<action>
-        FreezeStatus = removedCard.FreezeStatus
-    }
+    let newCard = inactiveToActiveUnit removedCard
     addCardToActiveUnits newCard laneID b1
     |> changeBoard cardsState
     |> changeCardsState gameState
@@ -1962,7 +1946,7 @@ let private createGame nPlayers nLanes =
         |> prepareHead prepareRemoved 10
     let drawPile =
         notRemoved
-        |> List.map (fun id -> {HandCardID = HandCardID id; Power = Map.find id cardPowers} : HandCard)
+        |> List.map (fun id -> {DeckCardID = DeckCardID id; Power = Map.find id cardPowers})
         |> NonEmptyList.fromList
     let gameState = GameStateBetweenTurns {
         CardsState = {
@@ -1990,9 +1974,9 @@ let private createGame nPlayers nLanes =
                 DrawPile = drawPile
                 HandCards =
                     handCards
-                    |> Map.map (fun _ cardIDs ->
+                    |> Map.map (fun playerID cardIDs ->
                         cardIDs
-                        |> List.map (fun cardID -> {HandCardID = HandCardID cardID; Power = Map.find cardID cardPowers})
+                        |> List.map (fun cardID -> {HandCardID = HandCardID cardID; Power = Map.find cardID cardPowers; Owner = playerID})
                         )
             }
             Removed = Set.map (fun id -> ({RemovedCardID = RemovedCardID id; Power = Map.find id cardPowers}: RemovedCard)) removed
