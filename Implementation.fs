@@ -107,6 +107,12 @@ type private DiscardedCard =
 | FaceDownDiscardedCard of FaceDownDiscardedCard
 | FaceUpDiscardedCard of FaceUpDiscardedCard
 
+let private (|Exhausted|Ready|) (card: ActiveUnit) =
+    if card.ActionsSpent >= card.MaxActions then
+        Exhausted
+    else
+        Ready
+
 let private maxHealth card =
     match card with
     | InactiveUnit _ -> 2<health>
@@ -114,6 +120,19 @@ let private maxHealth card =
         match power with
         | PassivePower Taunt -> 3<health>
         | _ -> 2<health>
+let private (|Dead|Alive|) (card: UnitCard) =
+    let damage =
+        match card with
+        | InactiveUnit {Damage = damage}
+        | ActiveUnit {Damage = damage} -> damage
+    if damage < maxHealth card then
+        Alive
+    else
+        Dead
+let private isDead (card: UnitCard) =
+    match card with
+    | Alive -> false
+    | Dead -> true
 
 type private CardConverter<'From, 'To> = 'From -> 'To
 
@@ -166,12 +185,6 @@ let private unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = fun un
             Power = power
         }
 
-let private (|Exhausted|Ready|) (card: ActiveUnit) =
-    if card.ActionsSpent >= card.MaxActions then
-        Exhausted
-    else
-        Ready
-
 type private Lane = {
     InactiveUnits: InactiveUnit list
     ActiveUnits: ActiveUnit list
@@ -209,33 +222,22 @@ type private Board = {
 
 let private findDeadCardsInLane laneID board =
     let lane = Map.find laneID board.Lanes
-    (lane.InactiveUnits |> List.choose (fun card -> if card.Damage >= maxHealth (InactiveUnit card) then Some (InactiveUnit card) else None))
-    @ (lane.ActiveUnits |> List.choose (fun card -> if card.Damage >= maxHealth (ActiveUnit card) then Some (ActiveUnit card) else None))
-    @ (lane.Pairs |> List.collect (fun (card1, card2) ->
-        match (card1.Damage >= maxHealth (ActiveUnit card1)), (card2.Damage >= maxHealth (ActiveUnit card2)) with
-        | true, true -> [ActiveUnit card1; ActiveUnit card2]
-        | true, false -> [ActiveUnit card1]
-        | false, true -> [ActiveUnit card2]
-        | false, false -> []
-        ))
+    (lane.InactiveUnits |> List.map InactiveUnit |> List.filter isDead)
+    @ (lane.ActiveUnits |> List.map ActiveUnit |> List.filter isDead)
+    @ (lane.Pairs |> List.collect (fun (card1, card2) -> [ActiveUnit card1; ActiveUnit card2]) |> List.filter isDead)
 let private findDeadCardIDsInLane laneID board =
     let lane = Map.find laneID board.Lanes
     (lane.InactiveUnits |> List.choose (fun card ->
         let {InactiveUnitID = InactiveUnitID id} = card
-        if card.Damage >= maxHealth (InactiveUnit card) then Some (UnitID id) else None)
-        )
+        if isDead (InactiveUnit card) then Some (UnitID id) else None
+        ))
     @ (lane.ActiveUnits |> List.choose (fun card ->
         let {ActiveUnitID = ActiveUnitID id} = card
-        if card.Damage >= maxHealth (ActiveUnit card) then Some (UnitID id) else None)
-        )
-    @ (lane.Pairs |> List.collect (fun (card1, card2) ->
-        let {ActiveUnitID = ActiveUnitID id1} = card1
-        let {ActiveUnitID = ActiveUnitID id2} = card2
-        match (card1.Damage >= maxHealth (ActiveUnit card1)), (card2.Damage >= maxHealth (ActiveUnit card2)) with
-        | true, true -> [UnitID id1; UnitID id2]
-        | true, false -> [UnitID id1]
-        | false, true -> [UnitID id2]
-        | false, false -> []
+        if isDead (ActiveUnit card) then Some (UnitID id) else None
+        ))
+    @ (lane.Pairs |> List.collect (fun (card1, card2) -> [card1; card2]) |> List.choose (fun card ->
+        let {ActiveUnitID = ActiveUnitID id} = card
+        if isDead (ActiveUnit card) then Some (UnitID id) else None
         ))
 
 type private EarlyGameInfo = {
@@ -423,17 +425,19 @@ let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDe
 
 let private triggerTargetInactiveDeathPowers laneID cardsState =
     let board = cardsState.Board
-    let inactiveUnits = (Map.find laneID board.Lanes).InactiveUnits
     let zeroHealthInactiveDeathPowerUnits =
         findDeadCardsInLane laneID board
         |> List.filter (fun card ->
-            let power =
-                match card with
-                | InactiveUnit {Power = p}
-                | ActiveUnit {Power = p} -> p
-            match power, List.contains card (inactiveUnits |> List.map (fun c -> InactiveUnit c)) with
-            | InactiveDeathPower p, true -> true
-            | _ -> false
+            match card with
+            | InactiveUnit {Power = p} ->
+                match p with
+                | InactiveDeathPower _ ->
+                    true
+                | ActivationPower _
+                | PassivePower _ ->
+                    false
+            | ActiveUnit _ ->
+                false
             )
     cardsState
     |> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits
