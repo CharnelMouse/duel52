@@ -338,13 +338,13 @@ let private actionString action =
             string cardID + ": View"
         | ForesightPowerContext (_, cardID) -> string cardID + ": Foresight"
         | MovePowerContext (_, laneID, cardID) -> string cardID + ": Move to lane " + string laneID
-    | TurnActionInfo (Play (_, cardID, laneID)) ->
+    | TurnActionInfo (ActionChoiceInfo (Play (_, cardID, laneID))) ->
         "Play card " + string cardID
         + " to lane " + string laneID
-    | TurnActionInfo (Activate (_, laneID, cardID)) ->
+    | TurnActionInfo (ActionChoiceInfo (Activate (_, laneID, cardID))) ->
         "Activate inactive card " + string cardID
         + " in lane " + string laneID
-    | TurnActionInfo (SingleAttack (_, laneID, attackerID, targetInfo)) ->
+    | TurnActionInfo (ActionChoiceInfo (SingleAttack (_, laneID, attackerID, targetInfo))) ->
         let attackerText =
             "Active card " + string attackerID
         let targetText =
@@ -362,7 +362,7 @@ let private actionString action =
                 + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (PairAttack (_, laneID, (attackerID1, attackerID2), targetInfo)) ->
+    | TurnActionInfo (ActionChoiceInfo (PairAttack (_, laneID, (attackerID1, attackerID2), targetInfo))) ->
         let attackerText =
             "Paired cards " + string attackerID1 + " and " + string attackerID2
         let targetText =
@@ -380,11 +380,11 @@ let private actionString action =
                 + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (CreatePair (_, laneID, cardID1, cardID2)) ->
+    | TurnActionInfo (ActionChoiceInfo (CreatePair (_, laneID, cardID1, cardID2))) ->
         "Create pair"
         + " in lane " + string laneID
         + " from cards " + string cardID1 + " and " + string cardID2
-    | EndTurn _ ->
+    | TurnActionInfo (EndTurn _) ->
         "End turn"
     | StartTurn _ ->
         "Start turn"

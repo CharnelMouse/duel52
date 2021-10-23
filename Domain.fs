@@ -197,19 +197,22 @@ type MidPassivePowerChoiceInfo =
 
 type StackChoiceInfo = PlayerID * EventID * ActivationPowerContext
 
-type TurnActionInfo =
+type ActionChoiceInfo =
 | Play of PlayerID * CardID * LaneID
 | Activate of PlayerID * LaneID * CardID
 | SingleAttack of PlayerID * LaneID * CardID * AttackTargetInfo
 | PairAttack of PlayerID * LaneID * (CardID * CardID) * AttackTargetInfo
 | CreatePair of PlayerID * LaneID * CardID * CardID
 
+type TurnActionInfo =
+| ActionChoiceInfo of ActionChoiceInfo
+| EndTurn of PlayerID
+
 type ActionInfo =
 | MidActivationPowerChoiceInfo of MidActivationPowerChoiceInfo
 | MidPassivePowerChoiceInfo of MidPassivePowerChoiceInfo
 | StackChoiceInfo of StackChoiceInfo
 | TurnActionInfo of TurnActionInfo
-| EndTurn of PlayerID
 | StartTurn of PlayerID
 
 type ActionCapability = unit -> ActionResult

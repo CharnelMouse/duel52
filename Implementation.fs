@@ -1070,7 +1070,6 @@ let private getPlayActionsInfo (gameState: GameStateDuringTurn) =
     |> List.allPairs (createIDsToLength 1<LID> (Map.count gameState.CardsState.Board.Lanes))
     |> List.map (fun (laneID, {HandCardID = HandCardID id}) ->
         Play (playerID, id, laneID)
-        |> TurnActionInfo
         )
 
 let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
@@ -1086,7 +1085,7 @@ let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
         |> List.filter (fun card -> card.FreezeStatus = NotFrozen)
         |> List.map (fun card ->
             let {InactiveUnitID = InactiveUnitID id} = card
-            Activate (playerID, laneID, id) |> TurnActionInfo
+            Activate (playerID, laneID, id)
             )
         )
 
@@ -1103,7 +1102,6 @@ let private getPairActionsInfoFromUnits playerID laneID (ownActiveUnits: ActiveU
             let {ActiveUnitID = ActiveUnitID id1} = card1
             let {ActiveUnitID = ActiveUnitID id2} = card2
             CreatePair (playerID, laneID, id1, id2)
-            |> TurnActionInfo
             |> Some
         else
             None
@@ -1183,13 +1181,11 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
                     allTargets
                     |> List.map (fun target ->
                         SingleAttack (playerID, laneID, attackerID, target)
-                        |> TurnActionInfo
                     )
                 else
                     tauntTargets
                     |> List.map (fun target ->
                         SingleAttack (playerID, laneID, attackerID, target)
-                        |> TurnActionInfo
                     )
             )
         let pairAttacks =
@@ -1201,13 +1197,11 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
                     allTargets
                     |> List.map (fun target ->
                         PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                        |> TurnActionInfo
                     )
                 else
                     tauntTargets
                     |> List.map (fun target ->
                         PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                        |> TurnActionInfo
                     )
             )
         singleAttacks @ pairAttacks
@@ -1245,6 +1239,8 @@ let private getPossibleActionsInfo (gameState: GameState) =
                 |> List.singleton
             else
                actions
+               |> List.map ActionChoiceInfo
+        |> List.map (TurnActionInfo)
     | GameStateDuringStackChoice gs ->
         gs.EpochEvents
         |> Map.toList
@@ -1861,10 +1857,10 @@ let rec private makeNextActionInfo gameState action =
                 ChoiceContext = choiceContext
                 FutureStack = newStack
             }
-        | GameStateDuringTurn gs, TurnActionInfo tai ->
-            executeTurnAction tai gs
+        | GameStateDuringTurn gs, TurnActionInfo (ActionChoiceInfo aci) ->
+            executeTurnAction aci gs
             |> checkForGameEnd
-        | GameStateDuringTurn gs, EndTurn _ ->
+        | GameStateDuringTurn gs, TurnActionInfo (EndTurn _) ->
             let tip = gs.TurnState
             let nextPlayer =
                 if int tip.CurrentPlayer = tip.NPlayers then
@@ -1897,27 +1893,22 @@ let rec private makeNextActionInfo gameState action =
         | GameStateDuringMidActivationPowerChoice _, StackChoiceInfo _
         | GameStateDuringMidActivationPowerChoice _, TurnActionInfo _
         | GameStateDuringMidActivationPowerChoice _, StartTurn _
-        | GameStateDuringMidActivationPowerChoice _, EndTurn _
         | GameStateDuringMidPassivePowerChoice _, MidActivationPowerChoiceInfo _
         | GameStateDuringMidPassivePowerChoice _, StackChoiceInfo _
         | GameStateDuringMidPassivePowerChoice _, TurnActionInfo _
         | GameStateDuringMidPassivePowerChoice _, StartTurn _
-        | GameStateDuringMidPassivePowerChoice _, EndTurn _
         | GameStateDuringStackChoice _, MidActivationPowerChoiceInfo _
         | GameStateDuringStackChoice _, MidPassivePowerChoiceInfo _
         | GameStateDuringStackChoice _, TurnActionInfo _
         | GameStateDuringStackChoice _, StartTurn _
-        | GameStateDuringStackChoice _, EndTurn _
         | GameStateDuringTurn _, StackChoiceInfo _
         | GameStateDuringTurn _, MidActivationPowerChoiceInfo _
         | GameStateDuringTurn _, MidPassivePowerChoiceInfo _
         | GameStateDuringTurn _, StartTurn _
-        | GameStateDuringTurn _, EndTurn _
         | GameStateBetweenTurns _, StackChoiceInfo _
         | GameStateBetweenTurns _, MidActivationPowerChoiceInfo _
         | GameStateBetweenTurns _, MidPassivePowerChoiceInfo _
         | GameStateBetweenTurns _, TurnActionInfo _
-        | GameStateBetweenTurns _, EndTurn _
         | GameStateWon _, _
         | GameStateTied _, _ ->
             failwithf "action incompatible with game state"
