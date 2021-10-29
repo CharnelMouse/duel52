@@ -1823,18 +1823,40 @@ let private resetAllActiveMaxCardActions cardsState =
         |> Map.map (fun _ lane -> resetMaxActionsInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
+type private ActionPair =
+| MidActivationPowerChoicePair of GameStateDuringMidActivationPowerChoice * MidActivationPowerChoiceInfo
+| MidPassivePowerChoicePair of GameStateDuringMidPassivePowerChoice * MidPassivePowerChoiceInfo
+| StackChoicePair of GameStateDuringStackChoice * StackChoiceInfo
+| TurnActionChoicePair of GameStateDuringTurn * TurnActionInfo
+| StartTurnPair of GameStateBetweenTurns * PlayerID
+let private createActionPair gameState action =
+    match gameState, action with
+    | GameStateDuringMidActivationPowerChoice gs, MidActivationPowerChoiceInfo mapci ->
+        MidActivationPowerChoicePair (gs, mapci)
+    | GameStateDuringMidPassivePowerChoice gs, MidPassivePowerChoiceInfo mppci ->
+        MidPassivePowerChoicePair (gs, mppci)
+    | GameStateDuringStackChoice gs, StackChoiceInfo sci ->
+        StackChoicePair (gs, sci)
+    | GameStateDuringTurn gs, TurnActionInfo tai ->
+        TurnActionChoicePair (gs, tai)
+    | GameStateBetweenTurns gs, StartTurn pid ->
+        StartTurnPair (gs, pid)
+    | _ ->
+        failwithf "action incompatible with game state"
+
 let rec private makeNextActionInfo gameState action =
+    let actionPair = createActionPair gameState action
     let newGameState =
-        match gameState, action with
-        | GameStateDuringMidActivationPowerChoice gs, MidActivationPowerChoiceInfo mapci ->
+        match actionPair with
+        | MidActivationPowerChoicePair (gs, mapci) ->
             executeMidActivationPowerChoice mapci gs
             |> GameStateDuringTurn
             |> checkForGameEnd
-        | GameStateDuringMidPassivePowerChoice gs, MidPassivePowerChoiceInfo mppci ->
+        | MidPassivePowerChoicePair (gs, mppci) ->
             executeMidPassivePowerChoice mppci gs
             |> GameStateDuringTurn
             |> checkForGameEnd
-        | GameStateDuringStackChoice gs, StackChoiceInfo sci ->
+        | StackChoicePair (gs, sci) ->
             let _, index, event = sci
             let newHead =
                 gs.EpochEvents
@@ -1857,10 +1879,10 @@ let rec private makeNextActionInfo gameState action =
                 ChoiceContext = choiceContext
                 FutureStack = newStack
             }
-        | GameStateDuringTurn gs, TurnActionInfo (ActionChoiceInfo aci) ->
+        | TurnActionChoicePair (gs, ActionChoiceInfo aci) ->
             executeTurnAction aci gs
             |> checkForGameEnd
-        | GameStateDuringTurn gs, TurnActionInfo (EndTurn _) ->
+        | TurnActionChoicePair (gs, EndTurn _) ->
             let tip = gs.TurnState
             let nextPlayer =
                 if int tip.CurrentPlayer = tip.NPlayers then
@@ -1884,34 +1906,11 @@ let rec private makeNextActionInfo gameState action =
                     FutureActionCounts = nextFutureActionCounts
                     }
                 }
-        | GameStateBetweenTurns gs, StartTurn id ->
+        | StartTurnPair (gs, id) ->
             gs
             |> startPlayerTurn id
             |> tryDrawCard id
             |> GameStateDuringTurn
-        | GameStateDuringMidActivationPowerChoice _, MidPassivePowerChoiceInfo _
-        | GameStateDuringMidActivationPowerChoice _, StackChoiceInfo _
-        | GameStateDuringMidActivationPowerChoice _, TurnActionInfo _
-        | GameStateDuringMidActivationPowerChoice _, StartTurn _
-        | GameStateDuringMidPassivePowerChoice _, MidActivationPowerChoiceInfo _
-        | GameStateDuringMidPassivePowerChoice _, StackChoiceInfo _
-        | GameStateDuringMidPassivePowerChoice _, TurnActionInfo _
-        | GameStateDuringMidPassivePowerChoice _, StartTurn _
-        | GameStateDuringStackChoice _, MidActivationPowerChoiceInfo _
-        | GameStateDuringStackChoice _, MidPassivePowerChoiceInfo _
-        | GameStateDuringStackChoice _, TurnActionInfo _
-        | GameStateDuringStackChoice _, StartTurn _
-        | GameStateDuringTurn _, StackChoiceInfo _
-        | GameStateDuringTurn _, MidActivationPowerChoiceInfo _
-        | GameStateDuringTurn _, MidPassivePowerChoiceInfo _
-        | GameStateDuringTurn _, StartTurn _
-        | GameStateBetweenTurns _, StackChoiceInfo _
-        | GameStateBetweenTurns _, MidActivationPowerChoiceInfo _
-        | GameStateBetweenTurns _, MidPassivePowerChoiceInfo _
-        | GameStateBetweenTurns _, TurnActionInfo _
-        | GameStateWon _, _
-        | GameStateTied _, _ ->
-            failwithf "action incompatible with game state"
     let possibleActionsInfo = getPossibleActionsInfo newGameState
     let checkedGameState, checkedPossibleActionsInfo =
         match newGameState, possibleActionsInfo with
