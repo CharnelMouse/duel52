@@ -1,15 +1,18 @@
 A program for playing Duel 52, to practise domain modelling for card games.
 
-Work in progress: UI in place, basic play rules implemented. Need to implement card abilities.
+Work in progress: primitive UI in place, basic play rules implemented. Need to implement card abilities.
 
 - Basic actions: play card, activate, attack, make pair. Cards ready at the end of the turn.
-- Players only see known information (except who's peeked at face-down cards).
+- Players only see known information (except who's peeked at face-down cards, the console UI is verbose enough as it is).
 - Bases become activatable when the draw pile empties.
 - After the draw pile runs out, lanes are counted as won while only one player has cards there.
 - Lanes have no "memory" WRT being won: a won lane is no longer won if it gets emptied by Move powers.
-- A Vampiric card on 1 health killing a Retaliate survives, and dying Taunt cards still protect non-Taunt cards in that lane, so current working model is that we only check for deaths after resolving all triggered abilities.
+- We only check for death after resolving all triggered abilities. Specific rulings motivating this:
+  - A Vampiric card on 1 health killing a Retaliate survives.
+  - Dying Taunt cards still protect non-Taunt cards in that lane.
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
+  - We can only check early under the assumption that you can't be forced to vacate a won lane. For example, the Move power is always optional. This assumption might change if we ever allow the use of variant power sets.
 - Card ability implementation progress:
   - View
     - Draw a card [implemented]
@@ -28,6 +31,7 @@ Work in progress: UI in place, basic play rules implemented. Need to implement c
     - Can't be secondary target for Twinstrike [implemented]
     - Extra damage to Taunt [implemented]
   - TwinStrike [implemented]
+    - Currently not properly handling Trap cards killed by Twinstrike damage. Should fix this by only checking for dead cards in one place.
   - Taunt
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
