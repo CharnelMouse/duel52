@@ -393,6 +393,9 @@ let private changeCardLane cardID fromLaneID toLaneID cardsState =
     |> addCardsToInactiveUnits movedInactive toLaneID
     |> addCardsToActiveUnits movedActive toLaneID
 
+let private healActiveCard (activeCard: ActiveUnit) =
+    {activeCard with Damage = 0<health>}
+
 let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cardsState =
     let inactiveIDs =
         zeroHealthInactiveDeathPowerUnits
@@ -404,7 +407,9 @@ let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDe
     let removedCards, cs1 =
         cardsState
         |> removeCardsFromInactiveUnits inactiveIDs laneID
-    let newCards = List.map inactiveToActiveUnit removedCards
+    let newCards =
+        removedCards
+        |> List.map (inactiveToActiveUnit >> healActiveCard)
     addCardsToActiveUnits newCards laneID cs1
 
 let private damageCard (UnitID cardID) damage laneID cardsState =
@@ -919,7 +924,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops playerID playerID lane
+                        playerID, getTroops viewerID playerID lane
                         )
                     |> Map.ofList
                 {
@@ -940,7 +945,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops playerID playerID lane
+                        playerID, getTroops viewerID playerID lane
                         )
                     |> Map.ofList
                 match Map.tryFind laneID laneWins with
@@ -965,7 +970,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops playerID playerID lane
+                        playerID, getTroops viewerID playerID lane
                         )
                     |> Map.ofList
                 match Map.tryFind laneID laneWins with
