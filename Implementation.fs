@@ -864,7 +864,7 @@ let private getPairKnowledge (card1, card2) : PairKnowledge =
     min (card1.MaxActions - card1.ActionsSpent) (card2.MaxActions - card2.ActionsSpent),
     actionability1, actionability2
 
-let private getTroops viewerID ownerID (lane: Lane) : InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list =
+let private getLanePlayerTroopKnowledges viewerID ownerID (lane: Lane) : InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list =
     let pairsKnowledge =
         lane.Pairs
         |> List.filter (fun (card1, card2) -> card1.Owner = ownerID)
@@ -916,6 +916,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
     let ({Lanes = l; Discard = d}: Board) = cardsState.Board
     let getBase = getBaseKnowledge viewerID
     let getDeadCard = getDeadCardKnowledge viewerID
+    let getLanePlayerTroops = getLanePlayerTroopKnowledges viewerID
     match cardsState.GameStage with
     | Early {Bases = b; DrawPile = dp} ->
         let lanesKnowledge =
@@ -924,7 +925,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops viewerID playerID lane
+                        playerID, getLanePlayerTroops playerID lane
                         )
                     |> Map.ofList
                 {
@@ -945,7 +946,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops viewerID playerID lane
+                        playerID, getLanePlayerTroops playerID lane
                         )
                     |> Map.ofList
                 match Map.tryFind laneID laneWins with
@@ -970,7 +971,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
                 let troopKnowledge =
                     createIDsToLength 1<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
-                        playerID, getTroops viewerID playerID lane
+                        playerID, getLanePlayerTroops playerID lane
                         )
                     |> Map.ofList
                 match Map.tryFind laneID laneWins with
