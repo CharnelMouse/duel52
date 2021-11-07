@@ -31,8 +31,8 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - Can't be secondary target for Twinstrike [implemented]
     - Extra damage to Taunt [implemented]
   - TwinStrike [implemented]
-    - Currently not properly handling Trap cards killed by Twinstrike damage. Should fix this by only checking for dead cards in one place.
-    - Not handling Twinstrike damage after killing a Taunt card properly either (should still block, currently would allow if finding original target didn't cause a crash)
+    - Trap cards killed by Twinstrike damage correctly flip and heal
+    - Twinstrike damage gets correctly blocked after killing a Taunt card
   - Taunt
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
