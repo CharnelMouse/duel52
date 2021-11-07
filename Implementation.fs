@@ -603,10 +603,16 @@ type private GameStateDuringStackChoice = {
     FutureEpochs: ActivationPowerContext epoch list
 }
 
-type private GameStateDuringTurn = {
+type private GameStateDuringActionChoice = {
     CardsState: CardsState
     TurnState: TurnInProgress
 }
+
+type private GameStateDuringTurn =
+| GameStateDuringMidActivationPowerChoice of GameStateDuringMidActivationPowerChoice
+| GameStateDuringMidPassivePowerChoice of GameStateDuringMidPassivePowerChoice
+| GameStateDuringStackChoice of GameStateDuringStackChoice
+| GameStateDuringActionChoice of GameStateDuringActionChoice
 
 type private GameStateWon = {
     Lanes: Map<LaneID, Lane>
@@ -620,15 +626,12 @@ type private GameStateTied = {
 }
 
 type private GameState =
-| GameStateDuringMidActivationPowerChoice of GameStateDuringMidActivationPowerChoice
-| GameStateDuringMidPassivePowerChoice of GameStateDuringMidPassivePowerChoice
-| GameStateDuringStackChoice of GameStateDuringStackChoice
-| GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateDuringTurn of GameStateDuringTurn
+| GameStateBetweenTurns of GameStateBetweenTurns
 | GameStateWon of GameStateWon
 | GameStateTied of GameStateTied
 
-let private incrementActionsLeft (gameState: GameStateDuringTurn) =
+let private incrementActionsLeft (gameState: GameStateDuringActionChoice) =
     {gameState with
         TurnState = {
             gameState.TurnState with
@@ -636,13 +639,13 @@ let private incrementActionsLeft (gameState: GameStateDuringTurn) =
         }
     }
 
-let private changeCardsState (gameState: GameStateDuringTurn) newCardsState =
+let private changeCardsState (gameState: GameStateDuringActionChoice) newCardsState =
     {gameState with CardsState = newCardsState}
 let private changeMidActivationPowerCardsState (gameState: GameStateDuringMidActivationPowerChoice) newCardsState =
     {gameState with CardsState = newCardsState}
 let private changeMidPassivePowerCardsState (gameState: GameStateDuringMidPassivePowerChoice) newCardsState =
     {gameState with CardsState = newCardsState}
-let private addMidPowerChoiceContext context (gameState: GameStateDuringTurn) =
+let private addMidPowerChoiceContext context (gameState: GameStateDuringActionChoice) =
     {
         CardsState = gameState.CardsState
         TurnState = gameState.TurnState
@@ -660,7 +663,7 @@ let private removeMidPassivePowerChoiceContext (gameState: GameStateDuringMidPas
         CardsState = gameState.CardsState
         TurnState = gameState.TurnState
     }
-let private triggerTargetInactiveDeathPowers (gameState: GameStateDuringTurn) =
+let private triggerTargetInactiveDeathPowers (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let laneIDs =
@@ -685,7 +688,7 @@ let private triggerTargetInactiveDeathPowers (gameState: GameStateDuringTurn) =
     laneIDs
     |> List.fold (fun cs laneID -> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cs) cardsState
     |> changeCardsState gameState
-let private moveDeadCardsToDiscard (gameState: GameStateDuringTurn) =
+let private moveDeadCardsToDiscard (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let laneIDs =
@@ -703,7 +706,7 @@ let private moveDeadCardsToDiscard (gameState: GameStateDuringTurn) =
     let newDiscard = {newCardsState.Board with Discard = (newCardsState.Board.Discard @ discardCards)}
     {cardsState with Board = newDiscard}
     |> changeCardsState gameState
-let private updateLaneWins (gameState: GameStateDuringTurn) =
+let private updateLaneWins (gameState: GameStateDuringActionChoice) =
     match gameState.CardsState.GameStage with
     | Early _ ->
         gameState
@@ -741,7 +744,7 @@ let private updateLaneWins (gameState: GameStateDuringTurn) =
         |> changeCardsState gameState
 let private checkForGameEnd gameState =
     match gameState with
-    | GameStateDuringTurn {CardsState = cs} ->
+    | GameStateDuringTurn (GameStateDuringActionChoice {CardsState = cs}) ->
         match cs.GameStage with
         | Early _
         | DrawPileEmpty _ ->
@@ -780,9 +783,9 @@ let private checkForGameEnd gameState =
                         GameStateTied {Lanes = lanes; LaneWins = laneWins}
                     else
                         gameState
-    | GameStateDuringMidActivationPowerChoice _
-    | GameStateDuringMidPassivePowerChoice _
-    | GameStateDuringStackChoice _
+    | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice _)
+    | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice _)
+    | GameStateDuringTurn (GameStateDuringStackChoice _)
     | GameStateBetweenTurns _
     | GameStateWon _
     | GameStateTied _ ->
@@ -1011,7 +1014,7 @@ let private getHandInfos viewerID gameStage =
 
 let private getDisplayInfo gameState =
     match gameState with
-    | GameStateDuringMidPassivePowerChoice gs ->
+    | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice gs) ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandSizes) = getHandInfos id gs.CardsState.GameStage
         let boardKnowledge = getBoardKnowledge id gs.CardsState gs.TurnState
@@ -1023,7 +1026,7 @@ let private getDisplayInfo gameState =
             OpponentHandSizes = opponentHandSizes
             ChoiceContext = gs.ChoiceContext
         }
-    | GameStateDuringMidActivationPowerChoice gs ->
+    | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice gs) ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandSizes) = getHandInfos id gs.CardsState.GameStage
         let boardKnowledge = getBoardKnowledge id gs.CardsState gs.TurnState
@@ -1035,7 +1038,7 @@ let private getDisplayInfo gameState =
             OpponentHandSizes = opponentHandSizes
             ChoiceContext = gs.ChoiceContext
         }
-    | GameStateDuringStackChoice gs ->
+    | GameStateDuringTurn (GameStateDuringStackChoice gs) ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandSizes) = getHandInfos id gs.CardsState.GameStage
         let boardKnowledge = getBoardKnowledge id gs.CardsState gs.TurnState
@@ -1050,7 +1053,7 @@ let private getDisplayInfo gameState =
                 Tail = gs.FutureEpochs
             }
         }
-    | GameStateDuringTurn gs ->
+    | GameStateDuringTurn (GameStateDuringActionChoice gs) ->
         let id = gs.TurnState.CurrentPlayer
         let (playerHandInfo, opponentHandSizes) = getHandInfos id gs.CardsState.GameStage
         let boardKnowledge = getBoardKnowledge id gs.CardsState gs.TurnState
@@ -1073,7 +1076,7 @@ let private getDisplayInfo gameState =
             LaneWins = getPlayerLaneWins laneWins
         }
 
-let private getPlayActionsInfo (gameState: GameStateDuringTurn) =
+let private getPlayActionsInfo (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
     match gameState.CardsState.GameStage with
     | Early {HandCards = hc}
@@ -1086,7 +1089,7 @@ let private getPlayActionsInfo (gameState: GameStateDuringTurn) =
         Play (playerID, id, laneID)
         )
 
-let private getActivateActionsInfo (gameState: GameStateDuringTurn) =
+let private getActivateActionsInfo (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
     let lanes = gameState.CardsState.Board.Lanes
     lanes
@@ -1121,7 +1124,7 @@ let private getPairActionsInfoFromUnits playerID laneID (ownActiveUnits: ActiveU
             None
         )
 
-let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
+let private getAttackActionsInfo (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
     let lanes = gameState.CardsState.Board.Lanes
     lanes
@@ -1221,7 +1224,7 @@ let private getAttackActionsInfo (gameState: GameStateDuringTurn) =
         singleAttacks @ pairAttacks
         )
 
-let private getPairActionsInfo (gameState: GameStateDuringTurn) =
+let private getPairActionsInfo (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
     let lanes = gameState.CardsState.Board.Lanes
     lanes
@@ -1236,7 +1239,7 @@ type private ActionPair =
 | MidActivationPowerChoicePair of GameStateDuringMidActivationPowerChoice * MidActivationPowerChoiceInfo
 | MidPassivePowerChoicePair of GameStateDuringMidPassivePowerChoice * MidPassivePowerChoiceInfo
 | StackChoicePair of GameStateDuringStackChoice * StackChoiceInfo
-| TurnActionChoicePair of GameStateDuringTurn * TurnActionInfo
+| TurnActionChoicePair of GameStateDuringActionChoice * TurnActionInfo
 | StartTurnPair of GameStateBetweenTurns * PlayerID
     
 let private getPossibleActionPairs (gameState: GameState) =
@@ -1244,7 +1247,7 @@ let private getPossibleActionPairs (gameState: GameState) =
     | GameStateBetweenTurns gs ->
         StartTurnPair (gs, gs.TurnState.Player)
         |> List.singleton
-    | GameStateDuringTurn gs ->
+    | GameStateDuringTurn (GameStateDuringActionChoice gs) ->
         let currentPlayer = gs.TurnState.CurrentPlayer
         if gs.TurnState.ActionsLeft = 0<action> then
             TurnActionChoicePair (gs, EndTurn currentPlayer)
@@ -1261,13 +1264,13 @@ let private getPossibleActionPairs (gameState: GameState) =
             else
                actions
                |> List.map (fun action -> TurnActionChoicePair (gs, ActionChoiceInfo action))
-    | GameStateDuringStackChoice gs ->
+    | GameStateDuringTurn (GameStateDuringStackChoice gs) ->
         gs.EpochEvents
         |> Map.toList
         |> List.map (fun (eventID, event) ->
             StackChoicePair (gs, (gs.TurnState.CurrentPlayer, eventID, event))
         )
-    | GameStateDuringMidActivationPowerChoice gs ->
+    | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice gs) ->
         match gs.ChoiceContext with
         | DiscardChoiceContext (playerID, powerCardID) ->
             match gs.CardsState.GameStage with
@@ -1324,7 +1327,7 @@ let private getPossibleActionPairs (gameState: GameState) =
                 pairs
             else
                 MidActivationPowerChoicePair (gs, MoveChoice (None)) :: pairs
-    | GameStateDuringMidPassivePowerChoice gs ->
+    | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice gs) ->
         match gs.ChoiceContext with
         | TwinStrikeChoiceContext (playerID, laneID, powerCardID, originalTargetCardID) ->
             let lane = Map.find laneID gs.CardsState.Board.Lanes
@@ -1402,7 +1405,7 @@ let private executeMidPassivePowerChoice midPowerChoice (gameState: GameStateDur
         |> triggerTargetInactiveDeathPowers
         |> moveDeadCardsToDiscard
 
-let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
+let private executePlayAction cardID laneID (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
     let cardsState = gameState.CardsState
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
@@ -1412,7 +1415,7 @@ let private executePlayAction cardID laneID (gameState: GameStateDuringTurn) =
     |> removeHandsIfAllEmpty
     |> changeCardsState gameState
 
-let private tryDrawCard playerID (gameState: GameStateDuringTurn) =
+let private tryDrawCard playerID (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     match cardsState.GameStage with
     | Early preInfo ->
@@ -1525,7 +1528,7 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 
-let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameState: GameStateDuringTurn) =
+let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let {Board = board} = cardsState
     let lane = Map.find laneID board.Lanes
@@ -1542,36 +1545,36 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameSt
         |> GameStateDuringMidActivationPowerChoice
     | ActivationPower Flip ->
         gameState
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | ActivationPower Freeze ->
         cardsState
         |> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID
         |> changeCardsState gameState
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | ActivationPower Heal ->
         cardsState
         |> healOwnUnits playerID 2<health>
         |> changeCardsState gameState
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | ActivationPower Move ->
         gameState
         |> addMidPowerChoiceContext (MoveChoiceContext (playerID, laneID, cardID))
         |> GameStateDuringMidActivationPowerChoice
     | ActivationPower Empower ->
         gameState
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | ActivationPower Action ->
         gameState.CardsState
         |> setMaxCardActions cardID 2<action> laneID
         |> changeCardsState gameState
         |> incrementActionsLeft
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | InactiveDeathPower _
     | PassivePower _ ->
         gameState
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
 
-let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID attackedCardID) (gameState: GameStateDuringTurn) =
+let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID attackedCardID) (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let lane = Map.find laneID cardsState.Board.Lanes
     let card =
@@ -1585,7 +1588,7 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
        gameState
        |> triggerTargetInactiveDeathPowers
        |> moveDeadCardsToDiscard
-       |> GameStateDuringTurn
+       |> GameStateDuringActionChoice
     | PassivePower TwinStrike ->
         let context = TwinStrikeChoiceContext (playerID, laneID, (transferAttackerIDs attackerIDs), attackedCardID)
         {
@@ -1598,15 +1601,15 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
         gameState
         |> triggerTargetInactiveDeathPowers
         |> moveDeadCardsToDiscard
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
     | ActivationPower _
     | InactiveDeathPower _ ->
         gameState
         |> triggerTargetInactiveDeathPowers
         |> moveDeadCardsToDiscard
-        |> GameStateDuringTurn
+        |> GameStateDuringActionChoice
 
-let private executeActivateAction playerID laneID (InactiveUnitID cardID) (gameState: GameStateDuringTurn) =
+let private executeActivateAction playerID laneID (InactiveUnitID cardID) (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let removedCard, cs1 = removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
     let newCard = inactiveToActiveUnit removedCard
@@ -1697,7 +1700,7 @@ let private getPairAttackInfo pairMemberID targetInfo lane =
     let selfDamage = getAttackerSelfDamage attackerPower targetPower targetInfo
     targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
-let private executeSingleAttackAction playerID laneID (ActiveUnitID attackerID) targetInfo (gameState: GameStateDuringTurn) =
+let private executeSingleAttackAction playerID laneID (ActiveUnitID attackerID) targetInfo (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let targetID, damage, selfDamage =
@@ -1709,7 +1712,7 @@ let private executeSingleAttackAction playerID laneID (ActiveUnitID attackerID) 
     |> changeCardsState gameState
     |> resolveAttackerPassivePower playerID laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID
 
-let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo (gameState: GameStateDuringTurn) =
+let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let targetID, damage, selfDamage =
@@ -1723,7 +1726,7 @@ let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, A
     |> changeCardsState gameState
     |> resolveAttackerPassivePower playerID laneID (PairAttackerIDs (ActiveUnitID attackerID1, ActiveUnitID attackerID2)) targetID
 
-let private executeCreatePairAction laneID cardID1 cardID2 (gameState: GameStateDuringTurn) =
+let private executeCreatePairAction laneID cardID1 cardID2 (gameState: GameStateDuringActionChoice) =
     let removedUnits, newCardsState =
         gameState.CardsState
         |> removeCardsFromActiveUnits [cardID1; cardID2] laneID
@@ -1733,7 +1736,7 @@ let private executeCreatePairAction laneID cardID1 cardID2 (gameState: GameState
     |> addCardsToPairs (card1, card2) laneID
     |> changeCardsState gameState
 
-let private decrementActionsLeft (gameState: GameStateDuringTurn) =
+let private decrementActionsLeft (gameState: GameStateDuringActionChoice) =
     {gameState with
         TurnState = {
             gameState.TurnState with
@@ -1747,7 +1750,7 @@ let private executeTurnAction action gameState =
         match action with
         | Play (playerID, cardID, laneID) ->
             executePlayAction (HandCardID cardID) laneID gs
-            |> GameStateDuringTurn
+            |> GameStateDuringActionChoice
         | Activate (playerID, laneID, cardID) ->
             executeActivateAction playerID laneID (InactiveUnitID cardID) gs
         | SingleAttack (playerID, laneID, attackerID, targetInfo) ->
@@ -1756,21 +1759,17 @@ let private executeTurnAction action gameState =
             executePairAttackAction playerID laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo gs
         | CreatePair (playerID, laneID, cardID1, cardID2) ->
             executeCreatePairAction laneID (ActiveUnitID cardID1) (ActiveUnitID cardID2) gs
-            |> GameStateDuringTurn
+            |> GameStateDuringActionChoice
     match postAction with
     | GameStateDuringMidActivationPowerChoice _
     | GameStateDuringMidPassivePowerChoice _
     | GameStateDuringStackChoice _ ->
         postAction
-    | GameStateDuringTurn pa ->
+    | GameStateDuringActionChoice pa ->
         updateLaneWins pa
-        |> GameStateDuringTurn
-    | GameStateBetweenTurns _
-    | GameStateWon _
-    | GameStateTied _ ->
-        failwithf "Shouldn't be here!"
+        |> GameStateDuringActionChoice
 
-let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameStateDuringTurn =
+let private startPlayerTurn playerID (gameState: GameStateBetweenTurns) : GameStateDuringActionChoice =
     let ts = gameState.TurnState
     {
         CardsState = gameState.CardsState
@@ -1849,11 +1848,13 @@ let rec private makeNextActionInfo actionPair =
         match actionPair with
         | MidActivationPowerChoicePair (gs, mapci) ->
             executeMidActivationPowerChoice mapci gs
+            |> GameStateDuringActionChoice
             |> GameStateDuringTurn
             |> checkForGameEnd,
             MidActivationPowerChoiceInfo mapci
         | MidPassivePowerChoicePair (gs, mppci) ->
             executeMidPassivePowerChoice mppci gs
+            |> GameStateDuringActionChoice
             |> GameStateDuringTurn
             |> checkForGameEnd,
             MidPassivePowerChoiceInfo mppci
@@ -1879,10 +1880,11 @@ let rec private makeNextActionInfo actionPair =
                 TurnState = gs.TurnState
                 ChoiceContext = choiceContext
                 FutureStack = newStack
-            },
+            } |> GameStateDuringTurn,
             StackChoiceInfo sci
         | TurnActionChoicePair (gs, ActionChoiceInfo aci) ->
             executeTurnAction aci gs
+            |> GameStateDuringTurn
             |> checkForGameEnd,
             TurnActionInfo (ActionChoiceInfo aci)
         | TurnActionChoicePair (gs, EndTurn et) ->
@@ -1914,23 +1916,26 @@ let rec private makeNextActionInfo actionPair =
             gs
             |> startPlayerTurn id
             |> tryDrawCard id
+            |> GameStateDuringActionChoice
             |> GameStateDuringTurn,
             StartTurn id
     let possibleActionPairs = getPossibleActionPairs newGameState
     let checkedGameState, checkedPossibleActionPairs =
         match newGameState, possibleActionPairs with
-        | GameStateDuringMidActivationPowerChoice gs, [] ->
+        | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice gs), [] ->
             let state =
                 removeMidActivationPowerChoiceContext gs
                 |> triggerTargetInactiveDeathPowers
                 |> moveDeadCardsToDiscard
+                |> GameStateDuringActionChoice
                 |> GameStateDuringTurn
             state, getPossibleActionPairs state
-        | GameStateDuringMidPassivePowerChoice gs, [] ->
+        | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice gs), [] ->
             let state =
                 removeMidPassivePowerChoiceContext gs
                 |> triggerTargetInactiveDeathPowers
                 |> moveDeadCardsToDiscard
+                |> GameStateDuringActionChoice
                 |> GameStateDuringTurn
             state, getPossibleActionPairs state
         | _ ->
