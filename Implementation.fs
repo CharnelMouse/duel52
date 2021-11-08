@@ -498,6 +498,41 @@ let private setMaxCardActions cardID left laneID cardsState =
             }
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 
+let private makeCardKnown cardID playerID cardsState =
+    let board = cardsState.Board
+    let newLane _ lane = {
+        lane with
+            InactiveUnits =
+                lane.InactiveUnits
+                |> List.map (fun card ->
+                    let {InactiveUnitID = InactiveUnitID id} = card
+                    if id = cardID then
+                        {card with KnownBy = card.KnownBy |> Set.add playerID}
+                    else
+                        card
+                    )
+            }
+    let lanesUpdated = {cardsState with Board = {board with Lanes = board.Lanes |> Map.map newLane}}
+    match lanesUpdated.GameStage with
+    | Early stage ->
+        let newBases =
+            stage.Bases
+            |> Map.map (fun _ cards ->
+                cards
+                |> List.map (fun card ->
+                    let {BaseCardID = BaseCardID id} = card
+                    if id = cardID then
+                        {card with KnownBy = card.KnownBy |> Set.add playerID}
+                    else
+                        card
+                    )
+                )
+        let newStage = Early {stage with Bases = newBases}
+        {lanesUpdated with GameStage = newStage}
+    | DrawPileEmpty _
+    | HandsEmpty _ ->
+        lanesUpdated
+
 let private removeCardFromHand (HandCardID cardID) playerID (cardsState: CardsState) =
     match cardsState.GameStage with
     | Early gs ->
@@ -1381,7 +1416,8 @@ let private executeMidActivationPowerChoice midPowerChoice (gameState: GameState
         changeMidActivationPowerCardsState gameState newCardsState
     | ForesightChoice (playerID, powerCardID, targetCardID) ->
         gameState.CardsState
-        |> changeMidActivationPowerCardsState gameState // TODO: uh oh, I broke Foresight to not do anything!
+        |> makeCardKnown targetCardID playerID
+        |> changeMidActivationPowerCardsState gameState
     | MoveChoice maybeMove ->
         match maybeMove with
         | Some (playerID, laneID, powerCardID, targetLaneID, targetCardID) ->
