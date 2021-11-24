@@ -1214,27 +1214,33 @@ let private getAttackActionsInfo (gameState: GameStateDuringActionChoice) =
                 match target with
                 | InactiveTarget _ ->
                     false
-                | ActiveSingleTarget (_, cardID)
-                | ActivePairMemberTarget (_, cardID) ->
+                | ActiveSingleTarget (_, cardID) ->
                     let card =
                         lane.ActiveUnits
                         |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID)
                     card.Power = PassivePower Taunt
+                | ActivePairMemberTarget (_, cardID) ->
+                    let card =
+                        lane.Pairs
+                        |> List.unzip
+                        |> (fun (lst1, lst2) -> lst1 @ lst2)
+                        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID)
+                    card.Power = PassivePower Taunt
             )
+
+        let availableTargets power =
+            if power = PassivePower Nimble || List.isEmpty tauntTargets then
+                allTargets
+            else
+                tauntTargets
 
         let singleAttacks =
             possibleUnitAttackers
             |> List.collect (fun attacker ->
                 let {ActiveUnitID = ActiveUnitID attackerID; Power = power} = attacker
-                if power = PassivePower Nimble || List.isEmpty tauntTargets then
-                    allTargets
-                    |> List.map (fun target ->
-                        SingleAttack (playerID, laneID, attackerID, target)
-                    )
-                else
-                    tauntTargets
-                    |> List.map (fun target ->
-                        SingleAttack (playerID, laneID, attackerID, target)
+                availableTargets power
+                |> List.map (fun target ->
+                    SingleAttack (playerID, laneID, attackerID, target)
                     )
             )
         let pairAttacks =
@@ -1242,16 +1248,10 @@ let private getAttackActionsInfo (gameState: GameStateDuringActionChoice) =
             |> List.collect (fun (attacker1, attacker2) ->
                 let {ActiveUnitID = ActiveUnitID attackerID1;  Power = power} = attacker1
                 let {ActiveUnitID = ActiveUnitID attackerID2} = attacker2
-                if power = PassivePower Nimble || List.isEmpty tauntTargets then
-                    allTargets
-                    |> List.map (fun target ->
-                        PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                    )
-                else
-                    tauntTargets
-                    |> List.map (fun target ->
-                        PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                    )
+                availableTargets power
+                |> List.map (fun target ->
+                    PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
+                )
             )
         singleAttacks @ pairAttacks
         )
