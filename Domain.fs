@@ -127,7 +127,12 @@ type PassivePowerWithDecisionContext =
 type ActivationPowerContext =
 | ViewPowerContext of PlayerID * CardID
 | ForesightPowerContext of PlayerID * CardID
+| FlipPowerContext of PlayerID * LaneID * CardID
+| FreezePowerContext of PlayerID * LaneID * CardID
+| HealPowerContext of PlayerID * CardID
 | MovePowerContext of PlayerID * LaneID * CardID
+//| Empower
+| ActionPowerContext of PlayerID * CardID
 
 type MidActivationPowerChoiceDisplayInfo = {
     CurrentPlayer: PlayerID

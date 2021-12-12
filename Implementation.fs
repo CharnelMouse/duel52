@@ -1,6 +1,7 @@
 module Implementation
 open Domain
 open NonEmptyList
+open NonEmptyMap
 open EventStack
 
 let private createIDs start lst =
@@ -634,7 +635,7 @@ type private GameStateDuringMidActivationPowerChoice = {
 type private GameStateDuringStackChoice = {
     CardsState: CardsState
     TurnState: TurnInProgress
-    EpochEvents: Map<EventID, ActivationPowerContext>
+    EpochEvents: NonEmptyMap<EventID, ActivationPowerContext>
     FutureEpochs: ActivationPowerContext epoch list
 }
 
@@ -1081,9 +1082,9 @@ let private getDisplayInfo gameState =
             PlayerHand = playerHandInfo
             OpponentHandSizes = opponentHandSizes
             Stack = {
-                Head = Map.toList gs.EpochEvents |> List.map snd |> NonEmptyList.fromList
+                Head = gs.EpochEvents |> NonEmptyMap.toMap |> Map.toList |> List.map snd |> NonEmptyList.fromList
                 Tail = gs.FutureEpochs
-            }
+                }
         }
     | GameStateDuringTurn (GameStateDuringActionChoice gs) ->
         let id = gs.TurnState.CurrentPlayer
@@ -1298,6 +1299,7 @@ let private getPossibleActionPairs (gameState: GameState) =
                |> List.map (fun action -> TurnActionChoicePair (gs, ActionChoiceInfo action))
     | GameStateDuringTurn (GameStateDuringStackChoice gs) ->
         gs.EpochEvents
+        |> NonEmptyMap.toMap
         |> Map.toList
         |> List.map (fun (eventID, event) ->
             StackChoicePair (gs, (gs.TurnState.CurrentPlayer, eventID, event))
@@ -1561,6 +1563,51 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 
+let private addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (ActiveUnitID empowererCardID) gameState =
+    let lane =
+        gameState.CardsState.Board.Lanes
+        |> Map.find laneID
+    let relevantUnits =
+        lane.ActiveUnits @ (lane.Pairs |> List.unzip |> (fun (lst1, lst2) -> lst1 @ lst2))
+        |> List.filter (fun {ActiveUnitID = ActiveUnitID id; Owner = owner} -> owner = playerID && id <> empowererCardID)
+        |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Power = power} ->
+            match power with
+            | ActivationPower Empower -> None
+            | ActivationPower p -> Some (id, p)
+            | _ -> None
+        )
+    let powerChoices =
+        relevantUnits
+        |> List.map (fun (id, power) ->
+            match power with
+            | View -> ViewPowerContext (playerID, id)
+            | Foresight -> ForesightPowerContext (playerID, id)
+            | Flip -> FlipPowerContext (playerID, laneID, id)
+            | Freeze -> FreezePowerContext (playerID, laneID, id)
+            | Heal -> HealPowerContext (playerID, id)
+            | Move -> MovePowerContext (playerID, laneID, id)
+            | Empower -> failwithf "shouldn't be here!"
+            | Action -> ActionPowerContext (playerID, id)
+            )
+        |> createIDMap 1<EID>
+        |> NonEmptyMap.tryFromMap
+    match powerChoices with
+    | None ->
+        {
+            CardsState = gameState.CardsState
+            TurnState = gameState.TurnState
+        }
+        |> GameStateDuringActionChoice
+    | Some pc ->
+        {
+            CardsState = gameState.CardsState
+            TurnState = gameState.TurnState
+            EpochEvents = pc
+            FutureEpochs = []
+        }
+        |> GameStateDuringStackChoice
+
+
 let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let {Board = board} = cardsState
@@ -1595,7 +1642,7 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameSt
         |> GameStateDuringMidActivationPowerChoice
     | ActivationPower Empower ->
         gameState
-        |> GameStateDuringActionChoice
+        |> addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (ActiveUnitID cardID)
     | ActivationPower Action ->
         gameState.CardsState
         |> setMaxCardActions cardID 2<action> laneID
@@ -1704,12 +1751,14 @@ let private getSingleAttackInfo attackerID targetInfo lane =
     let selfDamage = getAttackerSelfDamage attackerPower targetPower targetInfo
     targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
-let private getPairAttackInfo pairMemberID targetInfo lane =
+let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
     let targetID = getTargetIDFromTargetInfo targetInfo
     let attackerPower =
-        lane.ActiveUnits
-        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = pairMemberID)
-        |> (fun {Power = power} -> power)
+        lane.Pairs
+        |> List.find (fun ({ActiveUnitID = ActiveUnitID id1}, {ActiveUnitID = ActiveUnitID id2}) ->
+            (id1, id2) = (pairMemberID1, pairMemberID2)
+        )
+        |> (fun ({Power = power}, _) -> power)
     let targetList =
         (lane.InactiveUnits |> List.map InactiveUnit)
         @ (lane.ActiveUnits |> List.map ActiveUnit)
@@ -1749,7 +1798,7 @@ let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, A
     let cardsState = gameState.CardsState
     let board = cardsState.Board
     let targetID, damage, selfDamage =
-        getPairAttackInfo attackerID1 targetInfo (Map.find laneID board.Lanes)
+        getPairAttackInfo attackerID1 attackerID2 targetInfo (Map.find laneID board.Lanes)
     cardsState
     |> incrementCardActionsUsed attackerID1 laneID
     |> incrementCardActionsUsed attackerID2 laneID
@@ -1856,20 +1905,26 @@ let private timeoutOwnedFreezeStates playerID cardsState =
         |> Map.map (fun _ lane -> timeoutOwnedFreezeStatesInLane playerID lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
-let private resetAllActiveCardActionsUsedInLane lane =
-    {lane with ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0<action>})}
-let private resetAllActiveCardActionsUsed cardsState =
+let private resetAllCardActionsUsedInLane lane =
+    {lane with
+        ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0<action>})
+        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> {card1 with ActionsSpent = 0<action>}, {card2 with ActionsSpent = 0<action>})
+        }
+let private resetAllCardActionsUsed cardsState =
     let board = cardsState.Board
     let newLanes =
         board.Lanes
-        |> Map.map (fun _ lane -> resetAllActiveCardActionsUsedInLane lane)
+        |> Map.map (fun _ lane -> resetAllCardActionsUsedInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
 let private resetMaxActions activeUnit =
     {activeUnit with MaxActions = 1<action>}
 let private resetMaxActionsInLane lane =
-    {lane with ActiveUnits = lane.ActiveUnits |> List.map resetMaxActions}
-let private resetAllActiveMaxCardActions cardsState =
+    {lane with
+        ActiveUnits = lane.ActiveUnits |> List.map resetMaxActions
+        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> resetMaxActions card1, resetMaxActions card2)
+        }
+let private resetAllMaxCardActions cardsState =
     let board = cardsState.Board
     let newLanes =
         board.Lanes
@@ -1893,6 +1948,7 @@ let rec private makeNextActionInfo actionPair =
             let _, index, event = sci
             let newHead =
                 gs.EpochEvents
+                |> NonEmptyMap.toMap
                 |> Map.remove index
                 |> Map.toList
                 |> List.map (fun (_, ev) -> ev)
@@ -1901,18 +1957,43 @@ let rec private makeNextActionInfo actionPair =
                 match newHead with
                 | Some h -> Some (NonEmptyList.create h gs.FutureEpochs)
                 | None -> NonEmptyList.tryFromList gs.FutureEpochs
-            let choiceContext =
+            let maybeChoiceContext =
                 match event with
-                | ViewPowerContext (p, c) -> DiscardChoiceContext (p, c)
-                | ForesightPowerContext (p, c) -> ForesightChoiceContext (p, c)
-                | MovePowerContext (p, l, c) -> MoveChoiceContext (p, l, c)
-            GameStateDuringMidActivationPowerChoice {
-                CardsState = gs.CardsState
-                TurnState = gs.TurnState
-                ChoiceContext = choiceContext
-                FutureStack = newStack
-            } |> GameStateDuringTurn,
-            StackChoiceInfo sci
+                | ViewPowerContext (p, c) -> Some (DiscardChoiceContext (p, c))
+                | ForesightPowerContext (p, c) -> Some (ForesightChoiceContext (p, c))
+                | FlipPowerContext _ -> None
+                | FreezePowerContext _ -> None
+                | HealPowerContext _ -> None
+                | MovePowerContext (p, l, c) -> Some (MoveChoiceContext (p, l, c))
+                | ActionPowerContext _ -> None
+            match maybeChoiceContext with
+            | Some choiceContext ->
+                GameStateDuringMidActivationPowerChoice {
+                    CardsState = gs.CardsState
+                    TurnState = gs.TurnState
+                    ChoiceContext = choiceContext
+                    FutureStack = newStack
+                } |> GameStateDuringTurn,
+                StackChoiceInfo sci
+            | None ->
+                match newStack with
+                | Some stack ->
+                    let ep =
+                        createIDMap 1<EID> (NonEmptyList.toList stack.Head)
+                        |> NonEmptyMap.fromMap
+                    GameStateDuringStackChoice {
+                        CardsState = gs.CardsState
+                        TurnState = gs.TurnState
+                        EpochEvents = ep
+                        FutureEpochs = stack.Tail
+                    } |> GameStateDuringTurn,
+                    StackChoiceInfo sci
+                | None ->
+                    GameStateDuringActionChoice {
+                        CardsState = gs.CardsState
+                        TurnState = gs.TurnState
+                    } |> GameStateDuringTurn,
+                    StackChoiceInfo sci
         | TurnActionChoicePair (gs, ActionChoiceInfo aci) ->
             executeTurnAction aci gs
             |> checkForGameEnd,
@@ -1931,8 +2012,9 @@ let rec private makeNextActionInfo actionPair =
             GameStateBetweenTurns {
                 CardsState =
                     gs.CardsState
-                    |> resetAllActiveCardActionsUsed
-                    |> resetAllActiveMaxCardActions
+                    |> resetAllCardActionsUsed
+                    // TODO: reset pairs too
+                    |> resetAllMaxCardActions
                     |> timeoutOwnedFreezeStates tip.CurrentPlayer
                 TurnState = {
                     Player = nextPlayer

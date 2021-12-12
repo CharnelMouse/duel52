@@ -334,10 +334,13 @@ let private actionString action =
         powerCardsString + ": damage card " + string targetCardID
     | StackChoiceInfo (_, _, action) ->
         match action with
-        | ViewPowerContext (_, cardID) ->
-            string cardID + ": View"
+        | ViewPowerContext (_, cardID) -> string cardID + ": View"
         | ForesightPowerContext (_, cardID) -> string cardID + ": Foresight"
+        | FlipPowerContext (_, laneID, cardID) -> string cardID + ": Flip in lane " + string laneID
+        | FreezePowerContext (_, laneID, cardID) -> string cardID + ": Freeze lane " + string laneID
+        | HealPowerContext (_, cardID) -> string cardID + ": Heal"
         | MovePowerContext (_, laneID, cardID) -> string cardID + ": Move to lane " + string laneID
+        | ActionPowerContext (_, cardID) -> string cardID + ": Action"
     | TurnActionInfo (ActionChoiceInfo (Play (_, cardID, laneID))) ->
         "Play card " + string cardID
         + " to lane " + string laneID
