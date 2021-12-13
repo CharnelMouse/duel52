@@ -39,7 +39,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - If present, non-Taunt allies can't be secondary target for Twinstrike either [implemented]
   - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
   - Move [implemented]
-  - Empower [to implement]
+  - Empower [implemented]
   - Action
     - Gain 1 action [implemented]
     - This card has a maximum of 2 attacks this turn [implemented]
