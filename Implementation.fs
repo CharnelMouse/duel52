@@ -689,6 +689,24 @@ let private addMidPowerChoiceContext context (gameState: GameStateDuringActionCh
         FutureStack = None
     }
 
+let private flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardID gameState =
+    let cardsState = gameState.CardsState
+    let lane = Map.find laneID cardsState.Board.Lanes
+    let flippingIDs =
+        lane.InactiveUnits
+        |> List.choose (fun card -> if card.Owner = playerID then Some card.InactiveUnitID else None)
+    let removedCards, cs1 =
+        cardsState
+        |> removeCardsFromInactiveUnits flippingIDs laneID
+    let flippedCards =
+        removedCards
+        |> List.map inactiveToActiveUnit
+    let cs2 =
+        cs1
+        |> addCardsToActiveUnits flippedCards laneID
+    {gameState with CardsState = cs2}
+    |> GameStateDuringActionChoice
+
 let private removeMidActivationPowerChoiceContext (gameState: GameStateDuringMidActivationPowerChoice) =
     {
         CardsState = gameState.CardsState
@@ -1625,7 +1643,7 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) (gameSt
         |> GameStateDuringMidActivationPowerChoice
     | ActivationPower Flip ->
         gameState
-        |> GameStateDuringActionChoice
+        |> flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID (ActiveUnitID cardID)
     | ActivationPower Freeze ->
         cardsState
         |> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID
