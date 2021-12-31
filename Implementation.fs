@@ -704,8 +704,38 @@ let private flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID
     let cs2 =
         cs1
         |> addCardsToActiveUnits flippedCards laneID
-    {gameState with CardsState = cs2}
-    |> GameStateDuringActionChoice
+    let powerChoices =
+        flippedCards
+        |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Power = power} ->
+            match power with
+            | PassivePower _
+            | InactiveDeathPower _ ->
+                None
+            | ActivationPower p ->
+                match p  with
+                | View -> Some (ViewPowerContext (playerID, laneID, id))
+                | Foresight -> Some (ForesightPowerContext (playerID, laneID, id))
+                | Flip -> Some (FlipPowerContext (playerID, laneID, id))
+                | Freeze -> Some (FreezePowerContext (playerID, laneID, id))
+                | Heal -> Some (HealPowerContext (playerID, laneID, id))
+                | Move -> Some (MovePowerContext (playerID, laneID, id))
+                | Empower -> Some (EmpowerPowerContext (playerID, laneID, id))
+                | Action -> Some (ActionPowerContext (playerID, laneID, id))
+        )
+        |> createIDMap 1<EID>
+        |> NonEmptyMap.tryFromMap
+    match powerChoices with
+    | None ->
+        {gameState with CardsState = cs2}
+        |> GameStateDuringActionChoice
+    | Some pc ->
+        {
+            CardsState = cs2
+            TurnState = gameState.TurnState
+            EpochEvents = pc
+            FutureEpochs = []
+        }
+        |> GameStateDuringStackChoice
 
 let private removeMidActivationPowerChoiceContext (gameState: GameStateDuringMidActivationPowerChoice) =
     {
@@ -1964,6 +1994,19 @@ let rec private makeNextActionInfo actionPair =
             MidPassivePowerChoiceInfo mppci
         | StackChoicePair (gs, sci) ->
             let playerID, index, event = sci
+
+            let maybeRemainingHead =
+                gs.EpochEvents
+                |> NonEmptyMap.toMap
+                |> Map.remove index
+                |> Map.toList
+                |> List.map snd
+                |> NonEmptyList.tryFromList
+            let remainingEpochs =
+                match maybeRemainingHead with
+                | Some h -> h :: gs.FutureEpochs
+                | None -> gs.FutureEpochs
+
             let newState =
                 match event with
                 | ViewPowerContext (p, l, c)
@@ -1972,56 +2015,51 @@ let rec private makeNextActionInfo actionPair =
                 | FreezePowerContext (p, l, c)
                 | HealPowerContext (p, l, c)
                 | MovePowerContext (p, l, c)
+                | EmpowerPowerContext (p, l, c)
                 | ActionPowerContext (p, l, c) ->
                     resolveActivationPower p l (ActiveUnitID c) {CardsState = gs.CardsState; TurnState = gs.TurnState}
-            let newCardState, newTurnState, maybeChoiceContext =
-                match newState with
-                | GameStateDuringActionChoice {CardsState = cs; TurnState = ts} ->
-                    cs, ts, None
-                | GameStateDuringMidActivationPowerChoice {CardsState = cs; TurnState = ts; ChoiceContext = cc} ->
-                    cs, ts, Some cc
-                | GameStateDuringMidPassivePowerChoice {CardsState = cs; TurnState = ts}
-                | GameStateDuringStackChoice {CardsState = cs; TurnState = ts} ->
-                    failwithf "Shouldn't be here!"
-            let newHead =
-                gs.EpochEvents
-                |> NonEmptyMap.toMap
-                |> Map.remove index
-                |> Map.toList
-                |> List.map (fun (_, ev) -> ev)
-                |> NonEmptyList.tryFromList
-            let newStack =
-                match newHead with
-                | Some h -> Some (NonEmptyList.create h gs.FutureEpochs)
-                | None -> NonEmptyList.tryFromList gs.FutureEpochs
-            match maybeChoiceContext with
-            | Some choiceContext ->
-                GameStateDuringMidActivationPowerChoice {
-                    CardsState = newCardState
-                    TurnState = newTurnState
-                    ChoiceContext = choiceContext
-                    FutureStack = newStack
-                } |> GameStateDuringTurn,
-                StackChoiceInfo sci
-            | None ->
-                match newStack with
+            match newState with
+            | GameStateDuringActionChoice {CardsState = cs; TurnState = ts} ->
+                let remainingStack = NonEmptyList.tryFromList remainingEpochs
+                match remainingStack with
                 | Some stack ->
                     let epochEvents =
                         createIDMap 1<EID> (NonEmptyList.toList stack.Head)
                         |> NonEmptyMap.fromMap
                     GameStateDuringStackChoice {
-                        CardsState = newCardState
-                        TurnState = newTurnState
+                        CardsState = cs
+                        TurnState = ts
                         EpochEvents = epochEvents
                         FutureEpochs = stack.Tail
                     } |> GameStateDuringTurn,
                     StackChoiceInfo sci
                 | None ->
                     GameStateDuringActionChoice {
-                        CardsState = newCardState
-                        TurnState = newTurnState
+                        CardsState = cs
+                        TurnState = ts
                     } |> GameStateDuringTurn,
                     StackChoiceInfo sci
+            | GameStateDuringMidActivationPowerChoice {CardsState = cs; TurnState = ts; ChoiceContext = cc} ->
+                GameStateDuringMidActivationPowerChoice {
+                    CardsState = cs
+                    TurnState = ts
+                    ChoiceContext = cc
+                    FutureStack = NonEmptyList.tryFromList remainingEpochs
+                } |> GameStateDuringTurn,
+                StackChoiceInfo sci
+            | GameStateDuringMidPassivePowerChoice {CardsState = cs; TurnState = ts} ->
+                failwithf "Shouldn't be here!"
+            | GameStateDuringStackChoice {CardsState = cs; TurnState = ts; EpochEvents = ee; FutureEpochs = fe} ->
+                match fe with
+                | [] -> ignore()
+                | _ -> failwithf "FutureEpochs should be empty"
+                GameStateDuringStackChoice {
+                    CardsState = cs
+                    TurnState = ts
+                    EpochEvents = ee
+                    FutureEpochs = remainingEpochs
+                } |> GameStateDuringTurn,
+                StackChoiceInfo sci
         | TurnActionChoicePair (gs, ActionChoiceInfo aci) ->
             executeTurnAction aci gs
             |> checkForGameEnd,

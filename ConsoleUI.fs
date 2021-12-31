@@ -340,6 +340,7 @@ let private actionString action =
         | FreezePowerContext (_, laneID, cardID) -> string cardID + ": Freeze lane " + string laneID
         | HealPowerContext (_, _, cardID) -> string cardID + ": Heal"
         | MovePowerContext (_, laneID, cardID) -> string cardID + ": Move to lane " + string laneID
+        | EmpowerPowerContext (_, laneID, cardID) -> string cardID + ": Empower in lane " + string laneID
         | ActionPowerContext (_, _, cardID) -> string cardID + ": Action"
     | TurnActionInfo (ActionChoiceInfo (Play (_, cardID, laneID))) ->
         "Play card " + string cardID

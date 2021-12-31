@@ -131,7 +131,7 @@ type ActivationPowerContext =
 | FreezePowerContext of PlayerID * LaneID * CardID
 | HealPowerContext of PlayerID * LaneID * CardID
 | MovePowerContext of PlayerID * LaneID * CardID
-//| Empower
+| EmpowerPowerContext of PlayerID * LaneID * CardID
 | ActionPowerContext of PlayerID * LaneID * CardID
 
 type MidActivationPowerChoiceDisplayInfo = {

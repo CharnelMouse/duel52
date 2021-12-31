@@ -21,7 +21,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
   - Foresight [implemented]
   - Flip
     - Activate all inactive allied cards in lane [implemented]
-    - Choose order to resolve triggered activation powers [to implement]
+    - Choose order to resolve triggered activation powers [implemented]
   - Freeze [implemented]
   - Heal [implemented]
   - Retaliate [implemented]
