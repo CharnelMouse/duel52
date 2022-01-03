@@ -1615,28 +1615,21 @@ let private addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (Ac
     let lane =
         gameState.CardsState.Board.Lanes
         |> Map.find laneID
-    let relevantUnits =
+    let powerChoices =
         lane.ActiveUnits @ (lane.Pairs |> List.unzip |> (fun (lst1, lst2) -> lst1 @ lst2))
         |> List.filter (fun {ActiveUnitID = ActiveUnitID id; Owner = owner} -> owner = playerID && id <> empowererCardID)
         |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Power = power} ->
             match power with
+            | ActivationPower View -> Some (ViewPowerContext(playerID, laneID, id))
+            | ActivationPower Foresight -> Some (ForesightPowerContext(playerID, laneID, id))
+            | ActivationPower Flip -> Some (FlipPowerContext(playerID, laneID, id))
+            | ActivationPower Freeze -> Some (FreezePowerContext(playerID, laneID, id))
+            | ActivationPower Heal -> Some (HealPowerContext(playerID, laneID, id))
+            | ActivationPower Move -> Some (MovePowerContext(playerID, laneID, id))
             | ActivationPower Empower -> None
-            | ActivationPower p -> Some (id, p)
+            | ActivationPower Action -> Some (ActionPowerContext(playerID, laneID, id))
             | _ -> None
         )
-    let powerChoices =
-        relevantUnits
-        |> List.map (fun (id, power) ->
-            match power with
-            | View -> ViewPowerContext (playerID, laneID, id)
-            | Foresight -> ForesightPowerContext (playerID, laneID, id)
-            | Flip -> FlipPowerContext (playerID, laneID, id)
-            | Freeze -> FreezePowerContext (playerID, laneID, id)
-            | Heal -> HealPowerContext (playerID, laneID, id)
-            | Move -> MovePowerContext (playerID, laneID, id)
-            | Empower -> failwithf "shouldn't be here!"
-            | Action -> ActionPowerContext (playerID, laneID, id)
-            )
         |> createIDMap 1<EID>
         |> NonEmptyMap.tryFromMap
     match powerChoices with
@@ -1979,24 +1972,44 @@ let private resetAllMaxCardActions cardsState =
         |> Map.map (fun _ lane -> resetMaxActionsInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
-let rec private makeNextActionInfo actionPair =
-    let newGameState, action =
-        match actionPair with
-        | MidActivationPowerChoicePair (gs, mapci) ->
-            executeMidActivationPowerChoice mapci gs
+let private cancelPowerChoiceIfNoChoices state actionPairs =
+    match state, actionPairs with
+    | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice state), [] ->
+        let cancelledState =
+            removeMidActivationPowerChoiceContext state
+            |> triggerTargetInactiveDeathPowers
+            |> moveDeadCardsToDiscard
             |> GameStateDuringActionChoice
-            |> checkForGameEnd,
-            MidActivationPowerChoiceInfo mapci
-        | MidPassivePowerChoicePair (gs, mppci) ->
-            executeMidPassivePowerChoice mppci gs
+            |> GameStateDuringTurn
+        cancelledState, getPossibleActionPairs cancelledState
+    | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice state), [] ->
+        let cancelledState =
+            removeMidPassivePowerChoiceContext state
+            |> triggerTargetInactiveDeathPowers
+            |> moveDeadCardsToDiscard
             |> GameStateDuringActionChoice
-            |> checkForGameEnd,
-            MidPassivePowerChoiceInfo mppci
-        | StackChoicePair (gs, sci) ->
-            let playerID, index, event = sci
+            |> GameStateDuringTurn
+        cancelledState, getPossibleActionPairs cancelledState
+    | _ ->
+        state, actionPairs
 
+let rec private makeNextActionInfo actionPair =
+    let newState, action =
+        match actionPair with
+        | MidActivationPowerChoicePair (state, choiceInfo) ->
+            executeMidActivationPowerChoice choiceInfo state
+            |> GameStateDuringActionChoice
+            |> checkForGameEnd,
+            MidActivationPowerChoiceInfo choiceInfo
+        | MidPassivePowerChoicePair (state, choiceInfo) ->
+            executeMidPassivePowerChoice choiceInfo state
+            |> GameStateDuringActionChoice
+            |> checkForGameEnd,
+            MidPassivePowerChoiceInfo choiceInfo
+        | StackChoicePair (state, choiceInfo) ->
+            let playerID, index, event = choiceInfo
             let maybeRemainingHead =
-                gs.EpochEvents
+                state.EpochEvents
                 |> NonEmptyMap.toMap
                 |> Map.remove index
                 |> Map.toList
@@ -2004,9 +2017,8 @@ let rec private makeNextActionInfo actionPair =
                 |> NonEmptyList.tryFromList
             let remainingEpochs =
                 match maybeRemainingHead with
-                | Some h -> h :: gs.FutureEpochs
-                | None -> gs.FutureEpochs
-
+                | Some h -> h :: state.FutureEpochs
+                | None -> state.FutureEpochs
             let newState =
                 match event with
                 | ViewPowerContext (p, l, c)
@@ -2017,7 +2029,7 @@ let rec private makeNextActionInfo actionPair =
                 | MovePowerContext (p, l, c)
                 | EmpowerPowerContext (p, l, c)
                 | ActionPowerContext (p, l, c) ->
-                    resolveActivationPower p l (ActiveUnitID c) {CardsState = gs.CardsState; TurnState = gs.TurnState}
+                    resolveActivationPower p l (ActiveUnitID c) {CardsState = state.CardsState; TurnState = state.TurnState}
             match newState with
             | GameStateDuringActionChoice {CardsState = cs; TurnState = ts} ->
                 let remainingStack = NonEmptyList.tryFromList remainingEpochs
@@ -2032,13 +2044,13 @@ let rec private makeNextActionInfo actionPair =
                         EpochEvents = epochEvents
                         FutureEpochs = stack.Tail
                     } |> GameStateDuringTurn,
-                    StackChoiceInfo sci
+                    StackChoiceInfo choiceInfo
                 | None ->
                     GameStateDuringActionChoice {
                         CardsState = cs
                         TurnState = ts
                     } |> GameStateDuringTurn,
-                    StackChoiceInfo sci
+                    StackChoiceInfo choiceInfo
             | GameStateDuringMidActivationPowerChoice {CardsState = cs; TurnState = ts; ChoiceContext = cc} ->
                 GameStateDuringMidActivationPowerChoice {
                     CardsState = cs
@@ -2046,7 +2058,7 @@ let rec private makeNextActionInfo actionPair =
                     ChoiceContext = cc
                     FutureStack = NonEmptyList.tryFromList remainingEpochs
                 } |> GameStateDuringTurn,
-                StackChoiceInfo sci
+                StackChoiceInfo choiceInfo
             | GameStateDuringMidPassivePowerChoice {CardsState = cs; TurnState = ts} ->
                 failwithf "Shouldn't be here!"
             | GameStateDuringStackChoice {CardsState = cs; TurnState = ts; EpochEvents = ee; FutureEpochs = fe} ->
@@ -2059,13 +2071,13 @@ let rec private makeNextActionInfo actionPair =
                     EpochEvents = ee
                     FutureEpochs = remainingEpochs
                 } |> GameStateDuringTurn,
-                StackChoiceInfo sci
-        | TurnActionChoicePair (gs, ActionChoiceInfo aci) ->
-            executeTurnAction aci gs
+                StackChoiceInfo choiceInfo
+        | TurnActionChoicePair (state, ActionChoiceInfo choiceInfo) ->
+            executeTurnAction choiceInfo state
             |> checkForGameEnd,
-            TurnActionInfo (ActionChoiceInfo aci)
-        | TurnActionChoicePair (gs, EndTurn et) ->
-            let tip = gs.TurnState
+            TurnActionInfo (ActionChoiceInfo choiceInfo)
+        | TurnActionChoicePair (state, EndTurn playerID) ->
+            let tip = state.TurnState
             let nextPlayer =
                 if int tip.CurrentPlayer = tip.NPlayers then
                     1<PID>
@@ -2077,9 +2089,8 @@ let rec private makeNextActionInfo actionPair =
                 | h :: t -> h, t
             GameStateBetweenTurns {
                 CardsState =
-                    gs.CardsState
+                    state.CardsState
                     |> resetAllCardActionsUsed
-                    // TODO: reset pairs too
                     |> resetAllMaxCardActions
                     |> timeoutOwnedFreezeStates tip.CurrentPlayer
                 TurnState = {
@@ -2089,35 +2100,16 @@ let rec private makeNextActionInfo actionPair =
                     FutureActionCounts = nextFutureActionCounts
                     }
                 },
-            TurnActionInfo (EndTurn et)
-        | StartTurnPair (gs, id) ->
-            gs
-            |> startPlayerTurn id
-            |> tryDrawCard id
+            TurnActionInfo (EndTurn playerID)
+        | StartTurnPair (state, playerID) ->
+            state
+            |> startPlayerTurn playerID
+            |> tryDrawCard playerID
             |> GameStateDuringActionChoice
             |> GameStateDuringTurn,
-            StartTurn id
-    let possibleActionPairs = getPossibleActionPairs newGameState
+            StartTurn playerID
     let checkedGameState, checkedPossibleActionPairs =
-        match newGameState, possibleActionPairs with
-        | GameStateDuringTurn (GameStateDuringMidActivationPowerChoice gs), [] ->
-            let state =
-                removeMidActivationPowerChoiceContext gs
-                |> triggerTargetInactiveDeathPowers
-                |> moveDeadCardsToDiscard
-                |> GameStateDuringActionChoice
-                |> GameStateDuringTurn
-            state, getPossibleActionPairs state
-        | GameStateDuringTurn (GameStateDuringMidPassivePowerChoice gs), [] ->
-            let state =
-                removeMidPassivePowerChoiceContext gs
-                |> triggerTargetInactiveDeathPowers
-                |> moveDeadCardsToDiscard
-                |> GameStateDuringActionChoice
-                |> GameStateDuringTurn
-            state, getPossibleActionPairs state
-        | _ ->
-            newGameState, possibleActionPairs
+        cancelPowerChoiceIfNoChoices newState (getPossibleActionPairs newState)
     let newDisplayInfo = getDisplayInfo checkedGameState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
