@@ -2062,6 +2062,8 @@ let rec private makeNextActionInfo actionPair =
             | GameStateDuringMidPassivePowerChoice {CardsState = cs; TurnState = ts} ->
                 failwithf "Shouldn't be here!"
             | GameStateDuringStackChoice {CardsState = cs; TurnState = ts; EpochEvents = ee; FutureEpochs = fe} ->
+                // Awful process where resolution only returns new epoch, and I need to add the old epochs back in
+                // Should be using consOptions / resolveNext instead
                 match fe with
                 | [] -> ignore()
                 | _ -> failwithf "FutureEpochs should be empty"
