@@ -174,11 +174,11 @@ let private inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun 
     }
 let private unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = fun unitCard ->
     match unitCard with
-    | InactiveUnit {InactiveUnitID = InactiveUnitID id; Power = power; KnownBy = knownBy} ->
+    | InactiveUnit {InactiveUnitID = InactiveUnitID id; Owner = pid; Power = power; KnownBy = knownBy} ->
         FaceDownDiscardedCard {
             DiscardedCardID = DiscardedCardID id
             Power = power
-            KnownBy = knownBy
+            KnownBy = Set.add pid knownBy // player checks unknown base in case it's a Trap
         }
     | ActiveUnit {ActiveUnitID = ActiveUnitID id; Power = power} ->
         FaceUpDiscardedCard {
