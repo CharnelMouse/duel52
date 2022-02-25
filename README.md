@@ -5,6 +5,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
 - Basic actions: play card, activate, attack, make pair. Cards ready at the end of the turn.
 - Players only see known information (except who's peeked at face-down cards, the console UI is verbose enough as it is).
 - Bases become activatable when the draw pile empties.
+- You can look at your bases if they die face-down (to check whether they're a Trap). [need to check whether implemented]
 - After the draw pile runs out, lanes are counted as won while only one player has cards there.
 - Lanes have no "memory" WRT being won: a won lane is no longer won if it gets emptied by Move powers.
 - We only check for death after resolving all triggered abilities. Specific rulings motivating this:
@@ -13,7 +14,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
   - We can only check early under the assumption that you can't be forced to vacate a won lane. For example, the Move power is always optional. This assumption might change if we ever allow the use of variant power sets.
-- Card ability implementation progress: all done!
+- Card ability implementation progress:
   - View
     - Draw a card [implemented]
     - Choose a card to discard [implemented]
@@ -29,10 +30,12 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - Immune to Freeze [implemented]
     - Immune to Retaliate [implemented]
     - Can't be secondary target for Twinstrike [implemented]
-    - Extra damage to Taunt [implemented]
+    - Blocks Twinstrike ability if primary target [not implemented]
+    - Extra damage to Taunt (can't attack past it) [implemented]
   - TwinStrike [implemented]
     - Trap cards killed by Twinstrike damage correctly flip and heal
     - Twinstrike damage gets correctly blocked after killing a Taunt card
+    - Takes damage if dealing Twinstrike damage to a Retaliate (only one of a pair) [not implemented]
   - Taunt
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
