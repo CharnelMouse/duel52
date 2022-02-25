@@ -772,6 +772,43 @@ let private triggerTargetInactiveDeathPowers (gameState: GameStateDuringActionCh
     laneIDs
     |> List.fold (fun cs laneID -> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cs) cardsState
     |> changeActionChoiceCardsState gameState
+let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID attackedID) laneID (gameState: GameStateDuringActionChoice) =
+    let board = gameState.CardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let dyingCardIDs = findDeadCardIDsInLane laneID board
+    if List.contains (UnitID attackedID) dyingCardIDs then
+        match attackerIDs with
+        | SingleAttackerID id ->
+            let activeUnits =
+                lane.ActiveUnits
+                |> List.map (fun card ->
+                    if card.ActiveUnitID = id then
+                        {card with Damage = max 0<health> (card.Damage - 1<health>)}
+                    else
+                        card
+                    )
+            let newLane = {lane with ActiveUnits = activeUnits}
+            let newLanes = Map.add laneID newLane board.Lanes
+            let newBoard = {board with Lanes = newLanes}
+            {gameState.CardsState with Board = newBoard}
+            |> changeActionChoiceCardsState gameState
+        | PairAttackerIDs (id1, id2) ->
+            let pairs =
+                lane.Pairs
+                |> List.map (fun (card1, card2) ->
+                    if List.contains card1.ActiveUnitID [id1; id2] then
+                        {card1 with Damage = max 0<health> (card1.Damage - 1<health>)},
+                        {card2 with Damage = max 0<health> (card2.Damage - 1<health>)}
+                    else
+                        (card1, card2)
+                    )
+            let newLane = {lane with Pairs = pairs}
+            let newLanes = Map.add laneID newLane board.Lanes
+            let newBoard = {board with Lanes = newLanes}
+            {gameState.CardsState with Board = newBoard}
+            |> changeActionChoiceCardsState gameState
+    else
+        gameState
 let private moveDeadCardsToDiscard (gameState: GameStateDuringActionChoice) =
     let cardsState = gameState.CardsState
     let board = cardsState.Board
@@ -1721,6 +1758,7 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
     | PassivePower Vampiric ->
         gameState
         |> triggerTargetInactiveDeathPowers
+        |> healAttackersIfDefenderDying attackerIDs (UnitID attackedCardID) laneID
         |> moveDeadCardsToDiscard
         |> GameStateDuringActionChoice
     | ActivationPower _

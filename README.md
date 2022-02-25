@@ -13,7 +13,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
 - Won lane counts are only used to check for victory once the player hands are all empty, since lanes cannot then be un-won.
   - Strictly speaking, the game ends when no one can take an action, but checking when hands are empty speeds things up.
   - We can only check early under the assumption that you can't be forced to vacate a won lane. For example, the Move power is always optional. This assumption might change if we ever allow the use of variant power sets.
-- Card ability implementation progress:
+- Card ability implementation progress: all done!
   - View
     - Draw a card [implemented]
     - Choose a card to discard [implemented]
@@ -37,7 +37,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - 3 maximum health instead of 2 [implemented]
     - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
     - If present, non-Taunt allies can't be secondary target for Twinstrike either [implemented]
-  - Vampiric (replaces Trap and Foresight in solo mode) [to implement]
+  - Vampiric (replaces Trap and Foresight in solo mode) [implemented]
   - Move [implemented]
   - Empower [implemented]
   - Action
