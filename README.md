@@ -6,6 +6,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
 - Players only see known information (except who's peeked at face-down cards, the console UI is verbose enough as it is).
 - Bases become activatable when the draw pile empties.
 - You can look at your bases if they die face-down (to check whether they're a Trap). [implemented]
+- When you check your dying base, allies can see it too. Only case of shared vision. [not implemented]
 - After the draw pile runs out, lanes are counted as won while only one player has cards there.
 - Lanes have no "memory" WRT being won: a won lane is no longer won if it gets emptied by Move powers.
 - We only check for death after resolving all triggered abilities. Specific rulings motivating this:
