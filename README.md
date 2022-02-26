@@ -31,7 +31,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - Immune to Freeze [implemented]
     - Immune to Retaliate [implemented]
     - Can't be secondary target for Twinstrike [implemented]
-    - Blocks Twinstrike ability if primary target [not implemented]
+    - Blocks Twinstrike ability if primary target [implemented]
     - Extra damage to Taunt (can't attack past it) [implemented]
   - TwinStrike [implemented]
     - Trap cards killed by Twinstrike damage correctly flip and heal

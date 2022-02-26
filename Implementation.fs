@@ -1748,13 +1748,35 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
        |> moveDeadCardsToDiscard
        |> GameStateDuringActionChoice
     | PassivePower TwinStrike ->
-        let context = TwinStrikeChoiceContext (playerID, laneID, (transferAttackerIDs attackerIDs), attackedCardID)
-        {
-            CardsState = cardsState
-            TurnState = gameState.TurnState
-            ChoiceContext = context
-        }
-        |> GameStateDuringMidPassivePowerChoice
+        let activeLaneCards =
+            lane.ActiveUnits @ List.collect (fun (card1, card2) -> [card1; card2]) lane.Pairs
+        let activeTargetCard =
+            activeLaneCards
+            |> List.tryFind (fun {ActiveUnitID = (ActiveUnitID id)} -> id = attackedCardID)
+        match activeTargetCard with
+        | Some {Power = power} ->
+            match power with
+            | PassivePower Nimble ->
+               gameState
+               |> triggerTargetInactiveDeathPowers
+               |> moveDeadCardsToDiscard
+               |> GameStateDuringActionChoice
+            | _ ->
+                let context = TwinStrikeChoiceContext (playerID, laneID, (transferAttackerIDs attackerIDs), attackedCardID)
+                {
+                    CardsState = cardsState
+                    TurnState = gameState.TurnState
+                    ChoiceContext = context
+                }
+                |> GameStateDuringMidPassivePowerChoice
+        | None ->
+            let context = TwinStrikeChoiceContext (playerID, laneID, (transferAttackerIDs attackerIDs), attackedCardID)
+            {
+                CardsState = cardsState
+                TurnState = gameState.TurnState
+                ChoiceContext = context
+            }
+            |> GameStateDuringMidPassivePowerChoice
     | PassivePower Vampiric ->
         gameState
         |> triggerTargetInactiveDeathPowers
