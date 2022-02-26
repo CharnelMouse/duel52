@@ -115,6 +115,7 @@ type BoardKnowledge =
 
 type MidPassivePowerChoiceContext =
 | TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
+| TwinStrikeRelatiatePairChoiceContext of PlayerID * LaneID * (CardID * CardID) * CardID
 
 type MidActivationPowerChoiceContext =
 | DiscardChoiceContext of PlayerID * CardID
@@ -199,6 +200,7 @@ type MidActivationPowerChoiceInfo =
 
 type MidPassivePowerChoiceInfo =
 | TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
+| TwinStrikeRetaliatePairChoice of PlayerID * LaneID * UnitIDs * CardID * CardID
 
 type StackChoiceInfo = PlayerID * EventID * ActivationPowerContext
 

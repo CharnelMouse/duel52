@@ -179,6 +179,8 @@ let private displayMidPassivePowerChoiceContext context =
             printfn "card %i: damage a card in lane %i" cardID laneID
         | PairIDs (cardID1, cardID2) ->
             printfn "pair %i, %i: damage a card in lane %i" cardID1 cardID2 laneID
+    | TwinStrikeRelatiatePairChoiceContext (_, _, (cardID1, cardID2), targetCardID) ->
+        printfn "pair %i, %i: one takes Retaliate damage from card %i" cardID1 cardID2 targetCardID
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
@@ -332,6 +334,8 @@ let private actionString action =
             | SingleCardID id -> string id
             | PairIDs (id1, id2) -> string id1 + ", " + string id2
         powerCardsString + ": damage card " + string targetCardID
+    | MidPassivePowerChoiceInfo (TwinStrikeRetaliatePairChoice (_, _, _, targetCardID, choiceID)) ->
+        "card " + string choiceID + " takes Retaliate damage from card " + string targetCardID
     | StackChoiceInfo (_, _, action) ->
         match action with
         | ViewPowerContext (_, _, cardID) -> string cardID + ": View"

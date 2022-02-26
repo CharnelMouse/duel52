@@ -1486,6 +1486,15 @@ let private getPossibleActionPairs (gameState: GameState) =
             |> List.map (fun (UnitID cardID) ->
                 MidPassivePowerChoicePair (gs, TwinStrikeChoice (playerID, laneID, powerCardID, cardID))
             )
+        | TwinStrikeRelatiatePairChoiceContext (playerID, laneID, powerCardIDs, originalTargetCardID) ->
+            let (id1, id2) = powerCardIDs
+            [id1; id2]
+            |> List.map (fun id ->
+                MidPassivePowerChoicePair (
+                    gs,
+                    TwinStrikeRetaliatePairChoice (playerID, laneID, PairIDs (id1, id2), originalTargetCardID, id)
+                )
+            )
     | GameStateWon _
     | GameStateTied _ ->
         List.empty
@@ -1518,12 +1527,57 @@ let private executeMidActivationPowerChoice midPowerChoice (gameState: GameState
 let private executeMidPassivePowerChoice midPowerChoice (gameState: GameStateDuringMidPassivePowerChoice) =
     match midPowerChoice with
     | TwinStrikeChoice (playerID, laneID, powerCardID, targetCardID) ->
+        let lane = Map.find laneID gameState.CardsState.Board.Lanes
+        let activeTarget =
+            lane.ActiveUnits @ (List.collect (fun (card1, card2) -> [card1; card2]) lane.Pairs)
+            |> List.tryFind (fun {ActiveUnitID = ActiveUnitID id} -> id = targetCardID)
+        match activeTarget with
+        | Some target ->
+            match target.Power with
+            | PassivePower Retaliate ->
+                let newState =
+                    gameState.CardsState
+                    |> damageCard (UnitID targetCardID) 1<health> laneID
+                match powerCardID with
+                | SingleCardID id ->
+                    newState
+                    |> damageCard (UnitID id) 1<health> laneID
+                    |> changeMidPassivePowerCardsState gameState
+                    |> removeMidPassivePowerChoiceContext
+                    |> triggerTargetInactiveDeathPowers
+                    |> moveDeadCardsToDiscard
+                    |> GameStateDuringActionChoice
+                | PairIDs (id1, id2) ->
+                    {
+                        CardsState = newState
+                        TurnState = gameState.TurnState
+                        ChoiceContext = TwinStrikeRelatiatePairChoiceContext (playerID, laneID, (id1, id2), targetCardID)
+                    }
+                    |> GameStateDuringMidPassivePowerChoice
+            | _ ->
+                gameState.CardsState
+                |> damageCard (UnitID targetCardID) 1<health> laneID
+                |> changeMidPassivePowerCardsState gameState
+                |> removeMidPassivePowerChoiceContext
+                |> triggerTargetInactiveDeathPowers
+                |> moveDeadCardsToDiscard
+                |> GameStateDuringActionChoice
+        | None ->
+            gameState.CardsState
+            |> damageCard (UnitID targetCardID) 1<health> laneID
+            |> changeMidPassivePowerCardsState gameState
+            |> removeMidPassivePowerChoiceContext
+            |> triggerTargetInactiveDeathPowers
+            |> moveDeadCardsToDiscard
+            |> GameStateDuringActionChoice
+    | TwinStrikeRetaliatePairChoice (playerID, laneID, powerCardID, targetCardID, whichID) ->
         gameState.CardsState
-        |> damageCard (UnitID targetCardID) 1<health> laneID
+        |> damageCard (UnitID whichID) 1<health> laneID
         |> changeMidPassivePowerCardsState gameState
         |> removeMidPassivePowerChoiceContext
         |> triggerTargetInactiveDeathPowers
         |> moveDeadCardsToDiscard
+        |> GameStateDuringActionChoice
 
 let private executePlayAction cardID laneID (gameState: GameStateDuringActionChoice) =
     let playerID = gameState.TurnState.CurrentPlayer
@@ -2063,7 +2117,6 @@ let rec private makeNextActionInfo actionPair =
             MidActivationPowerChoiceInfo choiceInfo
         | MidPassivePowerChoicePair (state, choiceInfo) ->
             executeMidPassivePowerChoice choiceInfo state
-            |> GameStateDuringActionChoice
             |> checkForGameEnd,
             MidPassivePowerChoiceInfo choiceInfo
         | StackChoicePair (state, choiceInfo) ->
