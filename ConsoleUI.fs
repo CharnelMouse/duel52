@@ -8,29 +8,28 @@ let private readiness (actions: Actions) =
     else
         Ready
 
-let private deparsePower power =
-    match power with
-    | ActivationPower View -> '2'
-    | InactiveDeathPower Trap -> '3'
-    | ActivationPower Foresight -> '4'
-    | ActivationPower Flip -> '5'
-    | ActivationPower Freeze -> '6'
-    | ActivationPower Heal -> '7'
-    | PassivePower Retaliate -> '8'
-    | PassivePower Nimble -> '9'
-    | PassivePower TwinStrike -> 'X'
-    | PassivePower Taunt -> 'J'
-    | PassivePower Vampiric -> 'V'
-    | ActivationPower Move -> 'Q'
-    | ActivationPower Empower -> 'K'
-    | ActivationPower Action -> 'A'
+let private deparseRank rank =
+    match rank with
+    | Two -> '2'
+    | Three -> '3'
+    | Four -> '4'
+    | Five -> '5'
+    | Six -> '6'
+    | Seven -> '7'
+    | Eight -> '8'
+    | Nine -> '9'
+    | Ten -> 'X'
+    | Jack -> 'J'
+    | Queen -> 'Q'
+    | King -> 'K'
+    | Ace -> 'A'
 
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard playerID ->
         printf "?"
-    | KnownBaseCard (playerID, power) ->
-        printf "%c" (deparsePower power)
+    | KnownBaseCard (playerID, rank, suit, abilities) ->
+        printf "%c" (deparseRank rank)
 
 let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKnowledge) =
     match inactiveUnitKnowledge with
@@ -42,33 +41,33 @@ let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKno
         match damage with
         | 0<health> -> printfn "Inactive"
         | d -> printfn "Inactive, %i damage" d
-    | KnownInactiveCardKnowledge (cardID, power, damage, actionability) ->
+    | KnownInactiveCardKnowledge (cardID, rank, suit, abilities, damage, actionability) ->
         printf "%i: " cardID
         match actionability with
         | Normal -> ()
         | Frozen -> printf "Frozen "
         match damage with
-        | 0<health> -> printfn "Inactive %c" (deparsePower power)
-        | d -> printfn "Inactive %c, %i damage" (deparsePower power) d
+        | 0<health> -> printfn "Inactive %c" (deparseRank rank)
+        | d -> printfn "Inactive %c, %i damage" (deparseRank rank) d
     // later will need cases for active/pair when card is frozen
 
 let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledge: ActiveUnitKnowledge) =
-    let (cardID, power, damage, actionsLeft, actionability) = activeUnitKnowledge
+    let (cardID, rank, suit, abilities, damage, actionsLeft, actionability) = activeUnitKnowledge
     printf "%i: " cardID
     match actionability with
     | Normal -> ()
     | Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage with
-        | 0<health> -> printfn "%A %c" (readiness actionsLeft) (deparsePower power)
-        | d -> printfn "%A %c, %i damage" (readiness actionsLeft) (deparsePower power) d
+        | 0<health> -> printfn "%A %c" (readiness actionsLeft) (deparseRank rank)
+        | d -> printfn "%A %c, %i damage" (readiness actionsLeft) (deparseRank rank) d
     else
         match damage with
-        | 0<health> -> printfn "%c" (deparsePower power)
-        | d -> printfn "%c, %i damage" (deparsePower power) d
+        | 0<health> -> printfn "%c" (deparseRank rank)
+        | d -> printfn "%c, %i damage" (deparseRank rank) d
 
 let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowledge) =
-    let (cardID1, cardID2, power, damage1, damage2, actionsLeft, actionability1, actionability2) = pairKnowledge
+    let (cardID1, cardID2, rank, suit1, suit2, abilities, damage1, damage2, actionsLeft, actionability1, actionability2) = pairKnowledge
     printf "%i, %i: " cardID1 cardID2
     match actionability1, actionability2 with
     | Normal, Normal -> ()
@@ -77,12 +76,12 @@ let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowl
     | Frozen, Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage1, damage2 with
-        | 0<health>, 0<health> -> printfn "%A %c pair" (readiness actionsLeft) (deparsePower power)
-        | d1, d2 -> printfn "%A %c pair: damage %i and %i" (readiness actionsLeft) (deparsePower power) d1 d2
+        | 0<health>, 0<health> -> printfn "%A %c pair" (readiness actionsLeft) (deparseRank rank)
+        | d1, d2 -> printfn "%A %c pair: damage %i and %i" (readiness actionsLeft) (deparseRank rank) d1 d2
     else
         match damage1, damage2 with
-        | 0<health>, 0<health> -> printfn "%c pair" (deparsePower power)
-        | d1, d2 -> printfn "%c pair: damage %i and %i" (deparsePower power) d1 d2
+        | 0<health>, 0<health> -> printfn "%c pair" (deparseRank rank)
+        | d1, d2 -> printfn "%c pair: damage %i and %i" (deparseRank rank) d1 d2
 
 let private displayTroopKnowledges currentPlayer (troops: TroopKnowledge) =
     if Map.forall (fun _ (inactiveUnits, activeUnits, pairs) ->
@@ -137,8 +136,8 @@ let private displayPostLaneKnowledges currentPlayer laneKnowledges =
     laneKnowledges
     |> Map.iter (displayPostLaneKnowledge currentPlayer)
 
-let private displayHandCard (HandCardInfo (cardID, power)) =
-    printf "%i:%c " (int cardID) (deparsePower power)
+let private displayHandCard (HandCardInfo (cardID, rank, suit, abilities)) =
+    printf "%i:%c " (int cardID) (deparseRank rank)
 
 let private displayOpponentHandSize (id, size) =
     if size = 0 then
@@ -149,8 +148,8 @@ let private displayOpponentHandSize (id, size) =
 let private displayDeadCard deadCard =
     match deadCard with
     | UnknownDeadCard -> printfn "unknown card"
-    | KnownFaceDownDeadCard power -> printfn "%c, face-down" (deparsePower power)
-    | KnownFaceUpDeadCard power -> printfn "%c, face-up" (deparsePower power)
+    | KnownFaceDownDeadCard (rank, suit) -> printfn "%c, face-down" (deparseRank rank)
+    | KnownFaceUpDeadCard (rank, suit) -> printfn "%c, face-up" (deparseRank rank)
 
 let private displayDiscardKnowledge discardKnowledge =
     if List.isEmpty discardKnowledge then

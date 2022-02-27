@@ -39,7 +39,7 @@ Work in progress: primitive UI in place, basic play rules implemented. Need to i
     - Takes damage if dealing Twinstrike damage to a Retaliate (only one of a pair) [implemented]
   - Taunt
     - 3 maximum health instead of 2 [implemented]
-    - If present, non-Taunt allies can't be attacked by non-Nimble enemies [implemented]
+    - If present, non-Taunt allies can't be attacked [don't let Nimble ignore]
     - If present, non-Taunt allies can't be secondary target for Twinstrike either [implemented]
   - Vampiric (replaces Trap and Foresight in solo mode) [implemented]
   - Move [implemented]

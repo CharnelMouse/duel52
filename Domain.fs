@@ -1,30 +1,58 @@
 namespace Domain
 open EventStack
 
-type ActivationPower =
-| View
-| Foresight
-| Flip
-| Freeze
-| Heal
-| Move
-| Empower
-| Action
+type Rank =
+| Two
+| Three
+| Four
+| Five
+| Six
+| Seven
+| Eight
+| Nine
+| Ten
+| Jack
+| Queen
+| King
+| Ace
 
-type PassivePower =
-| Retaliate
-| Nimble
-| TwinStrike
-| Taunt
-| Vampiric // replaces Trap and Foresight in solo mode
+type Suit =
+| Clubs
+| Diamonds
+| Hearts
+| Spades
 
-type InactiveDeathPower =
-| Trap
+type TriggerEvent =
+| Draw of uint
+| Discard of uint
+| HealSelf of uint
+| ActivateSelf
+| ViewInactive of uint
+| ActivateAlliesInLane
+| FreezeEnemiesInLane
+| HealAllAllies of uint
+| ReturnDamage
+| DamageExtraTarget
+| MayMoveAllyToOwnLane
+| ReactivateNonEmpowerActivationPowersInLane
+| ExtraActions of uint
+| ChangeMaxAttacksThisTurn of uint
+| MaxHealthIncrease of uint
+| ProtectsNonTauntAlliesInLane
+| ExtraDamageAgainstExtraMaxHealth of uint
 
-type Power =
-| ActivationPower of ActivationPower
-| PassivePower of PassivePower
-| InactiveDeathPower of InactiveDeathPower
+type Abilities = {
+    Name: string
+    OnActivation: TriggerEvent list
+    OnAttack: TriggerEvent list
+    OnDamaged: TriggerEvent list
+    OnKill: TriggerEvent list
+    OnInactiveDying: TriggerEvent list
+    Ignores: TriggerEvent list
+    WhileActive: TriggerEvent list
+}
+
+type PowerMap = Rank -> Abilities
 
 [<Measure>] type health
 [<Measure>] type PID
@@ -43,7 +71,7 @@ type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
 
-type HandCardInfo = HandCardInfo of CardID * Power
+type HandCardInfo = HandCardInfo of CardID * Rank * Suit * Abilities
 
 type Hand = HandCardInfo list
 
@@ -61,20 +89,20 @@ type ActiveStatus =
 
 type BaseKnowledge =
 | UnknownBaseCard of PlayerID
-| KnownBaseCard of PlayerID * Power
+| KnownBaseCard of PlayerID * Rank * Suit * Abilities
 
 type DeadCardKnowledge =
 | UnknownDeadCard
-| KnownFaceDownDeadCard of Power
-| KnownFaceUpDeadCard of Power
+| KnownFaceDownDeadCard of Rank * Suit
+| KnownFaceUpDeadCard of Rank * Suit
 
 type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Damage * Actionability
-| KnownInactiveCardKnowledge of CardID * Power * Damage * Actionability
+| KnownInactiveCardKnowledge of CardID * Rank * Suit * Abilities * Damage * Actionability
 
-type ActiveUnitKnowledge = CardID * Power * Damage * Actions * Actionability
+type ActiveUnitKnowledge = CardID * Rank * Suit * Abilities * Damage * Actions * Actionability
 
-type PairKnowledge = CardID * CardID * Power * Damage * Damage * Actions * Actionability * Actionability
+type PairKnowledge = CardID * CardID * Rank * Suit * Suit * Abilities * Damage * Damage * Actions * Actionability * Actionability
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 
