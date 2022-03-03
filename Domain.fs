@@ -22,10 +22,15 @@ type Suit =
 | Hearts
 | Spades
 
+type PassiveAbility =
+| MaxHealthIncrease of uint
+| ProtectsNonTauntAlliesInLane
+
 type TriggerEvent =
 | Draw of uint
 | Discard of uint
 | HealSelf of uint
+| FullyHealSelf
 | ActivateSelf
 | ViewInactive of uint
 | ActivateAlliesInLane
@@ -37,8 +42,6 @@ type TriggerEvent =
 | ReactivateNonEmpowerActivationPowersInLane
 | ExtraActions of uint
 | ChangeMaxAttacksThisTurn of uint
-| MaxHealthIncrease of uint
-| ProtectsNonTauntAlliesInLane
 | ExtraDamageAgainstExtraMaxHealth of uint
 
 type Abilities = {
@@ -49,7 +52,7 @@ type Abilities = {
     OnKill: TriggerEvent list
     OnInactiveDying: TriggerEvent list
     Ignores: TriggerEvent list
-    WhileActive: TriggerEvent list
+    WhileActive: PassiveAbility list
 }
 
 type PowerMap = Rank -> Abilities
