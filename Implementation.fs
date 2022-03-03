@@ -647,6 +647,12 @@ type private TurnInProgress = {
     FutureActionCounts: Actions list
 }
 
+type private ResolutionEpoch =
+| OrderChoiceEpoch of ActivationPowerContext epoch
+| OrderedTriggerEpoch of TriggerEvent epoch
+
+type private ResolutionStack = ResolutionEpoch nonEmptyList
+
 type private GameStateBetweenTurns = {
     CardsState: CardsState
     TurnState: PlayerReady

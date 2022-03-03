@@ -39,6 +39,7 @@ let map mapping nel = {
     Head = mapping nel.Head
     Tail = List.map mapping nel.Tail
 }
+let singleton h = {Head = h; Tail = []}
 let unzip nel =
     let (h1, h2) = nel.Head
     let t1, t2 = List.unzip nel.Tail
