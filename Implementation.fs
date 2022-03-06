@@ -55,7 +55,7 @@ type private HandCard = {
     Owner: PlayerID
 }
 let private getHandCardInfo {HandCardID = HandCardID id; Rank = r; Suit = s; Abilities = a} =
-    HandCardInfo (id, r, s, a)
+    HandCardInfo (id, r, s, a.Name)
 
 type private BaseCard = {
     BaseCardID: BaseCardID
@@ -67,7 +67,7 @@ type private BaseCard = {
 }
 let private getBaseKnowledge playerID (baseCard: BaseCard) =
     if Set.contains playerID baseCard.KnownBy then
-        KnownBaseCard (baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities)
+        KnownBaseCard (baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name)
     else
         UnknownBaseCard baseCard.Owner
 
@@ -647,6 +647,8 @@ type private TurnInProgress = {
     FutureActionCounts: Actions list
 }
 
+type private TriggerEvent = InstantNonTargetAbility * PlayerID * LaneID * CardID
+
 type private ResolutionEpoch =
 | OrderChoiceEpoch of ActivationPowerContext epoch
 | OrderedTriggerEpoch of TriggerEvent epoch
@@ -981,7 +983,7 @@ let private getPairKnowledge (card1, card2) : PairKnowledge =
     id1, id2,
     card1.Rank,
     card1.Suit, card2.Suit,
-    card1.Abilities,
+    card1.Abilities.Name,
     card1.Damage, card2.Damage,
     min (card1.MaxActions - card1.ActionsSpent) (card2.MaxActions - card2.ActionsSpent),
     actionability1, actionability2
@@ -997,7 +999,7 @@ let private getLanePlayerTroopKnowledges viewerID ownerID (lane: Lane) : Inactiv
         |> List.map (fun card ->
             let {ActiveUnitID = ActiveUnitID id} = card
             let actionability = getActionability card
-            ((id, card.Rank, card.Suit, card.Abilities, card.Damage, card.MaxActions - card.ActionsSpent, actionability): ActiveUnitKnowledge)
+            ((id, card.Rank, card.Suit, card.Abilities.Name, card.Damage, card.MaxActions - card.ActionsSpent, actionability): ActiveUnitKnowledge)
             )
     let inactiveUnitKnowledge =
         lane.InactiveUnits
@@ -1006,7 +1008,7 @@ let private getLanePlayerTroopKnowledges viewerID ownerID (lane: Lane) : Inactiv
             let {InactiveUnitID = InactiveUnitID id} = card
             let actionability = if card.FreezeStatus = NotFrozen then Normal else Frozen
             if Set.contains viewerID card.KnownBy then
-                KnownInactiveCardKnowledge (id, card.Rank, card.Suit, card.Abilities, card.Damage, actionability)
+                KnownInactiveCardKnowledge (id, card.Rank, card.Suit, card.Abilities.Name, card.Damage, actionability)
             else
                 UnknownInactiveCardKnowledge (id, card.Damage, actionability)
             )

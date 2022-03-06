@@ -22,52 +22,6 @@ type Suit =
 | Hearts
 | Spades
 
-type PassiveAbility =
-| MaxHealthIncrease of uint
-| ProtectsNonTauntAlliesInLane
-
-type InstantNonTargetAbility =
-| Draw of uint
-| Discard of uint
-| HealSelf of uint
-| FullyHealSelf
-| ActivateSelf
-| ViewInactive of uint
-| ActivateAlliesInLane
-| FreezeEnemiesInLane
-| HealAllAllies of uint
-| MayMoveAllyToOwnLane
-| ReactivateNonEmpowerActivationPowersInLane
-| ExtraActions of uint
-| ChangeMaxAttacksThisTurn of uint
-
-type AttackAbility =
-| DamageExtraTarget
-| ExtraDamageAgainstExtraMaxHealth of uint
-
-type DefendAbility =
-| ReturnDamage
-
-type PowerName = | PowerName of string
-
-type Ability =
-| InstantNonTargetAbility of InstantNonTargetAbility
-| AttackAbility of AttackAbility
-| DefendAbility of DefendAbility
-
-type Abilities = {
-    Name: PowerName
-    OnActivation: InstantNonTargetAbility list
-    OnAttack: AttackAbility list
-    OnDamaged: DefendAbility list
-    OnKill: InstantNonTargetAbility list
-    OnInactiveDying: InstantNonTargetAbility list
-    Ignores: Ability list
-    WhileActive: PassiveAbility list
-}
-
-type PowerMap = Rank -> Abilities
-
 [<Measure>] type health
 [<Measure>] type PID
 [<Measure>] type LID
@@ -85,9 +39,9 @@ type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
 
-type TriggerEvent = InstantNonTargetAbility * PlayerID * LaneID * CardID
+type PowerName = PowerName of string
 
-type HandCardInfo = HandCardInfo of CardID * Rank * Suit * Abilities
+type HandCardInfo = HandCardInfo of CardID * Rank * Suit * PowerName
 
 type Hand = HandCardInfo list
 
@@ -105,7 +59,7 @@ type ActiveStatus =
 
 type BaseKnowledge =
 | UnknownBaseCard of PlayerID
-| KnownBaseCard of PlayerID * Rank * Suit * Abilities
+| KnownBaseCard of PlayerID * Rank * Suit * PowerName
 
 type DeadCardKnowledge =
 | UnknownDeadCard
@@ -114,11 +68,11 @@ type DeadCardKnowledge =
 
 type InactiveUnitKnowledge =
 | UnknownInactiveCardKnowledge of CardID * Damage * Actionability
-| KnownInactiveCardKnowledge of CardID * Rank * Suit * Abilities * Damage * Actionability
+| KnownInactiveCardKnowledge of CardID * Rank * Suit * PowerName * Damage * Actionability
 
-type ActiveUnitKnowledge = CardID * Rank * Suit * Abilities * Damage * Actions * Actionability
+type ActiveUnitKnowledge = CardID * Rank * Suit * PowerName * Damage * Actions * Actionability
 
-type PairKnowledge = CardID * CardID * Rank * Suit * Suit * Abilities * Damage * Damage * Actions * Actionability * Actionability
+type PairKnowledge = CardID * CardID * Rank * Suit * Suit * PowerName * Damage * Damage * Actions * Actionability * Actionability
 
 type TroopKnowledge = Map<PlayerID, InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list>
 

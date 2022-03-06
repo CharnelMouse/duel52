@@ -1,6 +1,50 @@
 module PowerMaps
 open Domain
 
+type PassiveAbility =
+| MaxHealthIncrease of uint
+| ProtectsNonTauntAlliesInLane
+
+type InstantNonTargetAbility =
+| Draw of uint
+| Discard of uint
+| HealSelf of uint
+| FullyHealSelf
+| ActivateSelf
+| ViewInactive of uint
+| ActivateAlliesInLane
+| FreezeEnemiesInLane
+| HealAllAllies of uint
+| MayMoveAllyToOwnLane
+| ReactivateNonEmpowerActivationPowersInLane
+| ExtraActions of uint
+| ChangeMaxAttacksThisTurn of uint
+
+type AttackAbility =
+| DamageExtraTarget
+| ExtraDamageAgainstExtraMaxHealth of uint
+
+type DefendAbility =
+| ReturnDamage
+
+type Ability =
+| InstantNonTargetAbility of InstantNonTargetAbility
+| AttackAbility of AttackAbility
+| DefendAbility of DefendAbility
+
+type Abilities = {
+    Name: PowerName
+    OnActivation: InstantNonTargetAbility list
+    OnAttack: AttackAbility list
+    OnDamaged: DefendAbility list
+    OnKill: InstantNonTargetAbility list
+    OnInactiveDying: InstantNonTargetAbility list
+    Ignores: Ability list
+    WhileActive: PassiveAbility list
+}
+
+type PowerMap = Rank -> Abilities
+
 let basePower: PowerMap = function
     | Two ->
         {
