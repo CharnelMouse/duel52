@@ -4,7 +4,7 @@ open Domain
 let basePower: PowerMap = function
     | Two ->
         {
-            Name = "View"
+            Name = PowerName "View"
             OnActivation = [Draw 1u; Discard 1u]
             OnAttack = []
             OnDamaged = []
@@ -15,7 +15,7 @@ let basePower: PowerMap = function
         }
     | Three ->
         {
-            Name = "Trap"
+            Name = PowerName "Trap"
             OnActivation = []
             OnAttack = []
             OnDamaged = []
@@ -26,7 +26,7 @@ let basePower: PowerMap = function
         }
     | Four ->
         {
-            Name = "Foresight"
+            Name = PowerName "Foresight"
             OnActivation = [ViewInactive 1u]
             OnAttack = []
             OnDamaged = []
@@ -37,7 +37,7 @@ let basePower: PowerMap = function
         }
     | Five ->
         {
-            Name = "Flip"
+            Name = PowerName "Flip"
             OnActivation = [ActivateAlliesInLane]
             OnAttack = []
             OnDamaged = []
@@ -48,7 +48,7 @@ let basePower: PowerMap = function
         }
     | Six ->
         {
-            Name = "Freeze"
+            Name = PowerName "Freeze"
             OnActivation = [FreezeEnemiesInLane]
             OnAttack = []
             OnDamaged = []
@@ -59,7 +59,7 @@ let basePower: PowerMap = function
         }
     | Seven ->
         {
-            Name = "Heal"
+            Name = PowerName "Heal"
             OnActivation = [HealAllAllies 2u]
             OnAttack = []
             OnDamaged = []
@@ -70,7 +70,7 @@ let basePower: PowerMap = function
         }
     | Eight ->
         {
-            Name = "Retaliate"
+            Name = PowerName "Retaliate"
             OnActivation = []
             OnAttack = []
             OnDamaged = [ReturnDamage]
@@ -81,18 +81,18 @@ let basePower: PowerMap = function
         }
     | Nine ->
         {
-            Name = "Nimble"
+            Name = PowerName "Nimble"
             OnActivation = []
             OnAttack = [ExtraDamageAgainstExtraMaxHealth 1u]
             OnDamaged = []
             OnInactiveDying = []
             OnKill = []
-            Ignores = [FreezeEnemiesInLane; ReturnDamage; DamageExtraTarget]
+            Ignores = [InstantNonTargetAbility FreezeEnemiesInLane; DefendAbility ReturnDamage; AttackAbility DamageExtraTarget]
             WhileActive = []
         }
     | Ten ->
         {
-            Name = "Twinstrike"
+            Name = PowerName "Twinstrike"
             OnActivation = []
             OnAttack = [DamageExtraTarget]
             OnDamaged = []
@@ -103,7 +103,7 @@ let basePower: PowerMap = function
         }
     | Jack ->
         {
-            Name = "Taunt"
+            Name = PowerName "Taunt"
             OnActivation = []
             OnAttack = []
             OnDamaged = []
@@ -114,7 +114,7 @@ let basePower: PowerMap = function
         }
     | Queen ->
         {
-            Name = "Move"
+            Name = PowerName "Move"
             OnActivation = [MayMoveAllyToOwnLane]
             OnAttack = []
             OnDamaged = []
@@ -125,7 +125,7 @@ let basePower: PowerMap = function
         }
     | King ->
         {
-            Name = "Empower"
+            Name = PowerName "Empower"
             OnActivation = [ReactivateNonEmpowerActivationPowersInLane]
             OnAttack = []
             OnDamaged = []
@@ -136,7 +136,7 @@ let basePower: PowerMap = function
         }
     | Ace ->
         {
-            Name = "Action"
+            Name = PowerName "Action"
             OnActivation = [ExtraActions 1u; ChangeMaxAttacksThisTurn 2u]
             OnAttack = []
             OnDamaged = []
@@ -149,7 +149,7 @@ let basePower: PowerMap = function
 let soloPower: PowerMap = function
     | Two ->
         {
-            Name = "View"
+            Name = PowerName "View"
             OnActivation = [Draw 1u; Discard 1u]
             OnAttack = []
             OnDamaged = []
@@ -160,7 +160,7 @@ let soloPower: PowerMap = function
         }
     | Three ->
         {
-            Name = "Vampiric"
+            Name = PowerName "Vampiric"
             OnActivation = []
             OnAttack = []
             OnDamaged = []
@@ -171,7 +171,7 @@ let soloPower: PowerMap = function
         }
     | Four ->
         {
-            Name = "Vampiric"
+            Name = PowerName "Vampiric"
             OnActivation = []
             OnAttack = []
             OnDamaged = []
@@ -182,7 +182,7 @@ let soloPower: PowerMap = function
         }
     | Five ->
         {
-            Name = "Flip"
+            Name = PowerName "Flip"
             OnActivation = [ActivateAlliesInLane]
             OnAttack = []
             OnDamaged = []
@@ -193,7 +193,7 @@ let soloPower: PowerMap = function
         }
     | Six ->
         {
-            Name = "Freeze"
+            Name = PowerName "Freeze"
             OnActivation = [FreezeEnemiesInLane]
             OnAttack = []
             OnDamaged = []
@@ -204,7 +204,7 @@ let soloPower: PowerMap = function
         }
     | Seven ->
         {
-            Name = "Heal"
+            Name = PowerName "Heal"
             OnActivation = [HealAllAllies 2u]
             OnAttack = []
             OnDamaged = []
@@ -215,7 +215,7 @@ let soloPower: PowerMap = function
         }
     | Eight ->
         {
-            Name = "Retaliate"
+            Name = PowerName "Retaliate"
             OnActivation = []
             OnAttack = []
             OnDamaged = [ReturnDamage]
@@ -226,18 +226,18 @@ let soloPower: PowerMap = function
         }
     | Nine ->
         {
-            Name = "Nimble"
+            Name = PowerName "Nimble"
             OnActivation = []
             OnAttack = [ExtraDamageAgainstExtraMaxHealth 1u]
             OnDamaged = []
             OnInactiveDying = []
             OnKill = []
-            Ignores = [FreezeEnemiesInLane; ReturnDamage; DamageExtraTarget]
+            Ignores = [InstantNonTargetAbility FreezeEnemiesInLane; DefendAbility ReturnDamage; AttackAbility DamageExtraTarget]
             WhileActive = []
         }
     | Ten ->
         {
-            Name = "Twinstrike"
+            Name = PowerName "Twinstrike"
             OnActivation = []
             OnAttack = [DamageExtraTarget]
             OnDamaged = []
@@ -248,7 +248,7 @@ let soloPower: PowerMap = function
         }
     | Jack ->
         {
-            Name = "Taunt"
+            Name = PowerName "Taunt"
             OnActivation = []
             OnAttack = []
             OnDamaged = []
@@ -259,7 +259,7 @@ let soloPower: PowerMap = function
         }
     | Queen ->
         {
-            Name = "Move"
+            Name = PowerName "Move"
             OnActivation = [MayMoveAllyToOwnLane]
             OnAttack = []
             OnDamaged = []
@@ -270,7 +270,7 @@ let soloPower: PowerMap = function
         }
     | King ->
         {
-            Name = "Empower"
+            Name = PowerName "Empower"
             OnActivation = [ReactivateNonEmpowerActivationPowersInLane]
             OnAttack = []
             OnDamaged = []
@@ -281,7 +281,7 @@ let soloPower: PowerMap = function
         }
     | Ace ->
         {
-            Name = "Action"
+            Name = PowerName "Action"
             OnActivation = [ExtraActions 1u; ChangeMaxAttacksThisTurn 2u]
             OnAttack = []
             OnDamaged = []

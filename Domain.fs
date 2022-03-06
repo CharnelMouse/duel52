@@ -26,7 +26,7 @@ type PassiveAbility =
 | MaxHealthIncrease of uint
 | ProtectsNonTauntAlliesInLane
 
-type TriggerEvent =
+type InstantNonTargetAbility =
 | Draw of uint
 | Discard of uint
 | HealSelf of uint
@@ -36,22 +36,33 @@ type TriggerEvent =
 | ActivateAlliesInLane
 | FreezeEnemiesInLane
 | HealAllAllies of uint
-| ReturnDamage
-| DamageExtraTarget
 | MayMoveAllyToOwnLane
 | ReactivateNonEmpowerActivationPowersInLane
 | ExtraActions of uint
 | ChangeMaxAttacksThisTurn of uint
+
+type AttackAbility =
+| DamageExtraTarget
 | ExtraDamageAgainstExtraMaxHealth of uint
 
+type DefendAbility =
+| ReturnDamage
+
+type PowerName = | PowerName of string
+
+type Ability =
+| InstantNonTargetAbility of InstantNonTargetAbility
+| AttackAbility of AttackAbility
+| DefendAbility of DefendAbility
+
 type Abilities = {
-    Name: string
-    OnActivation: TriggerEvent list
-    OnAttack: TriggerEvent list
-    OnDamaged: TriggerEvent list
-    OnKill: TriggerEvent list
-    OnInactiveDying: TriggerEvent list
-    Ignores: TriggerEvent list
+    Name: PowerName
+    OnActivation: InstantNonTargetAbility list
+    OnAttack: AttackAbility list
+    OnDamaged: DefendAbility list
+    OnKill: InstantNonTargetAbility list
+    OnInactiveDying: InstantNonTargetAbility list
+    Ignores: Ability list
     WhileActive: PassiveAbility list
 }
 
@@ -73,6 +84,8 @@ type Actions = int<action>
 type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
+
+type TriggerEvent = InstantNonTargetAbility * PlayerID * LaneID * CardID
 
 type HandCardInfo = HandCardInfo of CardID * Rank * Suit * Abilities
 
@@ -156,15 +169,7 @@ type MidActivationPowerChoiceContext =
 type PassivePowerWithDecisionContext =
 | TwinStrikePowerContext of PlayerID * LaneID * CardID
 
-type ActivationPowerContext =
-| ViewPowerContext of PlayerID * LaneID * CardID
-| ForesightPowerContext of PlayerID * LaneID * CardID
-| FlipPowerContext of PlayerID * LaneID * CardID
-| FreezePowerContext of PlayerID * LaneID * CardID
-| HealPowerContext of PlayerID * LaneID * CardID
-| MovePowerContext of PlayerID * LaneID * CardID
-| EmpowerPowerContext of PlayerID * LaneID * CardID
-| ActionPowerContext of PlayerID * LaneID * CardID
+type ActivationPowerContext = PlayerID * LaneID * CardID * PowerName
 
 type MidActivationPowerChoiceDisplayInfo = {
     CurrentPlayer: PlayerID

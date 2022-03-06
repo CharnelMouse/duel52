@@ -335,16 +335,8 @@ let private actionString action =
         powerCardsString + ": damage card " + string targetCardID
     | MidPassivePowerChoiceInfo (TwinStrikeRetaliatePairChoice (_, _, _, targetCardID, choiceID)) ->
         "card " + string choiceID + " takes Retaliate damage from card " + string targetCardID
-    | StackChoiceInfo (_, _, action) ->
-        match action with
-        | ViewPowerContext (_, _, cardID) -> string cardID + ": View"
-        | ForesightPowerContext (_, _, cardID) -> string cardID + ": Foresight"
-        | FlipPowerContext (_, laneID, cardID) -> string cardID + ": Flip in lane " + string laneID
-        | FreezePowerContext (_, laneID, cardID) -> string cardID + ": Freeze lane " + string laneID
-        | HealPowerContext (_, _, cardID) -> string cardID + ": Heal"
-        | MovePowerContext (_, laneID, cardID) -> string cardID + ": Move to lane " + string laneID
-        | EmpowerPowerContext (_, laneID, cardID) -> string cardID + ": Empower in lane " + string laneID
-        | ActionPowerContext (_, _, cardID) -> string cardID + ": Action"
+    | StackChoiceInfo (_, _, (_, _, cardID, (PowerName powerName))) ->
+        string cardID + ": " + powerName
     | TurnActionInfo (ActionChoiceInfo (Play (_, cardID, laneID))) ->
         "Play card " + string cardID
         + " to lane " + string laneID
