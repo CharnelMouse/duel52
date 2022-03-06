@@ -43,9 +43,9 @@ type Abilities = {
     WhileActive: PassiveAbility list
 }
 
-type PowerMap = Rank -> Abilities
+type GetAbilities = Rank -> Abilities
 
-let basePower: PowerMap = function
+let basePowers: GetAbilities = function
     | Two ->
         {
             Name = PowerName "View"
@@ -190,7 +190,7 @@ let basePower: PowerMap = function
             WhileActive = []
         }
 
-let soloPower: PowerMap = function
+let soloPowers: GetAbilities = function
     | Two ->
         {
             Name = PowerName "View"

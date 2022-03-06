@@ -154,13 +154,13 @@ let private isDead (card: UnitCard) =
 
 type private CardConverter<'From, 'To> = 'From -> 'To
 
-let private deckToHandCard (powerMap: PowerMap) playerID : CardConverter<DeckCard, HandCard> = fun deckCard ->
+let private deckToHandCard (getAbilities: GetAbilities) playerID : CardConverter<DeckCard, HandCard> = fun deckCard ->
     let {DeckCardID = DeckCardID id} = deckCard
     {
         HandCardID = HandCardID id
         Rank = deckCard.Rank
         Suit = deckCard.Suit
-        Abilities = powerMap deckCard.Rank
+        Abilities = getAbilities deckCard.Rank
         Owner = playerID
     }
 let private handToDiscardedCard: CardConverter<HandCard, DiscardedCard> = fun handCard ->
@@ -289,7 +289,7 @@ type private GameStage =
 
 type private CardsState = {
     Board: Board
-    PowerMap: PowerMap
+    GetAbilities: GetAbilities
     GameStage: GameStage
     Removed: RemovedCard Set
 }
@@ -1626,7 +1626,7 @@ let private tryDrawCard playerID cardsState =
                 hands
                 |> Map.change playerID (function
                     | Some hc ->
-                        Some (hc @ [deckToHandCard cardsState.PowerMap playerID drawPile.Head])
+                        Some (hc @ [deckToHandCard cardsState.GetAbilities playerID drawPile.Head])
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
@@ -1641,7 +1641,7 @@ let private tryDrawCard playerID cardsState =
                 hands
                 |> Map.change playerID (function
                     | Some hc ->
-                        Some (hc @ [deckToHandCard cardsState.PowerMap playerID drawPile.Head])
+                        Some (hc @ [deckToHandCard cardsState.GetAbilities playerID drawPile.Head])
                     | None ->
                         failwithf "non-existent players can't draw cards"
                     )
@@ -2274,7 +2274,7 @@ let private createGame nPlayers nLanes =
                     |> createIDMap 1<LID>
                 Discard = List.empty
                 }
-            PowerMap = basePower
+            GetAbilities = basePowers
             GameStage = Early {
                 Bases =
                     bases
@@ -2288,7 +2288,7 @@ let private createGame nPlayers nLanes =
                                 BaseCardID = BaseCardID cardID
                                 Rank = rank
                                 Suit = suit
-                                Abilities = basePower rank
+                                Abilities = basePowers rank
                                 Owner = ownerID
                                 KnownBy = Set.empty
                             }
@@ -2305,7 +2305,7 @@ let private createGame nPlayers nLanes =
                                 HandCardID = HandCardID cardID
                                 Rank = rank
                                 Suit = suit
-                                Abilities = basePower rank
+                                Abilities = basePowers rank
                                 Owner = playerID
                             }
                         )
