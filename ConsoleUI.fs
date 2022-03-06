@@ -3,7 +3,7 @@ open System
 open Domain
 
 let private readiness (actions: Actions) =
-    if actions <= 0<action> then
+    if actions = 0u<action> then
         Exhausted
     else
         Ready
@@ -39,7 +39,7 @@ let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKno
         | Normal -> ()
         | Frozen -> printf "Frozen "
         match damage with
-        | 0<health> -> printfn "Inactive"
+        | 0u<health> -> printfn "Inactive"
         | d -> printfn "Inactive, %i damage" d
     | KnownInactiveCardKnowledge (cardID, rank, suit, abilities, damage, actionability) ->
         printf "%i: " cardID
@@ -47,7 +47,7 @@ let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKno
         | Normal -> ()
         | Frozen -> printf "Frozen "
         match damage with
-        | 0<health> -> printfn "Inactive %c" (deparseRank rank)
+        | 0u<health> -> printfn "Inactive %c" (deparseRank rank)
         | d -> printfn "Inactive %c, %i damage" (deparseRank rank) d
     // later will need cases for active/pair when card is frozen
 
@@ -59,11 +59,11 @@ let private displayActiveUnitKnowledge currentPlayer ownerID (activeUnitKnowledg
     | Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage with
-        | 0<health> -> printfn "%A %c" (readiness actionsLeft) (deparseRank rank)
+        | 0u<health> -> printfn "%A %c" (readiness actionsLeft) (deparseRank rank)
         | d -> printfn "%A %c, %i damage" (readiness actionsLeft) (deparseRank rank) d
     else
         match damage with
-        | 0<health> -> printfn "%c" (deparseRank rank)
+        | 0u<health> -> printfn "%c" (deparseRank rank)
         | d -> printfn "%c, %i damage" (deparseRank rank) d
 
 let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowledge) =
@@ -76,11 +76,11 @@ let private displayPairKnowledge currentPlayer ownerID (pairKnowledge: PairKnowl
     | Frozen, Frozen -> printf "Frozen "
     if ownerID = currentPlayer then
         match damage1, damage2 with
-        | 0<health>, 0<health> -> printfn "%A %c pair" (readiness actionsLeft) (deparseRank rank)
+        | 0u<health>, 0u<health> -> printfn "%A %c pair" (readiness actionsLeft) (deparseRank rank)
         | d1, d2 -> printfn "%A %c pair: damage %i and %i" (readiness actionsLeft) (deparseRank rank) d1 d2
     else
         match damage1, damage2 with
-        | 0<health>, 0<health> -> printfn "%c pair" (deparseRank rank)
+        | 0u<health>, 0u<health> -> printfn "%c pair" (deparseRank rank)
         | d1, d2 -> printfn "%c pair: damage %i and %i" (deparseRank rank) d1 d2
 
 let private displayTroopKnowledges currentPlayer (troops: TroopKnowledge) =

@@ -6,12 +6,12 @@ open EventStack
 open PowerMaps
 
 let private createIDs start lst =
-    [for i in 0..List.length lst - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
+    [for i in 0u..uint (List.length lst - 1) -> start + LanguagePrimitives.UInt32WithMeasure i]
 
 let private createIDsToLength start len =
-    [for i in 0..len - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
-let private zipIDs start lst =
-    let IDs = [for i in 0..List.length lst - 1 -> start + LanguagePrimitives.Int32WithMeasure i]
+    [for i in 0u..(len - 1u) -> start + LanguagePrimitives.UInt32WithMeasure i]
+let private zipIDs (start: uint<'a>) lst =
+    let IDs = [for i in 0u..uint (List.length lst - 1) -> start + LanguagePrimitives.UInt32WithMeasure i]
     List.zip IDs lst
 let private createIDMap start lst =
     zipIDs start lst
@@ -129,15 +129,15 @@ let private (|Exhausted|Ready|) (card: ActiveUnit) =
 
 let private maxHealth card =
     match card with
-    | InactiveUnit _ -> 2<health>
+    | InactiveUnit _ -> 2u<health>
     | ActiveUnit {Abilities = triggers} ->
         triggers.WhileActive
         |> List.fold (fun state trigger ->
             match trigger with
             | MaxHealthIncrease increase ->
-                state + (int increase)*1<health>
+                state + (uint increase)*1u<health>
             | _ -> state
-        ) 2<health>
+        ) 2u<health>
 let private (|Dead|Alive|) (card: UnitCard) =
     let damage =
         match card with
@@ -180,7 +180,7 @@ let private handToInactiveUnit: CardConverter<HandCard, InactiveUnit> = fun hand
         Abilities = handCard.Abilities
         Owner = handCard.Owner
         KnownBy = Set.singleton handCard.Owner
-        Damage = 0<health>
+        Damage = 0u<health>
         FreezeStatus = NotFrozen
     }
 let private inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun inactiveUnit ->
@@ -192,8 +192,8 @@ let private inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun 
         Abilities = inactiveUnit.Abilities
         Owner = inactiveUnit.Owner
         Damage = inactiveUnit.Damage
-        ActionsSpent = 0<action>
-        MaxActions = 1<action>
+        ActionsSpent = 0u<action>
+        MaxActions = 1u<action>
         FreezeStatus = inactiveUnit.FreezeStatus
     }
 let private unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = fun unitCard ->
@@ -422,11 +422,11 @@ let private changeCardLane cardID fromLaneID toLaneID cardsState =
     |> addCardsToActiveUnits movedActive toLaneID
 
 let private healInactiveCard amount (inactiveCard: InactiveUnit) =
-    {inactiveCard with Damage = max (inactiveCard.Damage - amount) 0<health>}
+    {inactiveCard with Damage = max (inactiveCard.Damage - amount) 0u<health>}
 let private healActiveCard amount (activeCard: ActiveUnit) =
-    {activeCard with Damage = max (activeCard.Damage - amount) 0<health>}
+    {activeCard with Damage = max (activeCard.Damage - amount) 0u<health>}
 let private fullyHealActiveCard (activeCard: ActiveUnit) =
-    {activeCard with Damage = 0<health>}
+    {activeCard with Damage = 0u<health>}
 
 let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cardsState =
     let inactiveIDs =
@@ -482,7 +482,7 @@ let private incrementCardActionsUsed cardID laneID cardsState =
                 |> List.map (fun card ->
                     let {ActiveUnitID = ActiveUnitID id} = card
                     if id = cardID then
-                        {card with ActionsSpent = card.ActionsSpent + 1<action>}
+                        {card with ActionsSpent = card.ActionsSpent + 1u<action>}
                     else
                         card
                     )
@@ -492,9 +492,9 @@ let private incrementCardActionsUsed cardID laneID cardsState =
                     let {ActiveUnitID = ActiveUnitID id1} = card1
                     let {ActiveUnitID = ActiveUnitID id2} = card2
                     if id1 = cardID then
-                        {card1 with ActionsSpent = card1.ActionsSpent + 1<action>}, card2
+                        {card1 with ActionsSpent = card1.ActionsSpent + 1u<action>}, card2
                     elif id2 = cardID then
-                        card1, {card2 with ActionsSpent = card2.ActionsSpent + 1<action>}
+                        card1, {card2 with ActionsSpent = card2.ActionsSpent + 1u<action>}
                     else
                         card1, card2
                     )
@@ -617,7 +617,7 @@ let private flipBasesOnLane (bases: BaseCard list, lane: Lane) =
                 Abilities = baseCard.Abilities
                 Owner = baseCard.Owner
                 KnownBy = baseCard.KnownBy
-                Damage = 0<health>
+                Damage = 0u<health>
                 FreezeStatus = NotFrozen
                 }
             )
@@ -635,14 +635,14 @@ let private flipBasesOnBoard bases ({Lanes = lanes; Discard = discard}: Board) =
 
 type private PlayerReady = {
     Player: PlayerID
-    NPlayers: int
+    NPlayers: uint
     Actions: Actions
     FutureActionCounts: Actions list
 }
 
 type private TurnInProgress = {
     CurrentPlayer: PlayerID
-    NPlayers: int
+    NPlayers: uint
     ActionsLeft: Actions
     FutureActionCounts: Actions list
 }
@@ -704,7 +704,7 @@ let private incrementActionsLeft (gameState: GameStateDuringTurn) =
     {gameState with
         TurnState = {
             gameState.TurnState with
-                ActionsLeft = gameState.TurnState.ActionsLeft + 1<action>
+                ActionsLeft = gameState.TurnState.ActionsLeft + 1u<action>
         }
     }
 
@@ -777,6 +777,11 @@ let private triggerTargetInactiveDeathPowers gameState =
     laneIDs
     |> List.fold (fun cs laneID -> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cs) cardsState
     |> changeCardsState gameState
+let private decrementCardDamage card =
+    if card.Damage = 0u<health> then
+        card
+    else
+        {card with Damage = card.Damage - 1u<health>}
 let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID attackedID) laneID gameState =
     let board = gameState.CardsState.Board
     let lane = Map.find laneID board.Lanes
@@ -788,7 +793,7 @@ let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID atta
                 lane.ActiveUnits
                 |> List.map (fun card ->
                     if card.ActiveUnitID = id then
-                        {card with Damage = max 0<health> (card.Damage - 1<health>)}
+                        decrementCardDamage card
                     else
                         card
                     )
@@ -802,8 +807,8 @@ let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID atta
                 lane.Pairs
                 |> List.map (fun (card1, card2) ->
                     if List.contains card1.ActiveUnitID [id1; id2] then
-                        {card1 with Damage = max 0<health> (card1.Damage - 1<health>)},
-                        {card2 with Damage = max 0<health> (card2.Damage - 1<health>)}
+                        decrementCardDamage card1,
+                        decrementCardDamage card2
                     else
                         (card1, card2)
                     )
@@ -949,17 +954,17 @@ let private createUnshuffledDeck () : (Rank * Suit) list =
     List.allPairs ranks suits
 
 let private prepareHead fn n lst =
-    let h, t = List.splitAt n lst
+    let h, t = List.splitAt (int n) lst
     fn h, t
 
-let private prepareBases nLanes lst =
+let private prepareBases (nLanes: uint) lst =
     lst
-    |> List.splitInto nLanes
-    |> createIDMap 1<LID>
+    |> List.splitInto (int nLanes)
+    |> createIDMap 1u<LID>
 
 let private prepareHands nPlayers (lst: CardID list) =
     let playerIDs =
-        createIDsToLength 1<PID> nPlayers
+        createIDsToLength 1u<PID> nPlayers
         |> List.collect (List.replicate 5)
     List.zip lst playerIDs
     |> List.groupBy (fun (_, playerID) -> playerID)
@@ -1047,7 +1052,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
             joinMaps b l
             |> Map.map (fun _ (bases, lane) ->
                 let troopKnowledge =
-                    createIDsToLength 1<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -1068,7 +1073,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
             l
             |> Map.map (fun laneID lane ->
                 let troopKnowledge =
-                    createIDsToLength 1<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -1093,7 +1098,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
             l
             |> Map.map (fun laneID lane ->
                 let troopKnowledge =
-                    createIDsToLength 1<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> turnInProgress.NPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -1214,7 +1219,7 @@ let private getPlayActionsInfo gameState =
         Map.find playerID hc
     | HandsEmpty _ ->
         List.empty
-    |> List.allPairs (createIDsToLength 1<LID> (Map.count gameState.CardsState.Board.Lanes))
+    |> List.allPairs (createIDsToLength 1u<LID> (gameState.CardsState.Board.Lanes |> Map.count |> uint))
     |> List.map (fun (laneID, {HandCardID = HandCardID id}) ->
         Play (playerID, id, laneID)
         )
@@ -1381,7 +1386,7 @@ let private getPossibleActionPairs (gameState: GameState) =
         match gs with
         | {CardsState = cs; TurnState = ts; TurnStage = ActionChoice} ->
             let currentPlayer = ts.CurrentPlayer
-            if ts.ActionsLeft = 0<action> then
+            if ts.ActionsLeft = 0u<action> then
                 TurnActionChoicePair (cs, ts, EndTurn currentPlayer)
                 |> List.singleton
             else
@@ -1546,11 +1551,11 @@ let private resolveReturnDamage playerID laneID attackerIDs targetCardID cardsSt
     let gameState = {CardsState = cardsState; TurnState = turnState; TurnStage = MidPassivePowerChoice midPassivePowerChoiceContext}
     let newState =
         gameState.CardsState
-        |> damageCard (UnitID targetCardID) 1<health> laneID
+        |> damageCard (UnitID targetCardID) 1u<health> laneID
     match attackerIDs with
     | SingleCardID id ->
         newState
-        |> damageCard (UnitID id) 1<health> laneID
+        |> damageCard (UnitID id) 1u<health> laneID
         |> changeCardsState gameState
         |> toActionChoice
         |> triggerTargetInactiveDeathPowers
@@ -1576,7 +1581,7 @@ let private executeMidPassivePowerChoice midPowerChoice cardsState turnState mid
             match target.Abilities.OnDamaged with
             | [] ->
                 gameState.CardsState
-                |> damageCard (UnitID targetCardID) 1<health> laneID
+                |> damageCard (UnitID targetCardID) 1u<health> laneID
                 |> changeCardsState gameState
                 |> toActionChoice
                 |> triggerTargetInactiveDeathPowers
@@ -1588,7 +1593,7 @@ let private executeMidPassivePowerChoice midPowerChoice cardsState turnState mid
                 failwithf "Unrecognised OnDamaged contents: %A" target.Abilities.OnDamaged
         | None ->
             gameState.CardsState
-            |> damageCard (UnitID targetCardID) 1<health> laneID
+            |> damageCard (UnitID targetCardID) 1u<health> laneID
             |> changeCardsState gameState
             |> toActionChoice
             |> triggerTargetInactiveDeathPowers
@@ -1596,7 +1601,7 @@ let private executeMidPassivePowerChoice midPowerChoice cardsState turnState mid
             |> toActionChoice
     | TwinStrikeRetaliatePairChoice (playerID, laneID, powerCardID, targetCardID, whichID) ->
         gameState.CardsState
-        |> damageCard (UnitID whichID) 1<health> laneID
+        |> damageCard (UnitID whichID) 1u<health> laneID
         |> changeCardsState gameState
         |> toActionChoice
         |> triggerTargetInactiveDeathPowers
@@ -1752,12 +1757,12 @@ let private resolveInstantNonTargetAbility event cardsState turnState =
     | Discard n -> cardsState, turnState, Some (MidAbilityChoice (DiscardChoiceContext (playerID, cardID)))
     | ViewInactive n -> cardsState, turnState, Some (MidAbilityChoice (ForesightChoiceContext (playerID, cardID)))
     | FreezeEnemiesInLane -> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None
-    | HealAllAllies n -> healOwnUnits playerID ((int n)*1<health>) cardsState, turnState, None
+    | HealAllAllies n -> healOwnUnits playerID (n*1u<health>) cardsState, turnState, None
     | MayMoveAllyToOwnLane -> cardsState, turnState, Some (MidAbilityChoice (MoveChoiceContext (playerID, laneID, cardID)))
     | ExtraActions n ->
-        let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + (int n)*1<action>}
+        let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
         cardsState, newTurnState, None
-    | ChangeMaxAttacksThisTurn n -> setMaxCardActions cardID 2<action> laneID cardsState, turnState, None
+    | ChangeMaxAttacksThisTurn n -> setMaxCardActions cardID 2u<action> laneID cardsState, turnState, None
     | ActivateAlliesInLane -> flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID (ActiveUnitID cardID) cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
         addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (ActiveUnitID cardID) cardsState turnState
@@ -1793,7 +1798,7 @@ let rec private processResolutionStack cardsState turnState (maybeResolutionStac
                 EpochEvents =
                     activationPowerContexts
                     |> NonEmptyList.toList
-                    |> createIDMap 1<EID>
+                    |> createIDMap 1u<EID>
                     |> NonEmptyMap.fromMap
                 ResolutionStack = NonEmptyList.tryFromList t
                 }
@@ -1891,11 +1896,11 @@ let private getBonusDefenderDamage attackerAbilities targetAbilities targetInfo 
         attackerAbilities.OnAttack
         |> List.fold (fun acc ability ->
             match ability with
-            | ExtraDamageAgainstExtraMaxHealth n -> acc + (int n)*1<health>
+            | ExtraDamageAgainstExtraMaxHealth n -> acc + n*1u<health>
             | _ -> acc
-        ) 0<health>
+        ) 0u<health>
     else
-        0<health>
+        0u<health>
 
 let private getTargetIDFromTargetInfo targetInfo =
     match targetInfo with
@@ -1906,9 +1911,9 @@ let private getTargetIDFromTargetInfo targetInfo =
 
 let private getAttackerSelfDamage attackerAbilities targetAbilities =
     if not (List.contains (DefendAbility ReturnDamage) attackerAbilities.Ignores) && (List.contains ReturnDamage targetAbilities.OnDamaged) then
-        1<health>
+        1u<health>
     else
-        0<health>
+        0u<health>
 
 let private getSingleAttackInfo attackerID targetInfo lane =
     let targetID = getTargetIDFromTargetInfo targetInfo
@@ -1934,7 +1939,7 @@ let private getSingleAttackInfo attackerID targetInfo lane =
             | ActiveUnit {Abilities = abilities} ->
                 abilities
             )
-    let baseDefenderDamage = 1<health>
+    let baseDefenderDamage = 1u<health>
     let bonusDefenderDamage = getBonusDefenderDamage attackerAbilities targetAbilities targetInfo
     let selfDamage = getAttackerSelfDamage attackerAbilities targetAbilities
     targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
@@ -1965,7 +1970,7 @@ let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
             | ActiveUnit {Abilities = abilities} ->
                 abilities
             )
-    let baseDefenderDamage = 2<health>
+    let baseDefenderDamage = 2u<health>
     let bonusDefenderDamage = getBonusDefenderDamage attackerAbilities targetAbilities targetInfo
     let selfDamage = getAttackerSelfDamage attackerAbilities targetAbilities
     targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
@@ -2007,7 +2012,7 @@ let private executeCreatePairAction laneID cardID1 cardID2 cardsState turnState 
     }
 
 let private decrementActionsLeft (turnState: TurnInProgress) =
-    {turnState with ActionsLeft = turnState.ActionsLeft - 1<action>}
+    {turnState with ActionsLeft = turnState.ActionsLeft - 1u<action>}
 
 let private executeTurnAction action cardsState turnState =
     let ts = decrementActionsLeft turnState
@@ -2088,8 +2093,8 @@ let private timeoutOwnedFreezeStates playerID cardsState =
 
 let private resetAllCardActionsUsedInLane lane =
     {lane with
-        ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0<action>})
-        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> {card1 with ActionsSpent = 0<action>}, {card2 with ActionsSpent = 0<action>})
+        ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0u<action>})
+        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> {card1 with ActionsSpent = 0u<action>}, {card2 with ActionsSpent = 0u<action>})
         }
 let private resetAllCardActionsUsed cardsState =
     let board = cardsState.Board
@@ -2099,7 +2104,7 @@ let private resetAllCardActionsUsed cardsState =
     {cardsState with Board = {board with Lanes = newLanes}}
 
 let private resetMaxActions activeUnit =
-    {activeUnit with MaxActions = 1<action>}
+    {activeUnit with MaxActions = 1u<action>}
 let private resetMaxActionsInLane lane =
     {lane with
         ActiveUnits = lane.ActiveUnits |> List.map resetMaxActions
@@ -2137,13 +2142,13 @@ let private cancelPowerChoiceIfNoChoices state actionPairs =
 
 let private executeEndingTurnAction cardsState turnState =
     let nextPlayer =
-        if int turnState.CurrentPlayer = turnState.NPlayers then
-            1<PID>
+        if turnState.CurrentPlayer = turnState.NPlayers*1u<PID> then
+            1u<PID>
         else
-            turnState.CurrentPlayer + 1<PID>
+            turnState.CurrentPlayer + 1u<PID>
     let actions, nextFutureActionCounts =
         match turnState.FutureActionCounts with
-        | [] -> 3<action>, []
+        | [] -> 3u<action>, []
         | h :: t -> h, t
     GameStateBetweenTurns {
         CardsState =
@@ -2240,12 +2245,12 @@ let rec private makeNextActionInfo actionPair =
         Capability = capability
         }
 
-let private createGame nPlayers nLanes =
+let private createGame (nPlayers: uint) (nLanes: uint) =
     let shuffledDeck =
         createUnshuffledDeck()
         |> shuffle
     let cardIDs =
-        createIDs 1<CID> shuffledDeck
+        createIDs 1u<CID> shuffledDeck
     let cardIndices =
         shuffledDeck
         |> List.zip cardIDs
@@ -2255,10 +2260,10 @@ let private createGame nPlayers nLanes =
         |> prepareHead (prepareBases nLanes) (nPlayers*nLanes)
     let handCards, notDeckCards =
         notBaseCards
-        |> prepareHead (prepareHands nPlayers) (5*nPlayers)
+        |> prepareHead (prepareHands nPlayers) (5u*nPlayers)
     let removed, notRemoved =
         notDeckCards
-        |> prepareHead prepareRemoved 10
+        |> prepareHead prepareRemoved 10u
     let drawPile =
         notRemoved
         |> List.map (fun id ->
@@ -2270,8 +2275,8 @@ let private createGame nPlayers nLanes =
         CardsState = {
             Board = {
                 Lanes =
-                    List.replicate nLanes emptyLane
-                    |> createIDMap 1<LID>
+                    List.replicate (int nLanes) emptyLane
+                    |> createIDMap 1u<LID>
                 Discard = List.empty
                 }
             GetAbilities = basePowers
@@ -2280,7 +2285,7 @@ let private createGame nPlayers nLanes =
                     bases
                     |> Map.map (fun _ cardIDs ->
                         cardIDs
-                        |> createIDMap 1<PID>
+                        |> createIDMap 1u<PID>
                         |> Map.toList
                         |> List.map (fun (ownerID, cardID) ->
                             let (rank, suit) = Map.find cardID cardIndices
@@ -2323,9 +2328,9 @@ let private createGame nPlayers nLanes =
                 )
             }
         TurnState = {
-            Player = 1<PID>
+            Player = 1u<PID>
             NPlayers = nPlayers
-            Actions = 2<action>
+            Actions = 2u<action>
             FutureActionCounts = List.empty
             }
         }
@@ -2336,5 +2341,5 @@ let private createGame nPlayers nLanes =
     InProgress (displayInfo, nextActions)
 
 let api = {
-    NewGame = fun () -> createGame 2 3
+    NewGame = fun () -> createGame 2u 3u
 }

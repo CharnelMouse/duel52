@@ -29,12 +29,12 @@ type Suit =
 [<Measure>] type EID
 [<Measure>] type action
  
-type Damage = int<health>
-type PlayerID = int<PID>
-type LaneID = int<LID>
-type CardID = int<CID>
-type EventID = int<EID>
-type Actions = int<action>
+type Damage = uint<health>
+type PlayerID = uint<PID>
+type LaneID = uint<LID>
+type CardID = uint<CID>
+type EventID = uint<EID>
+type Actions = uint<action>
 type UnitIDs =
 | SingleCardID of CardID
 | PairIDs of CardID * CardID
