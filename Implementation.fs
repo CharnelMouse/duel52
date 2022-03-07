@@ -5,6 +5,228 @@ open NonEmptyMap
 open EventStack
 open PowerMaps
 
+type private RemovedCardID = RemovedCardID of CardID
+type private DeckCardID = DeckCardID of CardID
+type private HandCardID = HandCardID of CardID
+type private BaseCardID = BaseCardID of CardID
+type private InactiveUnitID = InactiveUnitID of CardID
+type private ActiveUnitID = ActiveUnitID of CardID
+type private PairedUnitID = PairedUnitID of CardID
+type private UnitID = UnitID of CardID
+type private DiscardedCardID = DiscardedCardID of CardID
+type private ForesightTargetID = ForesightTargetID of CardID
+type private AttackerIDs =
+| SingleAttackerID of ActiveUnitID
+| PairAttackerIDs of PairedUnitID * PairedUnitID
+
+type private RemovedCard = {
+    RemovedCardID: RemovedCardID
+    Rank: Rank
+    Suit: Suit
+}
+type private DeckCard = {
+    DeckCardID: DeckCardID
+    Rank: Rank
+    Suit: Suit
+}
+type private HandCard = {
+    HandCardID: HandCardID
+    Rank: Rank
+    Suit: Suit
+    Abilities: Abilities
+    Owner: PlayerID
+}
+type private BaseCard = {
+    BaseCardID: BaseCardID
+    Rank: Rank
+    Suit: Suit
+    Abilities: Abilities
+    Owner: PlayerID
+    KnownBy: PlayerID Set
+}
+
+type private FreezeStatus =
+| FrozenBy of PlayerID
+| NotFrozen
+
+type private InactiveUnit = {
+    InactiveUnitID: InactiveUnitID
+    Rank: Rank
+    Suit: Suit
+    Abilities: Abilities
+    Owner: PlayerID
+    KnownBy: PlayerID Set
+    Damage: Damage
+    FreezeStatus: FreezeStatus
+}
+type private ActiveUnit = {
+    ActiveUnitID: ActiveUnitID
+    Rank: Rank
+    Suit: Suit
+    Abilities: Abilities
+    Owner: PlayerID
+    Damage: Damage
+    ActionsSpent: Actions
+    MaxActions: Actions
+    FreezeStatus: FreezeStatus
+}
+type private PairedUnit = {
+    PairedUnitID: PairedUnitID
+    Suit: Suit
+    Damage: Damage
+    ActionsSpent: Actions
+    MaxActions: Actions
+    FreezeStatus: FreezeStatus
+}
+type private FullPairedUnit = {
+    PairedUnit: PairedUnit
+    Rank: Rank
+    Abilities: Abilities
+    Owner: PlayerID
+}
+type private ActiveCard =
+| Solo of ActiveUnit
+| Paired of FullPairedUnit
+type private UnitCard =
+| InactiveUnit of InactiveUnit
+| ActiveUnit of ActiveUnit
+| PairedUnit of FullPairedUnit
+type private Pair = {
+    Cards: PairedUnit * PairedUnit
+    Rank: Rank
+    Abilities: Abilities
+    Owner: PlayerID
+}
+type private FaceDownDiscardedCard = {
+    DiscardedCardID: DiscardedCardID
+    Rank: Rank
+    Suit: Suit
+    KnownBy: PlayerID Set
+}
+type private FaceUpDiscardedCard = {
+    DiscardedCardID: DiscardedCardID
+    Rank: Rank
+    Suit: Suit
+}
+type private DiscardedCard =
+| FaceDownDiscardedCard of FaceDownDiscardedCard
+| FaceUpDiscardedCard of FaceUpDiscardedCard
+type private CardConverter<'From, 'To> = 'From -> 'To
+
+type private Lane = {
+    InactiveUnits: InactiveUnit list
+    ActiveUnits: ActiveUnit list
+    Pairs: Pair list
+}
+type private LaneControl =
+| Contested
+| Empty
+| Won of PlayerID
+
+type private Board = {
+    Lanes: Map<LaneID, Lane>
+    Discard: DiscardedCard list
+}
+
+type private EarlyGameInfo = {
+    Bases: Map<LaneID, BaseCard list>
+    DrawPile: DeckCard NonEmptyList
+    HandCards: Map<PlayerID, HandCard list>
+}
+type private PostDrawGameInfo = {
+    HandCards: Map<PlayerID, HandCard list>
+    LaneWins: Map<LaneID, PlayerID>
+}
+type private PostHandGameInfo = {
+    LaneWins: Map<LaneID, PlayerID>
+}
+type private GameStage =
+| Early of EarlyGameInfo
+| DrawPileEmpty of PostDrawGameInfo
+| HandsEmpty of PostHandGameInfo
+
+type private CardsState = {
+    Board: Board
+    GetAbilities: GetAbilities
+    GameStage: GameStage
+    Removed: RemovedCard Set
+}
+
+type private CardRemover<'T, 'TID> = 'TID -> LaneID -> CardsState -> 'T * CardsState
+type private CardPairRemover<'T, 'TID> = 'TID -> 'TID -> LaneID -> CardsState -> 'T * 'T * CardsState
+type private CardsRemover<'T, 'TID> = 'TID list -> LaneID -> CardsState -> 'T list * CardsState
+type private CardAdder<'T> = 'T -> LaneID -> CardsState -> CardsState
+type private CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
+
+type private PlayerReady = {
+    Player: PlayerID
+    NPlayers: uint
+    Actions: Actions
+    FutureActionCounts: Actions list
+}
+type private TurnInProgress = {
+    CurrentPlayer: PlayerID
+    NPlayers: uint
+    ActionsLeft: Actions
+    FutureActionCounts: Actions list
+}
+
+type private TriggerEvent = InstantNonTargetAbility * PlayerID * LaneID * CardID
+type private ResolutionEpoch =
+| OrderChoiceEpoch of ActivationPowerContext epoch
+| OrderedTriggerEpoch of TriggerEvent epoch
+| MidAbilityChoice of MidActivationPowerChoiceContext
+type private ResolutionStack = ResolutionEpoch nonEmptyList
+
+type private MidActivationPowerChoice = {
+    ChoiceContext: MidActivationPowerChoiceContext
+    ResolutionStack: ResolutionStack option
+}
+type private StackChoice = {
+    EpochEvents: NonEmptyMap<EventID, ActivationPowerContext>
+    ResolutionStack: ResolutionStack option
+}
+type private TurnStage =
+| MidPassivePowerChoice of MidPassivePowerChoiceContext
+| MidActivationPowerChoice of MidActivationPowerChoice
+| StackChoice of StackChoice
+| ActionChoice
+
+type private GameStateBetweenTurns = {
+    CardsState: CardsState
+    TurnState: PlayerReady
+}
+type private GameStateDuringTurn = {
+    CardsState: CardsState
+    TurnState: TurnInProgress
+    TurnStage: TurnStage
+}
+type private GameStateWon = {
+    EndLanes: Map<LaneID, Lane>
+    Winner: PlayerID
+    LaneWins: Map<LaneID, PlayerID>
+}
+type private GameStateTied = {
+    EndLanes: Map<LaneID, Lane>
+    LaneWins: Map<LaneID, PlayerID>
+}
+type private GameState =
+| GameStateDuringTurn of GameStateDuringTurn
+| GameStateBetweenTurns of GameStateBetweenTurns
+| GameStateWon of GameStateWon
+| GameStateTied of GameStateTied
+
+type private ActionPair =
+| MidActivationPowerChoicePair of CardsState * TurnInProgress * MidActivationPowerChoice * MidActivationPowerChoiceInfo
+| MidPassivePowerChoicePair of CardsState * TurnInProgress * MidPassivePowerChoiceContext * MidPassivePowerChoiceInfo
+| StackChoicePair of CardsState * TurnInProgress * StackChoice * StackChoiceInfo
+| TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
+| StartTurnPair of GameStateBetweenTurns * PlayerID
+
+type private GetInProgress = GameState -> ActionResult
+type private MakeUIOutput = GetInProgress -> ActionPair -> CapabilityInfo<ActionInfo, ActionResult>
+type private CreateGame = uint -> uint -> ActionResult
+
 // Give very large lists if passed a zero length
 let private createIDs start lst =
     [for i in 0u..uint (List.length lst - 1) -> start + LanguagePrimitives.UInt32WithMeasure i]
@@ -21,136 +243,19 @@ let private uSubtract amount n =
     n - min n amount
 let private twoToList (x, y) = [x; y]
 
-type private RemovedCardID = RemovedCardID of CardID
-type private DeckCardID = DeckCardID of CardID
-type private HandCardID = HandCardID of CardID
-type private BaseCardID = BaseCardID of CardID
-type private InactiveUnitID = InactiveUnitID of CardID
-type private ActiveUnitID = ActiveUnitID of CardID
-type private PairedUnitID = PairedUnitID of CardID
-type private UnitID = UnitID of CardID
-type private DiscardedCardID = DiscardedCardID of CardID
-
-type private ForesightTargetID = ForesightTargetID of CardID
-type private AttackerIDs =
-| SingleAttackerID of ActiveUnitID
-| PairAttackerIDs of PairedUnitID * PairedUnitID
 let private transferAttackerIDs attackerIDs =
     match attackerIDs with
     | SingleAttackerID (ActiveUnitID id) -> SingleCardID id
     | PairAttackerIDs (PairedUnitID id1, PairedUnitID id2) -> PairIDs (id1, id2)
 
-type private RemovedCard = {
-    RemovedCardID: RemovedCardID
-    Rank: Rank
-    Suit: Suit
-}
-
-type private DeckCard = {
-    DeckCardID: DeckCardID
-    Rank: Rank
-    Suit: Suit
-}
-
-type private HandCard = {
-    HandCardID: HandCardID
-    Rank: Rank
-    Suit: Suit
-    Abilities: Abilities
-    Owner: PlayerID
-}
 let private getHandCardInfo {HandCardID = HandCardID id; Rank = r; Suit = s; Abilities = a} =
     HandCardInfo (id, r, s, a.Name)
 
-type private BaseCard = {
-    BaseCardID: BaseCardID
-    Rank: Rank
-    Suit: Suit
-    Abilities: Abilities
-    Owner: PlayerID
-    KnownBy: PlayerID Set
-}
 let private getBaseKnowledge playerID (baseCard: BaseCard) =
     if Set.contains playerID baseCard.KnownBy then
         KnownBaseCard (baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name)
     else
         UnknownBaseCard baseCard.Owner
-
-type private FreezeStatus =
-| FrozenBy of PlayerID
-| NotFrozen
-
-type private InactiveUnit = {
-    InactiveUnitID: InactiveUnitID
-    Rank: Rank
-    Suit: Suit
-    Abilities: Abilities
-    Owner: PlayerID
-    KnownBy: PlayerID Set
-    Damage: Damage
-    FreezeStatus: FreezeStatus
-}
-
-type private ActiveUnit = {
-    ActiveUnitID: ActiveUnitID
-    Rank: Rank
-    Suit: Suit
-    Abilities: Abilities
-    Owner: PlayerID
-    Damage: Damage
-    ActionsSpent: Actions
-    MaxActions: Actions
-    FreezeStatus: FreezeStatus
-}
-
-type private PairedUnit = {
-    PairedUnitID: PairedUnitID
-    Suit: Suit
-    Damage: Damage
-    ActionsSpent: Actions
-    MaxActions: Actions
-    FreezeStatus: FreezeStatus
-}
-
-type private FullPairedUnit = {
-    PairedUnit: PairedUnit
-    Rank: Rank
-    Abilities: Abilities
-    Owner: PlayerID
-}
-
-type private ActiveCard =
-| Solo of ActiveUnit
-| Paired of FullPairedUnit
-
-type private UnitCard =
-| InactiveUnit of InactiveUnit
-| ActiveUnit of ActiveUnit
-| PairedUnit of FullPairedUnit
-
-type private Pair = {
-    Cards: PairedUnit * PairedUnit
-    Rank: Rank
-    Abilities: Abilities
-    Owner: PlayerID
-}
-
-type private FaceDownDiscardedCard = {
-    DiscardedCardID: DiscardedCardID
-    Rank: Rank
-    Suit: Suit
-    KnownBy: PlayerID Set
-}
-
-type private FaceUpDiscardedCard = {
-    DiscardedCardID: DiscardedCardID
-    Rank: Rank
-    Suit: Suit
-}
-
-type private DiscardedCard =
-| FaceDownDiscardedCard of FaceDownDiscardedCard
-| FaceUpDiscardedCard of FaceUpDiscardedCard
 
 let private (|Exhausted|Ready|) (card: ActiveCard) =
     match card with
@@ -187,8 +292,6 @@ let private isDead (card: UnitCard) =
     match card with
     | Alive -> false
     | Dead -> true
-
-type private CardConverter<'From, 'To> = 'From -> 'To
 
 let private deckToHandCard (getAbilities: GetAbilities) playerID : CardConverter<DeckCard, HandCard> = fun deckCard ->
     let {DeckCardID = DeckCardID id} = deckCard
@@ -319,22 +422,11 @@ let private pairedToActiveUnit: CardConverter<Rank * Abilities * PlayerID * Pair
         FreezeStatus = card.FreezeStatus
     }
 
-type private Lane = {
-    InactiveUnits: InactiveUnit list
-    ActiveUnits: ActiveUnit list
-    Pairs: Pair list
-}
-
 let private emptyLane = {
     InactiveUnits = List.empty
     ActiveUnits = List.empty
     Pairs = List.empty
 }
-
-type private LaneControl =
-| Contested
-| Empty
-| Won of PlayerID
 
 let private laneSolePresence (lane: Lane) =
     let cardOwners =
@@ -348,11 +440,6 @@ let private laneSolePresence (lane: Lane) =
     | [] -> Empty
     | [(controller, _)] -> Won controller
     | _ -> Contested
-
-type private Board = {
-    Lanes: Map<LaneID, Lane>
-    Discard: DiscardedCard list
-}
 
 let private findDeadCardsInLane laneID board =
     let lane = Map.find laneID board.Lanes
@@ -373,39 +460,6 @@ let private findDeadCardIDsInLane laneID board =
         let {PairedUnit = {PairedUnitID = PairedUnitID id}} = card
         if isDead (PairedUnit card) then Some (UnitID id) else None
         ))
-
-type private EarlyGameInfo = {
-    Bases: Map<LaneID, BaseCard list>
-    DrawPile: DeckCard NonEmptyList
-    HandCards: Map<PlayerID, HandCard list>
-}
-
-type private PostDrawGameInfo = {
-    HandCards: Map<PlayerID, HandCard list>
-    LaneWins: Map<LaneID, PlayerID>
-}
-
-type private PostHandGameInfo = {
-    LaneWins: Map<LaneID, PlayerID>
-}
-
-type private GameStage =
-| Early of EarlyGameInfo
-| DrawPileEmpty of PostDrawGameInfo
-| HandsEmpty of PostHandGameInfo
-
-type private CardsState = {
-    Board: Board
-    GetAbilities: GetAbilities
-    GameStage: GameStage
-    Removed: RemovedCard Set
-}
-
-type private CardRemover<'T, 'TID> = 'TID -> LaneID -> CardsState -> 'T * CardsState
-type private CardPairRemover<'T, 'TID> = 'TID -> 'TID -> LaneID -> CardsState -> 'T * 'T * CardsState
-type private CardsRemover<'T, 'TID> = 'TID list -> LaneID -> CardsState -> 'T list * CardsState
-type private CardAdder<'T> = 'T -> LaneID -> CardsState -> CardsState
-type private CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
 
 let private removeCardFromInactiveUnits: CardRemover<InactiveUnit, InactiveUnitID> = fun (InactiveUnitID cardID) laneID cardsState ->
     let board = cardsState.Board
@@ -767,73 +821,6 @@ let private flipBasesOnBoard bases ({Lanes = lanes; Discard = discard}: Board) =
         Discard = discard
         }
 
-type private PlayerReady = {
-    Player: PlayerID
-    NPlayers: uint
-    Actions: Actions
-    FutureActionCounts: Actions list
-}
-
-type private TurnInProgress = {
-    CurrentPlayer: PlayerID
-    NPlayers: uint
-    ActionsLeft: Actions
-    FutureActionCounts: Actions list
-}
-
-type private TriggerEvent = InstantNonTargetAbility * PlayerID * LaneID * CardID
-
-type private ResolutionEpoch =
-| OrderChoiceEpoch of ActivationPowerContext epoch
-| OrderedTriggerEpoch of TriggerEvent epoch
-| MidAbilityChoice of MidActivationPowerChoiceContext
-
-type private ResolutionStack = ResolutionEpoch nonEmptyList
-
-type private MidActivationPowerChoice = {
-    ChoiceContext: MidActivationPowerChoiceContext
-    ResolutionStack: ResolutionStack option
-}
-
-type private StackChoice = {
-    EpochEvents: NonEmptyMap<EventID, ActivationPowerContext>
-    ResolutionStack: ResolutionStack option
-}
-
-type private TurnStage =
-| MidPassivePowerChoice of MidPassivePowerChoiceContext
-| MidActivationPowerChoice of MidActivationPowerChoice
-| StackChoice of StackChoice
-| ActionChoice
-
-type private GameStateBetweenTurns = {
-    CardsState: CardsState
-    TurnState: PlayerReady
-}
-
-type private GameStateDuringTurn = {
-    CardsState: CardsState
-    TurnState: TurnInProgress
-    TurnStage: TurnStage
-}
-
-type private GameStateWon = {
-    Lanes: Map<LaneID, Lane>
-    Winner: PlayerID
-    LaneWins: Map<LaneID, PlayerID>
-}
-
-type private GameStateTied = {
-    Lanes: Map<LaneID, Lane>
-    LaneWins: Map<LaneID, PlayerID>
-}
-
-type private GameState =
-| GameStateDuringTurn of GameStateDuringTurn
-| GameStateBetweenTurns of GameStateBetweenTurns
-| GameStateWon of GameStateWon
-| GameStateTied of GameStateTied
-
 let private incrementActionsLeft (gameState: GameStateDuringTurn) =
     {gameState with
         TurnState = {
@@ -1033,7 +1020,7 @@ let private checkForGameEnd gameState =
                     lst
                     |> List.maxBy (fun (_, n) -> n)
                 if leadingWins >= 2 then
-                    GameStateWon {Winner = leadingPlayer; Lanes = lanes; LaneWins = laneWins}
+                    GameStateWon {Winner = leadingPlayer; EndLanes = lanes; LaneWins = laneWins}
                 else
                     let contestedLanes =
                         lanes
@@ -1051,7 +1038,7 @@ let private checkForGameEnd gameState =
                                 false
                             )
                     if Map.isEmpty contestedLanes then
-                        GameStateTied {Lanes = lanes; LaneWins = laneWins}
+                        GameStateTied {EndLanes = lanes; LaneWins = laneWins}
                     else
                         GameStateDuringTurn gameState
 
@@ -1550,13 +1537,6 @@ let private getPairActionsInfo gameState =
         |> getPairActionsInfoFromUnits playerID laneID
         )
 
-type private ActionPair =
-| MidActivationPowerChoicePair of CardsState * TurnInProgress * MidActivationPowerChoice * MidActivationPowerChoiceInfo
-| MidPassivePowerChoicePair of CardsState * TurnInProgress * MidPassivePowerChoiceContext * MidPassivePowerChoiceInfo
-| StackChoicePair of CardsState * TurnInProgress * StackChoice * StackChoiceInfo
-| TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
-| StartTurnPair of GameStateBetweenTurns * PlayerID
-    
 let private getPossibleActionPairs (gameState: GameState) =
     match gameState with
     | GameStateBetweenTurns gs ->
@@ -2423,9 +2403,7 @@ let private executeStackChoice cardsState turnState stackChoice choiceInfo =
             TurnStage = StackChoice sc
         }
 
-type private GetInProgress = GameState -> ActionResult
-
-let rec private makeNextActionInfo (inProgress: GetInProgress) actionPair =
+let rec private makeNextActionInfo: MakeUIOutput = fun inProgress actionPair ->
     // Want to do some checking that we have the right player
     let newState, action =
         match actionPair with
@@ -2470,7 +2448,7 @@ let rec private inProgress: GetInProgress = fun gameState ->
         |> List.map (makeNextActionInfo inProgress)
     InProgress (getDisplayInfo gameState, nextActions)
 
-let private createGame (nPlayers: uint) (nLanes: uint) =
+let private createGame: CreateGame = fun nPlayers nLanes ->
     let getAbilities = basePowers
     let shuffledDeck =
         createUnshuffledDeck()
