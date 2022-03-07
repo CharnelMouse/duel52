@@ -2146,28 +2146,25 @@ let private resetAllMaxCardActions cardsState =
         |> Map.map (fun _ lane -> resetMaxActionsInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
-let private cancelPowerChoiceIfNoChoices state actionPairs =
+let private cancelPowerChoiceIfNoChoices state =
+    let actionPairs = getPossibleActionPairs state
     match state, actionPairs with
     | GameStateDuringTurn gs, [] ->
         match gs.TurnStage with
         | MidActivationPowerChoice mapc ->
-            let cancelledState =
-                toActionChoice gs
-                |> triggerTargetInactiveDeathPowers
-                |> moveDeadCardsToDiscard
-                |> GameStateDuringTurn
-            cancelledState, getPossibleActionPairs cancelledState
+            toActionChoice gs
+            |> triggerTargetInactiveDeathPowers
+            |> moveDeadCardsToDiscard
+            |> GameStateDuringTurn
         | MidPassivePowerChoice mppcc ->
-            let cancelledState =
-                toActionChoice gs
-                |> triggerTargetInactiveDeathPowers
-                |> moveDeadCardsToDiscard
-                |> GameStateDuringTurn
-            cancelledState, getPossibleActionPairs cancelledState
+            toActionChoice gs
+            |> triggerTargetInactiveDeathPowers
+            |> moveDeadCardsToDiscard
+            |> GameStateDuringTurn
         | _ ->
-            state, actionPairs
+            state
     | _ ->
-        state, actionPairs
+        state
 
 let private executeEndingTurnAction cardsState turnState =
     let nextPlayer =
@@ -2227,7 +2224,9 @@ let private executeStackChoice cardsState turnState stackChoice choiceInfo =
             TurnStage = StackChoice sc
         }
 
-let rec private makeNextActionInfo actionPair =
+type private GetInProgress = GameState -> ActionResult
+
+let rec private makeNextActionInfo (inProgress: GetInProgress) actionPair =
     // Want to do some checking that we have the right player
     let newState, action =
         match actionPair with
@@ -2257,22 +2256,20 @@ let rec private makeNextActionInfo actionPair =
             {startTurn with CardsState = tryDrawCard playerID startTurn.CardsState}
             |> GameStateDuringTurn,
             StartTurn playerID
-    let checkedGameState, checkedPossibleActionPairs =
-        cancelPowerChoiceIfNoChoices newState (getPossibleActionPairs newState)
-    let newDisplayInfo = getDisplayInfo checkedGameState
+    let checkedGameState = cancelPowerChoiceIfNoChoices newState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
     // generating the entire game space, blowing the stack
-    let capability() =
-        InProgress (
-            newDisplayInfo,
-            checkedPossibleActionPairs
-            |> List.map makeNextActionInfo
-            )
+    let capability() = inProgress checkedGameState
     {
         Action = action
         Capability = capability
         }
+let rec private inProgress: GetInProgress = fun gameState ->
+    let nextActions =
+        getPossibleActionPairs gameState
+        |> List.map (makeNextActionInfo inProgress)
+    InProgress (getDisplayInfo gameState, nextActions)
 
 let private createGame (nPlayers: uint) (nLanes: uint) =
     let getAbilities = basePowers
@@ -2322,10 +2319,7 @@ let private createGame (nPlayers: uint) (nLanes: uint) =
             FutureActionCounts = List.empty
             }
         }
-    let nextActions =
-        getPossibleActionPairs gameState
-        |> List.map makeNextActionInfo
-    InProgress (getDisplayInfo gameState, nextActions)
+    inProgress gameState
 
 let api = {
     NewGame = fun () -> createGame 2u 3u

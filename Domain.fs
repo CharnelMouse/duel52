@@ -212,14 +212,17 @@ type ActionInfo =
 | TurnActionInfo of TurnActionInfo
 | StartTurn of PlayerID
 
-type ActionCapability = unit -> ActionResult
-and NextActionInfo = {
-    Action: ActionInfo
-    Capability: ActionCapability
+type Capability<'T> = unit -> 'T
+type CapabilityInfo<'Action, 'T> = {
+    Action: 'Action
+    Capability: Capability<'T>
 }
-and ActionResult =
-| InProgress of DisplayInfo * NextActionInfo list
+
+type ActionResult =
+| InProgress of DisplayInfo * CapabilityInfo<ActionInfo, ActionResult> list
 | Exit
+type NextActionInfo = CapabilityInfo<ActionInfo, ActionResult>
+type ActionCapability = Capability<ActionResult>
 
 type API = {
     NewGame: unit -> ActionResult
