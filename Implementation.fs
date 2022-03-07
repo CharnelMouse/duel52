@@ -957,22 +957,51 @@ let private prepareHead fn n lst =
     let h, t = List.splitAt (int n) lst
     fn h, t
 
-let private prepareBases (nLanes: uint) lst =
+let private prepareBases getAbilities (nLanes: uint) lst =
     lst
     |> List.splitInto (int nLanes)
     |> createIDMap 1u<LID>
+    |> Map.map (fun _ cardInfo ->
+        cardInfo
+        |> zipIDs 1u<PID>
+        |> List.map (fun (ownerID, (cardID, rank, suit)) ->
+            {
+                BaseCardID = BaseCardID cardID
+                Rank = rank
+                Suit = suit
+                Abilities = getAbilities rank
+                Owner = ownerID
+                KnownBy = Set.empty
+            }
+        )
+    )
 
-let private prepareHands nPlayers (lst: CardID list) =
+let private prepareHands getAbilities nPlayers lst =
     let playerIDs =
         createIDsToLength 1u<PID> nPlayers
         |> List.collect (List.replicate 5)
-    List.zip lst playerIDs
-    |> List.groupBy (fun (_, playerID) -> playerID)
-    |> List.map (fun (playerID, lst) -> playerID, List.map (fun (cardID, _) -> cardID) lst)
+    List.zip playerIDs lst
+    |> List.groupBy (fun (playerID, _) -> playerID)
+    |> List.map (fun (playerID, lst) ->
+        playerID,
+        lst
+        |> List.map (fun (playerID, (cardID, rank, suit)) -> {
+                HandCardID = HandCardID cardID
+                Owner = playerID
+                Rank = rank
+                Suit = suit
+                Abilities = getAbilities rank
+            })
+        )
     |> Map.ofList
 
 let private prepareRemoved lst =
     lst
+    |> List.map (fun (cardID, rank, suit) -> {
+        RemovedCardID = (RemovedCardID cardID)
+        Rank = rank
+        Suit = suit
+        })
     |> Set.ofList
 
 let private getActionability ({FreezeStatus = fs}: ActiveUnit) =
@@ -2246,28 +2275,27 @@ let rec private makeNextActionInfo actionPair =
         }
 
 let private createGame (nPlayers: uint) (nLanes: uint) =
+    let getAbilities = basePowers
     let shuffledDeck =
         createUnshuffledDeck()
         |> shuffle
-    let cardIDs =
-        createIDs 1u<CID> shuffledDeck
-    let cardIndices =
+    let cardIDs = createIDs 1u<CID> shuffledDeck
+    let cardInfos =
         shuffledDeck
         |> List.zip cardIDs
-        |> Map.ofList
+        |> List.map (fun (cardID, (rank, suit)) -> cardID, rank, suit)
     let bases, notBaseCards =
-        cardIDs
-        |> prepareHead (prepareBases nLanes) (nPlayers*nLanes)
+        cardInfos
+        |> prepareHead (prepareBases getAbilities nLanes) (nPlayers*nLanes)
     let handCards, notDeckCards =
         notBaseCards
-        |> prepareHead (prepareHands nPlayers) (5u*nPlayers)
+        |> prepareHead (prepareHands getAbilities nPlayers) (5u*nPlayers)
     let removed, notRemoved =
         notDeckCards
         |> prepareHead prepareRemoved 10u
     let drawPile =
         notRemoved
-        |> List.map (fun id ->
-            let (rank, suit) = Map.find id cardIndices
+        |> List.map (fun (id, rank, suit) ->
             {DeckCardID = DeckCardID id; Rank = rank; Suit = suit}
             )
         |> NonEmptyList.fromList
@@ -2279,53 +2307,13 @@ let private createGame (nPlayers: uint) (nLanes: uint) =
                     |> createIDMap 1u<LID>
                 Discard = List.empty
                 }
-            GetAbilities = basePowers
+            GetAbilities = getAbilities
             GameStage = Early {
-                Bases =
-                    bases
-                    |> Map.map (fun _ cardIDs ->
-                        cardIDs
-                        |> createIDMap 1u<PID>
-                        |> Map.toList
-                        |> List.map (fun (ownerID, cardID) ->
-                            let (rank, suit) = Map.find cardID cardIndices
-                            {
-                                BaseCardID = BaseCardID cardID
-                                Rank = rank
-                                Suit = suit
-                                Abilities = basePowers rank
-                                Owner = ownerID
-                                KnownBy = Set.empty
-                            }
-                        )
-                    )
+                Bases = bases
                 DrawPile = drawPile
-                HandCards =
-                    handCards
-                    |> Map.map (fun playerID cardIDs ->
-                        cardIDs
-                        |> List.map (fun cardID ->
-                            let (rank, suit) = Map.find cardID cardIndices
-                            {
-                                HandCardID = HandCardID cardID
-                                Rank = rank
-                                Suit = suit
-                                Abilities = basePowers rank
-                                Owner = playerID
-                            }
-                        )
-                    )
+                HandCards = handCards
             }
-            Removed =
-                removed
-                |> Set.map (fun id ->
-                    let (rank, suit) = Map.find id cardIndices
-                    {
-                        RemovedCardID = RemovedCardID id
-                        Rank = rank
-                        Suit = suit
-                    }
-                )
+            Removed = removed
             }
         TurnState = {
             Player = 1u<PID>
@@ -2334,11 +2322,10 @@ let private createGame (nPlayers: uint) (nLanes: uint) =
             FutureActionCounts = List.empty
             }
         }
-    let displayInfo = getDisplayInfo gameState
     let nextActions =
         getPossibleActionPairs gameState
         |> List.map makeNextActionInfo
-    InProgress (displayInfo, nextActions)
+    InProgress (getDisplayInfo gameState, nextActions)
 
 let api = {
     NewGame = fun () -> createGame 2u 3u
