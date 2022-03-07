@@ -298,6 +298,7 @@ type private CardsState = {
 }
 
 type private CardRemover<'T, 'TID> = 'TID -> LaneID -> CardsState -> 'T * CardsState
+type private CardPairRemover<'T, 'TID> = 'TID -> 'TID -> LaneID -> CardsState -> 'T * 'T * CardsState
 type private CardsRemover<'T, 'TID> = 'TID list -> LaneID -> CardsState -> 'T list * CardsState
 type private CardAdder<'T> = 'T -> LaneID -> CardsState -> CardsState
 type private CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
@@ -319,6 +320,18 @@ let private removeCardsFromInactiveUnits: CardsRemover<InactiveUnit, InactiveUni
         |> List.partition (fun {InactiveUnitID = id} -> List.contains id cardIDs)
     let newLane = {lane with InactiveUnits = newInactiveUnits}
     removed,
+    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+let private removeCardPairFromActiveUnits: CardPairRemover<ActiveUnit, ActiveUnitID> = fun cardID1 cardID2 laneID cardsState ->
+    let board = cardsState.Board
+    let lane = Map.find laneID board.Lanes
+    let card1, inter =
+        lane.ActiveUnits
+        |> List.partition (fun {ActiveUnitID = id} -> id = cardID1)
+    let card2, newActiveUnits =
+        inter
+        |> List.partition (fun {ActiveUnitID = id} -> id = cardID2)
+    let newLane = {lane with ActiveUnits = newActiveUnits}
+    card1.Head, card2.Head,
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 let private removeCardsFromActiveUnits: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID cardsState ->
     let board = cardsState.Board
@@ -1782,16 +1795,16 @@ let private addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (Ac
 let private resolveInstantNonTargetAbility event cardsState turnState =
     let ability, playerID, laneID, cardID = event
     match ability with
-    | Draw n -> tryDrawCard playerID cardsState, turnState, None
-    | Discard n -> cardsState, turnState, Some (MidAbilityChoice (DiscardChoiceContext (playerID, cardID)))
-    | ViewInactive n -> cardsState, turnState, Some (MidAbilityChoice (ForesightChoiceContext (playerID, cardID)))
+    | Draw -> tryDrawCard playerID cardsState, turnState, None
+    | Discard -> cardsState, turnState, Some (MidAbilityChoice (DiscardChoiceContext (playerID, cardID)))
+    | ViewInactive -> cardsState, turnState, Some (MidAbilityChoice (ForesightChoiceContext (playerID, cardID)))
     | FreezeEnemiesInLane -> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None
     | HealAllAllies n -> healOwnUnits playerID (n*1u<health>) cardsState, turnState, None
     | MayMoveAllyToOwnLane -> cardsState, turnState, Some (MidAbilityChoice (MoveChoiceContext (playerID, laneID, cardID)))
     | ExtraActions n ->
         let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
         cardsState, newTurnState, None
-    | ChangeMaxAttacksThisTurn n -> setMaxCardActions cardID 2u<action> laneID cardsState, turnState, None
+    | ChangeMaxAttacksThisTurn n -> setMaxCardActions cardID (n*1u<action>) laneID cardsState, turnState, None
     | ActivateAlliesInLane -> flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID (ActiveUnitID cardID) cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
         addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (ActiveUnitID cardID) cardsState turnState
@@ -1863,7 +1876,7 @@ let private resolveActivationPower playerID laneID (ActiveUnitID cardID) cardsSt
         |> Option.map OrderedTriggerEpoch
     processResolutionStack cardsState turnState (NonEmptyList.consOptions newEpoch stack)
 
-let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID attackedCardID) cardsState turnState =
+let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID attackedCardID) turnState cardsState =
     let lane = Map.find laneID cardsState.Board.Lanes
     let card =
         match attackerIDs with
@@ -2008,32 +2021,28 @@ let private executeSingleAttackAction playerID laneID (ActiveUnitID attackerID) 
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getSingleAttackInfo attackerID targetInfo (Map.find laneID board.Lanes)
-    let newCardsState =
-        cardsState
-        |> incrementCardActionsUsed attackerID laneID
-        |> damageCard targetID damage laneID
-        |> damageCard (UnitID attackerID) selfDamage laneID
-    resolveAttackerPassivePower playerID laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID newCardsState turnState
+    cardsState
+    |> incrementCardActionsUsed attackerID laneID
+    |> damageCard targetID damage laneID
+    |> damageCard (UnitID attackerID) selfDamage laneID
+    |> resolveAttackerPassivePower playerID laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID turnState
 
 let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo cardsState turnState =
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getPairAttackInfo attackerID1 attackerID2 targetInfo (Map.find laneID board.Lanes)
-    let newCardsState =
-        cardsState
-        |> incrementCardActionsUsed attackerID1 laneID
-        |> incrementCardActionsUsed attackerID2 laneID
-        |> damageCard targetID damage laneID
-        |> damageCard (UnitID attackerID1) selfDamage laneID
-        |> damageCard (UnitID attackerID2) selfDamage laneID
-    resolveAttackerPassivePower playerID laneID (PairAttackerIDs (ActiveUnitID attackerID1, ActiveUnitID attackerID2)) targetID cardsState turnState
+    cardsState
+    |> incrementCardActionsUsed attackerID1 laneID
+    |> incrementCardActionsUsed attackerID2 laneID
+    |> damageCard targetID damage laneID
+    |> damageCard (UnitID attackerID1) selfDamage laneID
+    |> damageCard (UnitID attackerID2) selfDamage laneID
+    |> resolveAttackerPassivePower playerID laneID (PairAttackerIDs (ActiveUnitID attackerID1, ActiveUnitID attackerID2)) targetID turnState
 
 let private executeCreatePairAction laneID cardID1 cardID2 cardsState turnState =
-    let removedUnits, newCardsState =
+    let card1, card2, newCardsState =
         cardsState
-        |> removeCardsFromActiveUnits [cardID1; cardID2] laneID
-    let card1 = removedUnits.[0]
-    let card2 = removedUnits.[1]
+        |> removeCardPairFromActiveUnits cardID1 cardID2 laneID
     {
         CardsState = addCardsToPairs (card1, card2) laneID newCardsState
         TurnState = turnState

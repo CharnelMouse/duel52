@@ -6,12 +6,12 @@ type PassiveAbility =
 | ProtectsNonTauntAlliesInLane
 
 type InstantNonTargetAbility =
-| Draw of uint
-| Discard of uint
+| Draw
+| Discard
 | HealSelf of uint
 | FullyHealSelf
 | ActivateSelf
-| ViewInactive of uint
+| ViewInactive
 | ActivateAlliesInLane
 | FreezeEnemiesInLane
 | HealAllAllies of uint
@@ -49,7 +49,7 @@ let basePowers: GetAbilities = function
     | Two ->
         {
             Name = PowerName "View"
-            OnActivation = [Draw 1u; Discard 1u]
+            OnActivation = [Draw; Discard]
             OnAttack = []
             OnDamaged = []
             OnInactiveDying = []
@@ -71,7 +71,7 @@ let basePowers: GetAbilities = function
     | Four ->
         {
             Name = PowerName "Foresight"
-            OnActivation = [ViewInactive 1u]
+            OnActivation = [ViewInactive]
             OnAttack = []
             OnDamaged = []
             OnInactiveDying = []
@@ -194,7 +194,7 @@ let soloPowers: GetAbilities = function
     | Two ->
         {
             Name = PowerName "View"
-            OnActivation = [Draw 1u; Discard 1u]
+            OnActivation = [Draw; Discard]
             OnAttack = []
             OnDamaged = []
             OnInactiveDying = []
