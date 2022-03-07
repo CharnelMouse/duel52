@@ -5,9 +5,9 @@ open NonEmptyMap
 open EventStack
 open PowerMaps
 
+// Give very large lists if passed a zero length
 let private createIDs start lst =
     [for i in 0u..uint (List.length lst - 1) -> start + LanguagePrimitives.UInt32WithMeasure i]
-
 let private createIDsToLength start len =
     [for i in 0u..(len - 1u) -> start + LanguagePrimitives.UInt32WithMeasure i]
 let private zipIDs (start: uint<'a>) lst =
@@ -16,6 +16,9 @@ let private zipIDs (start: uint<'a>) lst =
 let private createIDMap start lst =
     zipIDs start lst
     |> Map.ofList
+
+let private uSubtract amount n =
+    n - min n amount
 
 type private RemovedCardID = RemovedCardID of CardID
 type private DeckCardID = DeckCardID of CardID
@@ -422,9 +425,9 @@ let private changeCardLane cardID fromLaneID toLaneID cardsState =
     |> addCardsToActiveUnits movedActive toLaneID
 
 let private healInactiveCard amount (inactiveCard: InactiveUnit) =
-    {inactiveCard with Damage = max (inactiveCard.Damage - amount) 0u<health>}
+    {inactiveCard with Damage = uSubtract amount inactiveCard.Damage}
 let private healActiveCard amount (activeCard: ActiveUnit) =
-    {activeCard with Damage = max (activeCard.Damage - amount) 0u<health>}
+    {activeCard with Damage = uSubtract amount activeCard.Damage}
 let private fullyHealActiveCard (activeCard: ActiveUnit) =
     {activeCard with Damage = 0u<health>}
 
@@ -777,11 +780,8 @@ let private triggerTargetInactiveDeathPowers gameState =
     laneIDs
     |> List.fold (fun cs laneID -> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cs) cardsState
     |> changeCardsState gameState
-let private decrementCardDamage card =
-    if card.Damage = 0u<health> then
-        card
-    else
-        {card with Damage = card.Damage - 1u<health>}
+let private decrementCardDamage (card: ActiveUnit) =
+    {card with Damage = uSubtract 1u<health> card.Damage}
 let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID attackedID) laneID gameState =
     let board = gameState.CardsState.Board
     let lane = Map.find laneID board.Lanes
