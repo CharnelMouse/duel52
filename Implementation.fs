@@ -19,6 +19,7 @@ let private createIDMap start lst =
 
 let private uSubtract amount n =
     n - min n amount
+let private twoToList (x, y) = [x; y]
 
 type private RemovedCardID = RemovedCardID of CardID
 type private DeckCardID = DeckCardID of CardID
@@ -26,17 +27,18 @@ type private HandCardID = HandCardID of CardID
 type private BaseCardID = BaseCardID of CardID
 type private InactiveUnitID = InactiveUnitID of CardID
 type private ActiveUnitID = ActiveUnitID of CardID
+type private PairedUnitID = PairedUnitID of CardID
 type private UnitID = UnitID of CardID
 type private DiscardedCardID = DiscardedCardID of CardID
 
 type private ForesightTargetID = ForesightTargetID of CardID
 type private AttackerIDs =
 | SingleAttackerID of ActiveUnitID
-| PairAttackerIDs of ActiveUnitID * ActiveUnitID
+| PairAttackerIDs of PairedUnitID * PairedUnitID
 let private transferAttackerIDs attackerIDs =
     match attackerIDs with
     | SingleAttackerID (ActiveUnitID id) -> SingleCardID id
-    | PairAttackerIDs (ActiveUnitID id1, ActiveUnitID id2) -> PairIDs (id1, id2)
+    | PairAttackerIDs (PairedUnitID id1, PairedUnitID id2) -> PairIDs (id1, id2)
 
 type private RemovedCard = {
     RemovedCardID: RemovedCardID
@@ -101,11 +103,37 @@ type private ActiveUnit = {
     FreezeStatus: FreezeStatus
 }
 
+type private PairedUnit = {
+    PairedUnitID: PairedUnitID
+    Suit: Suit
+    Damage: Damage
+    ActionsSpent: Actions
+    MaxActions: Actions
+    FreezeStatus: FreezeStatus
+}
+
+type private FullPairedUnit = {
+    PairedUnit: PairedUnit
+    Rank: Rank
+    Abilities: Abilities
+    Owner: PlayerID
+}
+
+type private ActiveCard =
+| Solo of ActiveUnit
+| Paired of FullPairedUnit
+
 type private UnitCard =
 | InactiveUnit of InactiveUnit
 | ActiveUnit of ActiveUnit
+| PairedUnit of FullPairedUnit
 
-type private Pair = ActiveUnit * ActiveUnit
+type private Pair = {
+    Cards: PairedUnit * PairedUnit
+    Rank: Rank
+    Abilities: Abilities
+    Owner: PlayerID
+}
 
 type private FaceDownDiscardedCard = {
     DiscardedCardID: DiscardedCardID
@@ -124,16 +152,20 @@ type private DiscardedCard =
 | FaceDownDiscardedCard of FaceDownDiscardedCard
 | FaceUpDiscardedCard of FaceUpDiscardedCard
 
-let private (|Exhausted|Ready|) (card: ActiveUnit) =
-    if card.ActionsSpent >= card.MaxActions then
-        Exhausted
-    else
-        Ready
+let private (|Exhausted|Ready|) (card: ActiveCard) =
+    match card with
+    | Solo {ActionsSpent = spent; MaxActions = m}
+    | Paired {PairedUnit = {ActionsSpent = spent; MaxActions = m}} ->
+        if spent >= m then
+            Exhausted
+        else
+            Ready
 
 let private maxHealth card =
     match card with
     | InactiveUnit _ -> 2u<health>
-    | ActiveUnit {Abilities = triggers} ->
+    | ActiveUnit {Abilities = triggers}
+    | PairedUnit {Abilities = triggers} ->
         triggers.WhileActive
         |> List.fold (fun state trigger ->
             match trigger with
@@ -145,7 +177,8 @@ let private (|Dead|Alive|) (card: UnitCard) =
     let damage =
         match card with
         | InactiveUnit {Damage = damage}
-        | ActiveUnit {Damage = damage} -> damage
+        | ActiveUnit {Damage = damage}
+        | PairedUnit {PairedUnit = {Damage = damage}} -> damage
     if damage < maxHealth card then
         Alive
     else
@@ -214,6 +247,77 @@ let private unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = fun un
             Rank = rank
             Suit = suit
         }
+    | PairedUnit {PairedUnit = {PairedUnitID = PairedUnitID id; Suit = suit}; Rank = rank} ->
+        FaceUpDiscardedCard {
+            DiscardedCardID = DiscardedCardID id
+            Rank = rank
+            Suit = suit
+        }
+let private pairToFullPairedUnits: CardConverter<Pair, FullPairedUnit * FullPairedUnit> = fun {Cards = card1, card2; Rank = rank; Abilities = abilities; Owner = owner} ->
+    {
+        PairedUnit = card1
+        Rank = rank
+        Abilities = abilities
+        Owner = owner
+    },
+    {
+        PairedUnit = card2
+        Rank = rank
+        Abilities = abilities
+        Owner = owner
+    }
+let private activeToPairedUnit: CardConverter<ActiveUnit, PairedUnit> = fun card ->
+    let {ActiveUnitID = ActiveUnitID cardID} = card
+    {
+        PairedUnitID = PairedUnitID cardID
+        Suit = card.Suit
+        Damage = card.Damage
+        ActionsSpent = card.ActionsSpent
+        MaxActions = card.MaxActions
+        FreezeStatus = card.FreezeStatus
+    }
+let private activeToFullPairedUnit: CardConverter<ActiveUnit, FullPairedUnit> = fun card ->
+    {
+        PairedUnit = activeToPairedUnit card
+        Rank = card.Rank
+        Abilities = card.Abilities
+        Owner = card.Owner
+    }
+let private fullPairedToActiveUnit: CardConverter<FullPairedUnit, ActiveUnit> = fun card ->
+    let {PairedUnitID = PairedUnitID cardID} = card.PairedUnit
+    {
+        ActiveUnitID = ActiveUnitID cardID
+        Rank = card.Rank
+        Suit = card.PairedUnit.Suit
+        Abilities = card.Abilities
+        Owner = card.Owner
+        Damage = card.PairedUnit.Damage
+        ActionsSpent = card.PairedUnit.ActionsSpent
+        MaxActions = card.PairedUnit.MaxActions
+        FreezeStatus = card.PairedUnit.FreezeStatus
+    }
+let private activeUnitsToPair: CardConverter<ActiveUnit * ActiveUnit, Pair> = fun (card1, card2) ->
+    if (card1.Rank, card1.Abilities, card1.Owner) <> (card2.Rank, card2.Abilities, card2.Owner) then
+        failwith "Paired cards don't share rank / abilities / owner"
+    {
+        Cards = activeToPairedUnit card1, activeToPairedUnit card2
+        Rank = card1.Rank
+        Abilities = card1.Abilities
+        Owner = card1.Owner
+    }
+let private pairedToActiveUnit: CardConverter<Rank * Abilities * PlayerID * PairedUnit, ActiveUnit> = fun (rank, abilities, owner, card) ->
+    let {PairedUnitID = PairedUnitID cardID} = card
+    {
+        ActiveUnitID = ActiveUnitID cardID
+        Rank = rank
+        Suit = card.Suit
+        Abilities = abilities
+        Owner = owner
+        Damage = card.Damage
+        ActionsSpent = card.ActionsSpent
+        MaxActions = card.MaxActions
+        FreezeStatus = card.FreezeStatus
+    }
 
 type private Lane = {
     InactiveUnits: InactiveUnit list
@@ -236,7 +340,7 @@ let private laneSolePresence (lane: Lane) =
     let cardOwners =
         (lane.InactiveUnits |> List.map (fun card -> card.Owner))
         @ (lane.ActiveUnits |> List.map (fun card -> card.Owner))
-        @ (lane.Pairs |> List.collect (fun (card1, card2) -> [card1.Owner; card2.Owner]))
+        @ (lane.Pairs |> List.collect (fun {Owner = owner} -> [owner; owner]))
     let playerCounts =
         cardOwners
         |> List.countBy id
@@ -254,7 +358,7 @@ let private findDeadCardsInLane laneID board =
     let lane = Map.find laneID board.Lanes
     (lane.InactiveUnits |> List.map InactiveUnit |> List.filter isDead)
     @ (lane.ActiveUnits |> List.map ActiveUnit |> List.filter isDead)
-    @ (lane.Pairs |> List.collect (fun (card1, card2) -> [ActiveUnit card1; ActiveUnit card2]) |> List.filter isDead)
+    @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList) |> List.map PairedUnit |> List.filter isDead)
 let private findDeadCardIDsInLane laneID board =
     let lane = Map.find laneID board.Lanes
     (lane.InactiveUnits |> List.choose (fun card ->
@@ -265,9 +369,9 @@ let private findDeadCardIDsInLane laneID board =
         let {ActiveUnitID = ActiveUnitID id} = card
         if isDead (ActiveUnit card) then Some (UnitID id) else None
         ))
-    @ (lane.Pairs |> List.collect (fun (card1, card2) -> [card1; card2]) |> List.choose (fun card ->
-        let {ActiveUnitID = ActiveUnitID id} = card
-        if isDead (ActiveUnit card) then Some (UnitID id) else None
+    @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList) |> List.choose (fun card ->
+        let {PairedUnit = {PairedUnitID = PairedUnitID id}} = card
+        if isDead (PairedUnit card) then Some (UnitID id) else None
         ))
 
 type private EarlyGameInfo = {
@@ -342,15 +446,15 @@ let private removeCardsFromActiveUnits: CardsRemover<ActiveUnit, ActiveUnitID> =
     let newLane = {lane with ActiveUnits = newActiveUnits}
     removed,
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
-let private removeCardsFromPairs: CardsRemover<ActiveUnit, ActiveUnitID> = fun cardIDs laneID cardsState ->
+let private removeCardsFromPairs: CardsRemover<FullPairedUnit, PairedUnitID> = fun cardIDs laneID cardsState ->
     let board = cardsState.Board
     let lane = Map.find laneID board.Lanes
     let removed, newPairs =
         lane.Pairs
-        |> List.partition (fun ({ActiveUnitID = id1}, {ActiveUnitID = id2}) ->
+        |> List.partition (fun {Cards = {PairedUnitID = id1}, {PairedUnitID = id2}} ->
             List.contains id1 cardIDs || List.contains id2 cardIDs
             )
-    let flatRemoved = List.collect (fun (c1, c2) -> [c1; c2]) removed
+    let flatRemoved = List.collect (pairToFullPairedUnits >> twoToList) removed
     let newLane = {lane with Pairs = newPairs}
     flatRemoved,
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
@@ -377,23 +481,23 @@ let private addCardsToActiveUnits: CardsAdder<ActiveUnit> = fun cards laneID car
 let private addCardsToPairs: CardAdder<ActiveUnit*ActiveUnit> = fun (card1, card2) laneID cardsState ->
     let board = cardsState.Board
     let lane = Map.find laneID board.Lanes
-    let newLane = {lane with Pairs = lane.Pairs @ [card1, card2]}
+    let newLane = {lane with Pairs = lane.Pairs @ [activeUnitsToPair (card1, card2)]}
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
-let private addCardPairPartnersToActiveUnits: CardsAdder<ActiveUnitID> = fun cardIDs laneID cardsState ->
+let private addCardPairPartnersToActiveUnits: CardsAdder<PairedUnitID> = fun cardIDs laneID cardsState ->
     let board = cardsState.Board
     let lane = Map.find laneID board.Lanes
     let partners =
         lane.Pairs
-        |> List.collect (fun (card1, card2) ->
-            let {ActiveUnitID = id1} = card1
-            let {ActiveUnitID = id2} = card1
+        |> List.collect (fun {Cards = card1, card2; Rank = rank; Abilities = abilities; Owner = owner} ->
+            let {PairedUnitID = id1} = card1
+            let {PairedUnitID = id2} = card1
             match List.contains id1 cardIDs, List.contains id2 cardIDs with
             | true, true ->
                 []
             | true, false ->
-                [card2]
+                [pairedToActiveUnit (rank, abilities, owner, card2)]
             | false, true ->
-                [card1]
+                [pairedToActiveUnit (rank, abilities, owner, card1)]
             | false, false ->
                 []
             )
@@ -408,14 +512,14 @@ let private removeCardsFromLane: CardsRemover<UnitCard, UnitID> = fun cardIDs la
         |> removeCardsFromActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
     let cs3 =
         cs2
-        |> addCardPairPartnersToActiveUnits (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
+        |> addCardPairPartnersToActiveUnits (cardIDs |> List.map (fun (UnitID id) -> PairedUnitID id)) laneID
     let removedPaired, cs4 =
         cs3
-        |> removeCardsFromPairs (cardIDs |> List.map (fun (UnitID id) -> ActiveUnitID id)) laneID
+        |> removeCardsFromPairs (cardIDs |> List.map (fun (UnitID id) -> PairedUnitID id)) laneID
     let removed =
         (List.map InactiveUnit removedInactive)
         @ (List.map ActiveUnit removedActive)
-        @ (List.map ActiveUnit removedPaired)
+        @ (List.map PairedUnit removedPaired)
     removed, cs4
 let private changeCardLane cardID fromLaneID toLaneID cardsState =
     let moved, cs1 =
@@ -425,13 +529,15 @@ let private changeCardLane cardID fromLaneID toLaneID cardsState =
         moved
         |> List.choose (function
             | InactiveUnit c -> Some c
-            | ActiveUnit _ -> None
+            | ActiveUnit _
+            | PairedUnit _ -> None
             )
     let movedActive =
         moved
         |> List.choose (function
             | InactiveUnit _ -> None
             | ActiveUnit c -> Some c
+            | PairedUnit c -> Some (fullPairedToActiveUnit c)
             )
     cs1
     |> addCardsToInactiveUnits movedInactive toLaneID
@@ -441,6 +547,8 @@ let private healInactiveCard amount (inactiveCard: InactiveUnit) =
     {inactiveCard with Damage = uSubtract amount inactiveCard.Damage}
 let private healActiveCard amount (activeCard: ActiveUnit) =
     {activeCard with Damage = uSubtract amount activeCard.Damage}
+let private healPairedCard amount (pairedCard: PairedUnit) =
+    {pairedCard with Damage = uSubtract amount pairedCard.Damage}
 let private fullyHealActiveCard (activeCard: ActiveUnit) =
     {activeCard with Damage = 0u<health>}
 
@@ -450,7 +558,8 @@ let private flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDe
         |> List.choose (fun card ->
             match card with
             | InactiveUnit {InactiveUnitID = cid} -> Some cid
-            | ActiveUnit _ -> None
+            | ActiveUnit _
+            | PairedUnit _ -> None
             )
     let removedCards, cs1 =
         cardsState
@@ -479,11 +588,14 @@ let private damageCard (UnitID cardID) damage laneID cardsState =
                     )
             Pairs =
                 lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    (if id1 = cardID then {card1 with Damage = card1.Damage + damage} else card1),
-                    (if id2 = cardID then {card2 with Damage = card2.Damage + damage} else card2)
+                |> List.map (fun pair ->
+                    let {Cards = card1, card2} = pair
+                    let {PairedUnitID = PairedUnitID id1} = card1
+                    let {PairedUnitID = PairedUnitID id2} = card2
+                    let newCards =
+                        (if id1 = cardID then {card1 with Damage = card1.Damage + damage} else card1),
+                        (if id2 = cardID then {card2 with Damage = card2.Damage + damage} else card2)
+                    {pair with Cards = newCards}
                     )
         }
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
@@ -504,15 +616,18 @@ let private incrementCardActionsUsed cardID laneID cardsState =
                     )
             Pairs =
                 lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    if id1 = cardID then
-                        {card1 with ActionsSpent = card1.ActionsSpent + 1u<action>}, card2
-                    elif id2 = cardID then
-                        card1, {card2 with ActionsSpent = card2.ActionsSpent + 1u<action>}
-                    else
-                        card1, card2
+                |> List.map (fun pair ->
+                    let (card1, card2) = pair.Cards
+                    let {PairedUnitID = PairedUnitID id1} = card1
+                    let {PairedUnitID = PairedUnitID id2} = card2
+                    let newCards =
+                        if id1 = cardID then
+                            {card1 with ActionsSpent = card1.ActionsSpent + 1u<action>}, card2
+                        elif id2 = cardID then
+                            card1, {card2 with ActionsSpent = card2.ActionsSpent + 1u<action>}
+                        else
+                            card1, card2
+                    {pair with Cards = newCards}
                     )
         }
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
@@ -533,15 +648,18 @@ let private setMaxCardActions cardID left laneID cardsState =
                     )
             Pairs =
                 lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    let {ActiveUnitID = ActiveUnitID id1} = card1
-                    let {ActiveUnitID = ActiveUnitID id2} = card2
-                    if id1 = cardID then
-                        {card1 with MaxActions = left}, card2
-                    elif id2 = cardID then
-                        card1, {card2 with MaxActions = left}
-                    else
-                        card1, card2
+                |> List.map (fun pair ->
+                    let (card1, card2) = pair.Cards
+                    let {PairedUnitID = PairedUnitID id1} = card1
+                    let {PairedUnitID = PairedUnitID id2} = card2
+                    let newCards =
+                        if id1 = cardID then
+                            {card1 with MaxActions = left}, card2
+                        elif id2 = cardID then
+                            card1, {card2 with MaxActions = left}
+                        else
+                            card1, card2
+                    {pair with Cards = newCards}
                     )
             }
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
@@ -782,18 +900,19 @@ let private triggerTargetInactiveDeathPowers gameState =
         |> List.filter (fun card ->
             match card with
             | InactiveUnit {Abilities = a} ->
-                match a.OnInactiveDying with
-                | [] ->
-                    false
-                | _ ->
-                    true
-            | ActiveUnit _ ->
+                not (List.isEmpty a.OnInactiveDying)
+            | ActiveUnit _
+            | PairedUnit _ ->
                 false
             )
     laneIDs
     |> List.fold (fun cs laneID -> flipAndActivateInactiveDeathPowersInLane laneID zeroHealthInactiveDeathPowerUnits cs) cardsState
     |> changeCardsState gameState
-let private decrementCardDamage (card: ActiveUnit) =
+let private decrementInactiveCardDamage (card: InactiveUnit) =
+    {card with Damage = uSubtract 1u<health> card.Damage}
+let private decrementActiveCardDamage (card: ActiveUnit) =
+    {card with Damage = uSubtract 1u<health> card.Damage}
+let private decrementPairedCardDamage (card: PairedUnit) =
     {card with Damage = uSubtract 1u<health> card.Damage}
 let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID attackedID) laneID gameState =
     let board = gameState.CardsState.Board
@@ -806,7 +925,7 @@ let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID atta
                 lane.ActiveUnits
                 |> List.map (fun card ->
                     if card.ActiveUnitID = id then
-                        decrementCardDamage card
+                        decrementActiveCardDamage card
                     else
                         card
                     )
@@ -818,12 +937,15 @@ let private healAttackersIfDefenderDying (attackerIDs: AttackerIDs) (UnitID atta
         | PairAttackerIDs (id1, id2) ->
             let pairs =
                 lane.Pairs
-                |> List.map (fun (card1, card2) ->
-                    if List.contains card1.ActiveUnitID [id1; id2] then
-                        decrementCardDamage card1,
-                        decrementCardDamage card2
-                    else
-                        (card1, card2)
+                |> List.map (fun pair ->
+                    let (card1, card2) = pair.Cards
+                    let newCards =
+                        if List.contains card1.PairedUnitID [id1; id2] then
+                            decrementPairedCardDamage card1,
+                            decrementPairedCardDamage card2
+                        else
+                            card1, card2
+                    {pair with Cards = newCards}
                     )
             let newLane = {lane with Pairs = pairs}
             let newLanes = Map.add laneID newLane board.Lanes
@@ -1017,20 +1139,26 @@ let private prepareRemoved lst =
         })
     |> Set.ofList
 
-let private getActionability ({FreezeStatus = fs}: ActiveUnit) =
-    match fs with
-    | FrozenBy _ -> Frozen
-    | NotFrozen -> Normal
+let private getActionability card =
+    match card with
+    | InactiveUnit {FreezeStatus = fs}
+    | ActiveUnit {FreezeStatus = fs}
+    | PairedUnit {PairedUnit = {FreezeStatus = fs}} ->
+        match fs with
+        | FrozenBy _ -> Frozen
+        | NotFrozen -> Normal
 
-let private getPairKnowledge (card1, card2) : PairKnowledge =
-    let {ActiveUnitID = ActiveUnitID id1} = card1
-    let {ActiveUnitID = ActiveUnitID id2} = card2
-    let actionability1 = getActionability card1
-    let actionability2 = getActionability card2
+let private getPairKnowledge pair : PairKnowledge =
+    let (card1, card2) = pair.Cards
+    let {PairedUnitID = PairedUnitID id1} = card1
+    let {PairedUnitID = PairedUnitID id2} = card2
+    let (fullCard1, fullCard2) = pairToFullPairedUnits pair
+    let actionability1 = getActionability (PairedUnit fullCard1)
+    let actionability2 = getActionability (PairedUnit fullCard2)
     id1, id2,
-    card1.Rank,
+    pair.Rank,
     card1.Suit, card2.Suit,
-    card1.Abilities.Name,
+    pair.Abilities.Name,
     card1.Damage, card2.Damage,
     min (card1.MaxActions - card1.ActionsSpent) (card2.MaxActions - card2.ActionsSpent),
     actionability1, actionability2
@@ -1038,14 +1166,14 @@ let private getPairKnowledge (card1, card2) : PairKnowledge =
 let private getLanePlayerTroopKnowledges viewerID ownerID (lane: Lane) : InactiveUnitKnowledge list * ActiveUnitKnowledge list * PairKnowledge list =
     let pairsKnowledge =
         lane.Pairs
-        |> List.filter (fun (card1, card2) -> card1.Owner = ownerID)
+        |> List.filter (fun {Owner = owner} -> owner = ownerID)
         |> List.map getPairKnowledge
     let nonPairedActiveUnitKnowledge =
         lane.ActiveUnits
         |> List.filter (fun card -> card.Owner = ownerID)
         |> List.map (fun card ->
             let {ActiveUnitID = ActiveUnitID id} = card
-            let actionability = getActionability card
+            let actionability = getActionability (ActiveUnit card)
             ((id, card.Rank, card.Suit, card.Abilities.Name, card.Damage, card.MaxActions - card.ActionsSpent, actionability): ActiveUnitKnowledge)
             )
     let inactiveUnitKnowledge =
@@ -1301,105 +1429,115 @@ let private getPairActionsInfoFromUnits playerID laneID (ownActiveUnits: ActiveU
             None
         )
 
+let private getAttackActionsInfoInLane playerID (laneID, lane) =
+    let findOwner toList x =
+        let first = toList >> List.head
+        match (first x) with
+        | InactiveUnit {Owner = owner}
+        | ActiveUnit {Owner = owner}
+        | PairedUnit {Owner = owner} -> owner
+
+    let possibleAttackers toList lst =
+        lst
+        |> List.filter (fun attacker ->
+            attacker
+            |> toList
+            |> List.forall (fun (attackerCard: ActiveCard) ->
+                let owner =
+                    match attackerCard with
+                    | Solo {Owner = o} -> o
+                    | Paired {Owner = o} -> o
+                owner = playerID
+                && match attackerCard with
+                    | Ready ->
+                        match attackerCard with
+                        | Solo {FreezeStatus = fs}
+                        | Paired {PairedUnit = {FreezeStatus = fs}} ->
+                            fs = NotFrozen
+                    | Exhausted ->
+                        false
+                    )
+            )
+    let possibleUnitAttackers = possibleAttackers (Solo >> List.singleton) lane.ActiveUnits
+    let possiblePairAttackers = possibleAttackers (pairToFullPairedUnits >> twoToList >> List.map Paired) lane.Pairs
+
+    let addTypeAndOwner T owner (x: UnitCard) =
+        let id =
+            match x with
+            | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
+            | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
+            | PairedUnit {PairedUnit = {PairedUnitID = PairedUnitID cid}} -> cid
+        T (owner, id)
+    let possibleTypeTargets toList T ids =
+        let transform owner = toList >> List.map (addTypeAndOwner T owner)
+        ids
+        |> List.groupBy (findOwner toList)
+        |> List.filter (fun (owner, _) -> owner <> playerID)
+        |> List.collect (fun (owner, units) ->
+            units
+            |> List.collect (transform owner)
+            )
+    let possibleSingleTypeTargets T cardIDs = possibleTypeTargets List.singleton T cardIDs
+    let possiblePairTypeTargets T pairIDs = possibleTypeTargets twoToList T pairIDs
+    let possibleInactiveUnitTargets = possibleSingleTypeTargets InactiveTarget (lane.InactiveUnits |> List.map InactiveUnit)
+    let possibleActiveUnitTargets = possibleSingleTypeTargets ActiveSingleTarget (lane.ActiveUnits |> List.map ActiveUnit)
+    let possiblePairTargets = possiblePairTypeTargets ActivePairMemberTarget (lane.Pairs |> List.map (pairToFullPairedUnits >> fun (c1, c2) -> PairedUnit c1, PairedUnit c2))
+    let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
+
+    let tauntTargets =
+        allTargets
+        |> List.filter (fun target ->
+            match target with
+            | InactiveTarget _ ->
+                false
+            | ActiveSingleTarget (_, cardID) ->
+                let card =
+                    lane.ActiveUnits
+                    |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID)
+                List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive
+            | ActivePairMemberTarget (_, cardID) ->
+                let card =
+                    lane.Pairs
+                    |> List.map pairToFullPairedUnits
+                    |> List.unzip
+                    |> (fun (lst1, lst2) -> lst1 @ lst2)
+                    |> List.find (fun {PairedUnit = {PairedUnitID = PairedUnitID id}} -> id = cardID)
+                List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive
+        )
+
+    let availableTargets =
+        if List.isEmpty tauntTargets then
+            allTargets
+        else
+            tauntTargets
+
+    let singleAttacks =
+        possibleUnitAttackers
+        |> List.collect (fun attacker ->
+            let {ActiveUnitID = ActiveUnitID attackerID} = attacker
+            availableTargets
+            |> List.map (fun target ->
+                SingleAttack (playerID, laneID, attackerID, target)
+                )
+        )
+    let pairAttacks =
+        possiblePairAttackers
+        |> List.collect (fun {Cards = attacker1, attacker2; Abilities = abilities} ->
+            let {PairedUnitID = PairedUnitID attackerID1} = attacker1
+            let {PairedUnitID = PairedUnitID attackerID2} = attacker2
+            availableTargets
+            |> List.map (fun target ->
+                PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
+            )
+        )
+    singleAttacks @ pairAttacks
+
 let private getAttackActionsInfo gameState =
     let playerID = gameState.TurnState.CurrentPlayer
     let lanes = gameState.CardsState.Board.Lanes
     lanes
     |> Map.toList
-    |> List.collect (fun (laneID, lane) ->
-        let pairToList (x, y) = [x; y]
-        let findOwner (toList: 'a -> UnitCard list) x =
-            let first = toList >> List.head
-            match (first x) with
-            | InactiveUnit {Owner = owner} -> owner
-            | ActiveUnit {Owner = owner} -> owner
-
-        let possibleAttackers toList lst =
-            lst
-            |> List.filter (fun attacker ->
-                attacker
-                |> toList
-                |> List.forall (fun (attackerCard: ActiveUnit) ->
-                    attackerCard.Owner = playerID
-                    && match attackerCard with
-                        | Ready ->
-                            attackerCard.FreezeStatus = NotFrozen
-                        | Exhausted ->
-                            false
-                        )
-                )
-        let possibleUnitAttackers = possibleAttackers List.singleton lane.ActiveUnits
-        let possiblePairAttackers = possibleAttackers pairToList lane.Pairs
-
-        let addTypeAndOwner T owner (x: UnitCard) =
-            let id =
-                match x with
-                | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
-                | ActiveUnit {ActiveUnitID = ActiveUnitID cid} -> cid
-            T (owner, id)
-        let possibleTypeTargets toList T ids =
-            let transform owner = toList >> List.map (addTypeAndOwner T owner)
-            ids
-            |> List.groupBy (findOwner toList)
-            |> List.filter (fun (owner, _) -> owner <> playerID)
-            |> List.collect (fun (owner, units) ->
-                units
-                |> List.collect (transform owner)
-                )
-        let possibleSingleTypeTargets T cardIDs = possibleTypeTargets List.singleton T cardIDs
-        let possiblePairTypeTargets T pairIDs = possibleTypeTargets pairToList T pairIDs
-        let possibleInactiveUnitTargets = possibleSingleTypeTargets InactiveTarget (lane.InactiveUnits |> List.map InactiveUnit)
-        let possibleActiveUnitTargets = possibleSingleTypeTargets ActiveSingleTarget (lane.ActiveUnits |> List.map ActiveUnit)
-        let possiblePairTargets = possiblePairTypeTargets ActivePairMemberTarget (lane.Pairs |> List.map (fun (c1, c2) -> ActiveUnit c1, ActiveUnit c2))
-        let allTargets = possibleInactiveUnitTargets @ possibleActiveUnitTargets @ possiblePairTargets
-
-        let tauntTargets =
-            allTargets
-            |> List.filter (fun target ->
-                match target with
-                | InactiveTarget _ ->
-                    false
-                | ActiveSingleTarget (_, cardID) ->
-                    let card =
-                        lane.ActiveUnits
-                        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID)
-                    List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive
-                | ActivePairMemberTarget (_, cardID) ->
-                    let card =
-                        lane.Pairs
-                        |> List.unzip
-                        |> (fun (lst1, lst2) -> lst1 @ lst2)
-                        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID)
-                    List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive
-            )
-
-        let availableTargets =
-            if List.isEmpty tauntTargets then
-                allTargets
-            else
-                tauntTargets
-
-        let singleAttacks =
-            possibleUnitAttackers
-            |> List.collect (fun attacker ->
-                let {ActiveUnitID = ActiveUnitID attackerID} = attacker
-                availableTargets
-                |> List.map (fun target ->
-                    SingleAttack (playerID, laneID, attackerID, target)
-                    )
-            )
-        let pairAttacks =
-            possiblePairAttackers
-            |> List.collect (fun (attacker1, attacker2) ->
-                let {ActiveUnitID = ActiveUnitID attackerID1; Abilities = abilities} = attacker1
-                let {ActiveUnitID = ActiveUnitID attackerID2} = attacker2
-                availableTargets
-                |> List.map (fun target ->
-                    PairAttack (playerID, laneID, (attackerID1, attackerID2), target)
-                )
-            )
-        singleAttacks @ pairAttacks
-        )
+    |> List.collect (getAttackActionsInfoInLane playerID)
 
 let private getPairActionsInfo gameState =
     let playerID = gameState.TurnState.CurrentPlayer
@@ -1497,7 +1635,7 @@ let private getPossibleActionPairs (gameState: GameState) =
                     |> List.collect (fun (targetLaneID, lane) ->
                         (lane.InactiveUnits |> List.choose (fun {InactiveUnitID = InactiveUnitID id; Owner = ownerID}-> if ownerID = playerID then Some id else None))
                         @ (lane.ActiveUnits |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Owner = ownerID} -> if ownerID = playerID then Some id else None))
-                        @ (lane.Pairs |> List.collect (fun ({ActiveUnitID = ActiveUnitID id1; Owner = ownerID}, {ActiveUnitID = ActiveUnitID id2}) -> if ownerID = playerID then [id1; id2] else []))
+                        @ (lane.Pairs |> List.collect (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}; Owner = ownerID} -> if ownerID = playerID then [id1; id2] else []))
                         |> List.map (fun id -> targetLaneID, id)
                     )
                     |> List.map (fun (targetLaneID, targetCardID) ->
@@ -1519,9 +1657,9 @@ let private getPossibleActionPairs (gameState: GameState) =
                         | Some card -> ActiveUnit card
                         | None ->
                             lane.Pairs
-                            |> List.collect (fun (c1, c2) -> [c1; c2])
-                            |> List.find (fun (card: ActiveUnit) -> card.ActiveUnitID = ActiveUnitID originalTargetCardID)
-                            |> ActiveUnit
+                            |> List.collect (pairToFullPairedUnits >> twoToList)
+                            |> List.find (fun card -> card.PairedUnit.PairedUnitID = PairedUnitID originalTargetCardID)
+                            |> PairedUnit
                 let activeTauntCheckTargets, nonActiveTauntCheckTargets =
                     let inactiveTargets =
                         lane.InactiveUnits
@@ -1536,7 +1674,8 @@ let private getPossibleActionPairs (gameState: GameState) =
                 let originalTargetIsActiveTaunt =
                     match originalTargetCard with
                     | InactiveUnit _ -> false
-                    | ActiveUnit {Abilities = a} -> List.contains ProtectsNonTauntAlliesInLane a.WhileActive
+                    | ActiveUnit {Abilities = a}
+                    | PairedUnit {Abilities = a} -> List.contains ProtectsNonTauntAlliesInLane a.WhileActive
                 let legalTargets =
                     if List.isEmpty activeTauntCheckTargets && not (originalTargetIsActiveTaunt)
                     then
@@ -1616,11 +1755,15 @@ let private executeMidPassivePowerChoice midPowerChoice cardsState turnState mid
     | TwinStrikeChoice (playerID, laneID, powerCardIDs, targetCardID) ->
         let lane = Map.find laneID gameState.CardsState.Board.Lanes
         let activeTarget =
-            lane.ActiveUnits @ (List.collect (fun (card1, card2) -> [card1; card2]) lane.Pairs)
-            |> List.tryFind (fun {ActiveUnitID = ActiveUnitID id} -> id = targetCardID)
+            List.map Solo lane.ActiveUnits @ (List.collect (pairToFullPairedUnits >> twoToList >> List.map Paired) lane.Pairs)
+            |> List.tryFind (function
+                | Solo {ActiveUnitID = ActiveUnitID cardID}
+                | Paired {PairedUnit = {PairedUnitID = PairedUnitID cardID}} -> cardID = targetCardID
+                )
         match activeTarget with
-        | Some target ->
-            match target.Abilities.OnDamaged with
+        | Some (Solo {Abilities = {OnDamaged = od}})
+        | Some (Paired {Abilities = {OnDamaged = od}}) ->
+            match od with
             | [] ->
                 gameState.CardsState
                 |> damageCard (UnitID targetCardID) 1u<health> laneID
@@ -1632,7 +1775,7 @@ let private executeMidPassivePowerChoice midPowerChoice cardsState turnState mid
             | [ReturnDamage] ->
                 resolveReturnDamage playerID laneID powerCardIDs targetCardID cardsState turnState midPassivePowerChoiceContext
             | _ ->
-                failwithf "Unrecognised OnDamaged contents: %A" target.Abilities.OnDamaged
+                failwithf "Unrecognised OnDamaged contents: %A" od
         | None ->
             gameState.CardsState
             |> damageCard (UnitID targetCardID) 1u<health> laneID
@@ -1726,12 +1869,12 @@ let private healOwnUnitsInLane playerID amount (lane: Lane) =
                 )
         Pairs =
             lane.Pairs
-            |> List.map (fun (card1, card2) ->
-                if card1.Owner = playerID then
-                    healActiveCard amount card1,
-                    healActiveCard amount card2
+            |> List.map (fun pair ->
+                let {Cards = (card1, card2); Owner = owner} = pair
+                if owner = playerID then
+                    {pair with Cards = healPairedCard amount card1, healPairedCard amount card2}
                 else
-                    card1, card2
+                    pair
                 )
         }
 let private healOwnUnits playerID amount cardsState =
@@ -1762,11 +1905,13 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
             )
     let newPairs =
         lane.Pairs
-        |> List.map (fun (c1, c2) ->
-            if c1.Owner <> playerID && not (List.contains (InstantNonTargetAbility FreezeEnemiesInLane) c1.Abilities.Ignores) then
-                {c1 with FreezeStatus = FrozenBy playerID}, {c2 with FreezeStatus = FrozenBy playerID}
+        |> List.map (fun pair ->
+            let {Cards = c1, c2; Owner = owner; Abilities = {Ignores = ignores}} = pair
+            if owner <> playerID && not (List.contains (InstantNonTargetAbility FreezeEnemiesInLane) ignores) then
+                let newCards = {c1 with FreezeStatus = FrozenBy playerID}, {c2 with FreezeStatus = FrozenBy playerID}
+                {pair with Cards = newCards}
             else
-                c1, c2
+                pair
             )
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
     {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
@@ -1776,17 +1921,29 @@ let private addActiveNonEmpowerActivationPowersInLaneToStack playerID laneID (Ac
         cardsState.Board.Lanes
         |> Map.find laneID
     let powerChoices =
-        lane.ActiveUnits @ (lane.Pairs |> List.unzip |> (fun (lst1, lst2) -> lst1 @ lst2))
-        |> List.filter (fun {ActiveUnitID = ActiveUnitID id; Owner = owner} -> owner = playerID && id <> empowererCardID)
-        |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Abilities = abilities} ->
-            match abilities.OnActivation with
-            | [] -> None
-            | oa ->
-                if List.contains ReactivateNonEmpowerActivationPowersInLane oa then
-                    None
-                else
-                    Some (ActivationPowerContext (playerID, laneID, id, abilities.Name))
-        )
+        List.map Solo lane.ActiveUnits @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map Paired))
+        |> List.filter (function
+            | Solo {ActiveUnitID = ActiveUnitID id; Owner = owner} -> owner = playerID && id <> empowererCardID
+            | Paired {PairedUnit = {PairedUnitID = PairedUnitID id}; Owner = owner} -> owner = playerID && id <> empowererCardID
+            )
+        |> List.choose (function
+            | Solo {ActiveUnitID = ActiveUnitID id; Abilities = abilities} ->
+                match abilities.OnActivation with
+                | [] -> None
+                | oa ->
+                    if List.contains ReactivateNonEmpowerActivationPowersInLane oa then
+                        None
+                    else
+                        Some (ActivationPowerContext (playerID, laneID, id, abilities.Name))
+            | Paired {PairedUnit = {PairedUnitID = PairedUnitID id}; Abilities = abilities} ->
+                match abilities.OnActivation with
+                | [] -> None
+                | oa ->
+                    if List.contains ReactivateNonEmpowerActivationPowersInLane oa then
+                        None
+                    else
+                        Some (ActivationPowerContext (playerID, laneID, id, abilities.Name))
+            )
         |> NonEmptyList.tryFromList
     match powerChoices with
     | None -> cardsState, turnState, None
@@ -1880,9 +2037,20 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
     let lane = Map.find laneID cardsState.Board.Lanes
     let card =
         match attackerIDs with
-        | SingleAttackerID (ActiveUnitID id) -> List.find (fun {ActiveUnitID = ActiveUnitID thisID} -> thisID = id) lane.ActiveUnits
-        | PairAttackerIDs ((ActiveUnitID id), _) -> List.find (fun {ActiveUnitID = ActiveUnitID thisID} -> thisID = id) (lane.Pairs |> List.collect (fun (c1, c2) -> [c1; c2]))
-    let attackingAbilities = (List.map AttackAbility card.Abilities.OnAttack) @ (List.map InstantNonTargetAbility card.Abilities.OnKill)
+        | SingleAttackerID (ActiveUnitID id) ->
+            lane.ActiveUnits
+            |> List.find (fun {ActiveUnitID = ActiveUnitID thisID} -> thisID = id)
+            |> Solo
+        | PairAttackerIDs ((PairedUnitID id), _) ->
+            lane.Pairs
+            |> List.collect (pairToFullPairedUnits >> twoToList)
+            |> List.find (fun {PairedUnit = {PairedUnitID = PairedUnitID thisID}} -> thisID = id)
+            |> Paired
+    let abilities =
+        match card with
+        | Solo {Abilities = a} -> a
+        | Paired {Abilities = a} -> a
+    let attackingAbilities = (List.map AttackAbility abilities.OnAttack) @ (List.map InstantNonTargetAbility abilities.OnKill)
     match attackingAbilities with
     | [] ->
         {CardsState = cardsState; TurnState = turnState; TurnStage = ActionChoice}
@@ -1890,12 +2058,16 @@ let private resolveAttackerPassivePower playerID laneID attackerIDs (UnitID atta
         |> moveDeadCardsToDiscard
     | [AttackAbility DamageExtraTarget] ->
         let activeLaneCards =
-            lane.ActiveUnits @ List.collect (fun (card1, card2) -> [card1; card2]) lane.Pairs
+            (List.map Solo lane.ActiveUnits) @ List.collect (pairToFullPairedUnits >> twoToList >> List.map Paired) lane.Pairs
         let activeTargetCard =
             activeLaneCards
-            |> List.tryFind (fun {ActiveUnitID = (ActiveUnitID id)} -> id = attackedCardID)
+            |> List.tryFind (function
+                | Solo {ActiveUnitID = (ActiveUnitID id)} -> id = attackedCardID
+                | Paired {PairedUnit = {PairedUnitID = (PairedUnitID id)}} -> id = attackedCardID
+                )
         match activeTargetCard with
-        | Some {Abilities = abilities} ->
+        | Some (Solo {Abilities = abilities})
+        | Some (Paired {Abilities = abilities}) ->
             if List.contains (AttackAbility DamageExtraTarget) abilities.Ignores then
                {CardsState = cardsState; TurnState = turnState; TurnStage = ActionChoice}
                |> triggerTargetInactiveDeathPowers
@@ -1966,19 +2138,20 @@ let private getSingleAttackInfo attackerID targetInfo lane =
     let targetList =
         (lane.InactiveUnits |> List.map InactiveUnit)
         @ (lane.ActiveUnits |> List.map ActiveUnit)
-        @ (lane.Pairs |> List.collect (fun (card1, card2) -> [ActiveUnit card1; ActiveUnit card2]))
+        @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map PairedUnit))
     let targetAbilities =
         targetList
         |> List.find (fun card ->
             match card with
             | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
-            | ActiveUnit {ActiveUnitID = ActiveUnitID cid} ->
+            | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
+            | PairedUnit {PairedUnit = {PairedUnitID = PairedUnitID cid}} ->
                 UnitID cid = targetID
             )
-        |> (fun card ->
-            match card with
+        |> (function
             | InactiveUnit {Abilities = abilities}
-            | ActiveUnit {Abilities = abilities} ->
+            | ActiveUnit {Abilities = abilities}
+            | PairedUnit {Abilities = abilities} ->
                 abilities
             )
     let baseDefenderDamage = 1u<health>
@@ -1990,26 +2163,28 @@ let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
     let targetID = getTargetIDFromTargetInfo targetInfo
     let attackerAbilities =
         lane.Pairs
-        |> List.find (fun ({ActiveUnitID = ActiveUnitID id1}, {ActiveUnitID = ActiveUnitID id2}) ->
+        |> List.find (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}} ->
             (id1, id2) = (pairMemberID1, pairMemberID2)
         )
-        |> (fun ({Abilities = abilities}, _) -> abilities)
+        |> (fun {Abilities = abilities} -> abilities)
     let targetList =
         (lane.InactiveUnits |> List.map InactiveUnit)
         @ (lane.ActiveUnits |> List.map ActiveUnit)
-        @ (lane.Pairs |> List.collect (fun (card1, card2) -> [ActiveUnit card1; ActiveUnit card2]))
+        @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map PairedUnit))
     let targetAbilities =
         targetList
         |> List.find (fun card ->
             match card with
             | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
-            | ActiveUnit {ActiveUnitID = ActiveUnitID cid} ->
+            | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
+            | PairedUnit {PairedUnit = {PairedUnitID = PairedUnitID cid}} ->
                 UnitID cid = targetID
             )
         |> (fun card ->
             match card with
             | InactiveUnit {Abilities = abilities}
-            | ActiveUnit {Abilities = abilities} ->
+            | ActiveUnit {Abilities = abilities}
+            | PairedUnit {Abilities = abilities} ->
                 abilities
             )
     let baseDefenderDamage = 2u<health>
@@ -2037,7 +2212,7 @@ let private executePairAttackAction playerID laneID (ActiveUnitID attackerID1, A
     |> damageCard targetID damage laneID
     |> damageCard (UnitID attackerID1) selfDamage laneID
     |> damageCard (UnitID attackerID2) selfDamage laneID
-    |> resolveAttackerPassivePower playerID laneID (PairAttackerIDs (ActiveUnitID attackerID1, ActiveUnitID attackerID2)) targetID turnState
+    |> resolveAttackerPassivePower playerID laneID (PairAttackerIDs (PairedUnitID attackerID1, PairedUnitID attackerID2)) targetID turnState
 
 let private executeCreatePairAction laneID cardID1 cardID2 cardsState turnState =
     let card1, card2, newCardsState =
@@ -2108,7 +2283,8 @@ let private timeoutOwnedFreezeStatesInLane playerID lane =
                 )
             Pairs =
                 lane.Pairs
-                |> List.map (fun (c1, c2) ->
+                |> List.map (fun pair ->
+                    let {Cards = c1, c2} = pair
                     let newC1 =
                         if c1.FreezeStatus = FrozenBy playerID then
                                 {c1 with FreezeStatus = NotFrozen}
@@ -2119,7 +2295,7 @@ let private timeoutOwnedFreezeStatesInLane playerID lane =
                             {c2 with FreezeStatus = NotFrozen}
                         else
                             c2
-                    newC1, newC2
+                    {pair with Cards = newC1, newC2}
                 )
     }
 let private timeoutOwnedFreezeStates playerID cardsState =
@@ -2132,7 +2308,13 @@ let private timeoutOwnedFreezeStates playerID cardsState =
 let private resetAllCardActionsUsedInLane lane =
     {lane with
         ActiveUnits = lane.ActiveUnits |> List.map (fun card -> {card with ActionsSpent = 0u<action>})
-        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> {card1 with ActionsSpent = 0u<action>}, {card2 with ActionsSpent = 0u<action>})
+        Pairs =
+            lane.Pairs
+            |> List.map (fun pair ->
+                let {Cards = card1, card2} = pair
+                let newCards = {card1 with ActionsSpent = 0u<action>}, {card2 with ActionsSpent = 0u<action>}
+                {pair with Cards = newCards}
+                )
         }
 let private resetAllCardActionsUsed cardsState =
     let board = cardsState.Board
@@ -2141,12 +2323,20 @@ let private resetAllCardActionsUsed cardsState =
         |> Map.map (fun _ lane -> resetAllCardActionsUsedInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
-let private resetMaxActions activeUnit =
-    {activeUnit with MaxActions = 1u<action>}
+let private resetMaxActiveActions (activeCard: ActiveUnit) =
+    {activeCard with MaxActions = 1u<action>}
+let private resetMaxPairedActions (pairedCard: PairedUnit) =
+    {pairedCard with MaxActions = 1u<action>}
 let private resetMaxActionsInLane lane =
     {lane with
-        ActiveUnits = lane.ActiveUnits |> List.map resetMaxActions
-        Pairs = lane.Pairs |> List.map (fun (card1, card2) -> resetMaxActions card1, resetMaxActions card2)
+        ActiveUnits = lane.ActiveUnits |> List.map resetMaxActiveActions
+        Pairs =
+            lane.Pairs
+            |> List.map (fun pair ->
+                let {Cards = card1, card2} = pair
+                let newCards = resetMaxPairedActions card1, resetMaxPairedActions card2
+                {pair with Cards = newCards}
+                )
         }
 let private resetAllMaxCardActions cardsState =
     let board = cardsState.Board
