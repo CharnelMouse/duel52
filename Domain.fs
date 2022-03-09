@@ -111,36 +111,22 @@ type BoardKnowledge =
 | PreBaseFlipBoardKnowledge of PreBaseFlipBoardKnowledge
 | PostBaseFlipBoardKnowledge of PostBaseFlipBoardKnowledge
 
-type MidPassivePowerChoiceContext =
-| TwinStrikeChoiceContext of PlayerID * LaneID * UnitIDs * CardID
-| TwinStrikeRelatiatePairChoiceContext of PlayerID * LaneID * (CardID * CardID) * CardID
+type AbilityChoiceContext =
+| DiscardChoiceContext of CardID
+| ViewInactiveChoiceContext of CardID
+| MayMoveAllyToOwnLaneChoiceContext of LaneID * CardID
+| DamageExtraTargetChoiceContext of LaneID * UnitIDs * CardID
+| ReturnDamagePairChoiceContext of LaneID * (CardID * CardID) * CardID
 
-type MidActivationPowerChoiceContext =
-| DiscardChoiceContext of PlayerID * CardID
-| ForesightChoiceContext of PlayerID * CardID
-| MoveChoiceContext of PlayerID * LaneID * CardID
+type PowerContext = LaneID * CardID * PowerName
 
-type PassivePowerWithDecisionContext =
-| TwinStrikePowerContext of PlayerID * LaneID * CardID
-
-type ActivationPowerContext = PlayerID * LaneID * CardID * PowerName
-
-type MidActivationPowerChoiceDisplayInfo = {
+type AbilityChoiceDisplayInfo = {
     CurrentPlayer: PlayerID
     ActionsLeft: Actions
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
-    ChoiceContext: MidActivationPowerChoiceContext
-}
-
-type MidPassivePowerChoiceDisplayInfo = {
-    CurrentPlayer: PlayerID
-    ActionsLeft: Actions
-    BoardKnowledge: BoardKnowledge
-    PlayerHand: Hand
-    OpponentHandSizes: (PlayerID * int) list
-    ChoiceContext: MidPassivePowerChoiceContext
+    ChoiceContext: AbilityChoiceContext
 }
 
 type StackChoiceDisplayInfo = {
@@ -149,7 +135,7 @@ type StackChoiceDisplayInfo = {
     BoardKnowledge: BoardKnowledge
     PlayerHand: Hand
     OpponentHandSizes: (PlayerID * int) list
-    Stack: ActivationPowerContext stack
+    Stack: PowerContext stack
 }
 
 type TurnDisplayInfo = {
@@ -170,8 +156,7 @@ type TiedGameDisplayInfo = {
 }
 
 type DisplayInfo =
-| MidActivationPowerChoiceDisplayInfo of MidActivationPowerChoiceDisplayInfo
-| MidPassivePowerChoiceDisplayInfo of MidPassivePowerChoiceDisplayInfo
+| AbilityChoiceDisplayInfo of AbilityChoiceDisplayInfo
 | StackChoiceDisplayInfo of StackChoiceDisplayInfo
 | TurnDisplayInfo of TurnDisplayInfo
 | SwitchDisplayInfo of PlayerID
@@ -183,34 +168,31 @@ type AttackTargetInfo =
 | ActiveSingleTarget of PlayerID * CardID
 | ActivePairMemberTarget of PlayerID * CardID
 
-type MidActivationPowerChoiceInfo =
-| DiscardChoice of PlayerID * CardID * CardID
-| ForesightChoice of PlayerID * CardID * CardID
-| MoveChoice of (PlayerID * LaneID * CardID * LaneID * CardID) option
+type AbilityChoiceInfo =
+| DiscardChoice of CardID * CardID
+| ViewInactiveChoice of CardID * CardID
+| MayMoveAllyToOwnLaneChoice of (LaneID * CardID * LaneID * CardID) option
+| DamageExtraTargetChoice of LaneID * UnitIDs * CardID
+| ReturnDamagePairChoice of LaneID * UnitIDs * CardID * CardID
 
-type MidPassivePowerChoiceInfo =
-| TwinStrikeChoice of PlayerID * LaneID * UnitIDs * CardID
-| TwinStrikeRetaliatePairChoice of PlayerID * LaneID * UnitIDs * CardID * CardID
-
-type StackChoiceInfo = PlayerID * EventID * ActivationPowerContext
+type StackChoiceInfo = EventID * PowerContext
 
 type ActionChoiceInfo =
-| Play of PlayerID * CardID * LaneID
-| Activate of PlayerID * LaneID * CardID
-| SingleAttack of PlayerID * LaneID * CardID * AttackTargetInfo
-| PairAttack of PlayerID * LaneID * (CardID * CardID) * AttackTargetInfo
-| CreatePair of PlayerID * LaneID * CardID * CardID
+| Play of LaneID * CardID
+| Activate of LaneID * CardID
+| SingleAttack of LaneID * CardID * AttackTargetInfo
+| PairAttack of LaneID * (CardID * CardID) * AttackTargetInfo
+| CreatePair of LaneID * CardID * CardID
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo
-| EndTurn of PlayerID
+| EndTurn
 
 type ActionInfo =
-| MidActivationPowerChoiceInfo of MidActivationPowerChoiceInfo
-| MidPassivePowerChoiceInfo of MidPassivePowerChoiceInfo
+| AbilityChoiceInfo of AbilityChoiceInfo
 | StackChoiceInfo of StackChoiceInfo
 | TurnActionInfo of TurnActionInfo
-| StartTurn of PlayerID
+| StartTurn
 
 type Capability<'T> = unit -> 'T
 type CapabilityInfo<'Action, 'T> = {

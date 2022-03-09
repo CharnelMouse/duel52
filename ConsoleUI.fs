@@ -159,87 +159,55 @@ let private displayDiscardKnowledge discardKnowledge =
         discardKnowledge
         |> List.iter displayDeadCard
 
-let private displayMidActivationPowerChoiceContext context =
+let private displayAbilityChoiceContext context =
     printf "Current choice: "
     match context with
-    | DiscardChoiceContext (_, cardID) ->
+    | DiscardChoiceContext cardID ->
         printfn "card %i: discard a card" cardID
-    | ForesightChoiceContext (_, cardID) ->
+    | ViewInactiveChoiceContext cardID ->
         printfn "card %i: view a face-down card" cardID
-    | MoveChoiceContext (_, laneID, cardID) ->
+    | MayMoveAllyToOwnLaneChoiceContext (laneID, cardID) ->
         printfn "card %i: move a card to lane %i" cardID laneID
-
-let private displayMidPassivePowerChoiceContext context =
-    printf "Current choice: "
-    match context with
-    | TwinStrikeChoiceContext (_, laneID, unitCardIDs, _) ->
+    | DamageExtraTargetChoiceContext (laneID, unitCardIDs, _) ->
         match unitCardIDs with
         | SingleCardID cardID ->
             printfn "card %i: damage a card in lane %i" cardID laneID
         | PairIDs (cardID1, cardID2) ->
             printfn "pair %i, %i: damage a card in lane %i" cardID1 cardID2 laneID
-    | TwinStrikeRelatiatePairChoiceContext (_, _, (cardID1, cardID2), targetCardID) ->
+    | ReturnDamagePairChoiceContext (_, (cardID1, cardID2), targetCardID) ->
         printfn "pair %i, %i: one takes Retaliate damage from card %i" cardID1 cardID2 targetCardID
 
 let private displayOngoingGameInfo displayInfo =
     Console.Clear()
     match displayInfo with
-    | MidActivationPowerChoiceDisplayInfo macdi ->
-        match macdi.BoardKnowledge with
+    | AbilityChoiceDisplayInfo acdi ->
+        match acdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPreLaneKnowledges macdi.CurrentPlayer lanes
+            displayPreLaneKnowledges acdi.CurrentPlayer lanes
         | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPostLaneKnowledges macdi.CurrentPlayer lanes
-        printfn "Player %i's turn, %i actions left\n" macdi.CurrentPlayer macdi.ActionsLeft
-        if List.isEmpty macdi.PlayerHand then
+            displayPostLaneKnowledges acdi.CurrentPlayer lanes
+        printfn "Player %i's turn, %i actions left\n" acdi.CurrentPlayer acdi.ActionsLeft
+        if List.isEmpty acdi.PlayerHand then
             printfn "Hand is empty"
         else
             printf "Hand: "
-            List.iter displayHandCard macdi.PlayerHand
+            List.iter displayHandCard acdi.PlayerHand
         printfn ""
-        match macdi.OpponentHandSizes with
+        match acdi.OpponentHandSizes with
         | [] -> ()
         | [h] -> displayOpponentHandSize h
         | _ ->
             printfn "Opponent hand sizes"
-            List.iter displayOpponentHandSize macdi.OpponentHandSizes
+            List.iter displayOpponentHandSize acdi.OpponentHandSizes
         printfn ""
-        match macdi.BoardKnowledge with
+        match acdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
             printfn "Draw pile: %i" dps
             displayDiscardKnowledge dk
         | PostBaseFlipBoardKnowledge {Discard = dk} ->
             displayDiscardKnowledge dk
         printfn ""
-        displayMidActivationPowerChoiceContext macdi.ChoiceContext
-    | MidPassivePowerChoiceDisplayInfo macdi ->
-        match macdi.BoardKnowledge with
-        | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPreLaneKnowledges macdi.CurrentPlayer lanes
-        | PostBaseFlipBoardKnowledge {Lanes = lanes} ->
-            displayPostLaneKnowledges macdi.CurrentPlayer lanes
-        printfn "Player %i's turn, %i actions left\n" macdi.CurrentPlayer macdi.ActionsLeft
-        if List.isEmpty macdi.PlayerHand then
-            printfn "Hand is empty"
-        else
-            printf "Hand: "
-            List.iter displayHandCard macdi.PlayerHand
-        printfn ""
-        match macdi.OpponentHandSizes with
-        | [] -> ()
-        | [h] -> displayOpponentHandSize h
-        | _ ->
-            printfn "Opponent hand sizes"
-            List.iter displayOpponentHandSize macdi.OpponentHandSizes
-        printfn ""
-        match macdi.BoardKnowledge with
-        | PreBaseFlipBoardKnowledge {DrawPileSize = dps; Discard = dk} ->
-            printfn "Draw pile: %i" dps
-            displayDiscardKnowledge dk
-        | PostBaseFlipBoardKnowledge {Discard = dk} ->
-            displayDiscardKnowledge dk
-        printfn ""
-        displayMidPassivePowerChoiceContext macdi.ChoiceContext
+        displayAbilityChoiceContext acdi.ChoiceContext
     | StackChoiceDisplayInfo scdi ->
         match scdi.BoardKnowledge with
         | PreBaseFlipBoardKnowledge {Lanes = lanes} ->
@@ -315,35 +283,35 @@ let private displayOngoingGameInfo displayInfo =
             |> printfn "Player %i: %s" pid
             )
 
-let private actionString action =
-    match action with
-    | MidActivationPowerChoiceInfo (DiscardChoice (_, powerCardID, discardeeCardID)) ->
+let private actionString actionInfo =
+    match actionInfo with
+    | AbilityChoiceInfo (DiscardChoice (powerCardID, discardeeCardID)) ->
         string powerCardID + ": discard card " + string discardeeCardID
-    | MidActivationPowerChoiceInfo (ForesightChoice (_, powerCardID, hiddenCardID)) ->
+    | AbilityChoiceInfo (ViewInactiveChoice (powerCardID, hiddenCardID)) ->
         string powerCardID + ": view card " + string hiddenCardID
-    | MidActivationPowerChoiceInfo (MoveChoice maybeMove) ->
+    | AbilityChoiceInfo (MayMoveAllyToOwnLaneChoice maybeMove) ->
         match maybeMove with
-        | Some (_, toLaneID, powerCardID, _, targetCardID) ->
+        | Some (toLaneID, powerCardID, _, targetCardID) ->
             string powerCardID + ": move card " + string targetCardID + " to lane " + string toLaneID
         | None ->
             "Move nothing"
-    | MidPassivePowerChoiceInfo (TwinStrikeChoice (_, _, powerCardIDs, targetCardID)) ->
+    | AbilityChoiceInfo (DamageExtraTargetChoice (_, powerCardIDs, targetCardID)) ->
         let powerCardsString =
             match powerCardIDs with
             | SingleCardID id -> string id
             | PairIDs (id1, id2) -> string id1 + ", " + string id2
         powerCardsString + ": damage card " + string targetCardID
-    | MidPassivePowerChoiceInfo (TwinStrikeRetaliatePairChoice (_, _, _, targetCardID, choiceID)) ->
+    | AbilityChoiceInfo (ReturnDamagePairChoice (_, _, targetCardID, choiceID)) ->
         "card " + string choiceID + " takes Retaliate damage from card " + string targetCardID
-    | StackChoiceInfo (_, _, (_, _, cardID, (PowerName powerName))) ->
+    | StackChoiceInfo (_, (_, cardID, (PowerName powerName))) ->
         string cardID + ": " + powerName
-    | TurnActionInfo (ActionChoiceInfo (Play (_, cardID, laneID))) ->
+    | TurnActionInfo (ActionChoiceInfo (Play (cardID, laneID))) ->
         "Play card " + string cardID
         + " to lane " + string laneID
-    | TurnActionInfo (ActionChoiceInfo (Activate (_, laneID, cardID))) ->
+    | TurnActionInfo (ActionChoiceInfo (Activate (laneID, cardID))) ->
         "Activate inactive card " + string cardID
         + " in lane " + string laneID
-    | TurnActionInfo (ActionChoiceInfo (SingleAttack (_, laneID, attackerID, targetInfo))) ->
+    | TurnActionInfo (ActionChoiceInfo (SingleAttack (laneID, attackerID, targetInfo))) ->
         let attackerText =
             "Active card " + string attackerID
         let targetText =
@@ -361,7 +329,7 @@ let private actionString action =
                 + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (ActionChoiceInfo (PairAttack (_, laneID, (attackerID1, attackerID2), targetInfo))) ->
+    | TurnActionInfo (ActionChoiceInfo (PairAttack (laneID, (attackerID1, attackerID2), targetInfo))) ->
         let attackerText =
             "Paired cards " + string attackerID1 + " and " + string attackerID2
         let targetText =
@@ -379,7 +347,7 @@ let private actionString action =
                 + " paired card " + string cardID
                 + " in lane " + string laneID
         attackerText + " attacks " + targetText
-    | TurnActionInfo (ActionChoiceInfo (CreatePair (_, laneID, cardID1, cardID2))) ->
+    | TurnActionInfo (ActionChoiceInfo (CreatePair (laneID, cardID1, cardID2))) ->
         "Create pair"
         + " in lane " + string laneID
         + " from cards " + string cardID1 + " and " + string cardID2
