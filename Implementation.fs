@@ -5,6 +5,9 @@ open NonEmptyMap
 open EventStack
 open PowerMaps
 
+type private NPlayers = NPlayers of uint
+type private NLanes = NLanes of uint
+
 type private RemovedCardID = RemovedCardID of CardID
 type private DeckCardID = DeckCardID of CardID
 type private HandCardID = HandCardID of CardID
@@ -166,13 +169,13 @@ type private CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
 
 type private PlayerReady = {
     Player: PlayerID
-    NPlayers: uint
+    NPlayers: NPlayers
     Actions: Actions
     FutureActionCounts: Actions list
 }
 type private TurnInProgress = {
     CurrentPlayer: PlayerID
-    NPlayers: uint
+    NPlayers: NPlayers
     ActionsLeft: Actions
     FutureActionCounts: Actions list
 }
@@ -229,7 +232,7 @@ type private ActionPair =
 
 type private GetInProgress = GameState -> ActionResult
 type private MakeUIOutput = GetInProgress -> ActionPair -> CapabilityInfo<ActionInfo, ActionResult>
-type private CreateGame = uint -> uint -> ActionResult
+type private CreateGame = NPlayers -> NLanes -> ActionResult
 
 // Give very large lists if passed a zero length
 let private createIDs start lst =
@@ -1100,7 +1103,7 @@ let private prepareHead fn n lst =
     let h, t = List.splitAt (int n) lst
     fn h, t
 
-let private prepareBases getAbilities (nLanes: uint) lst =
+let private prepareBases getAbilities (NLanes nLanes) lst =
     lst
     |> List.splitInto (int nLanes)
     |> createIDMap 1u<LID>
@@ -1119,7 +1122,7 @@ let private prepareBases getAbilities (nLanes: uint) lst =
         )
     )
 
-let private prepareHands getAbilities nPlayers lst =
+let private prepareHands getAbilities (NPlayers nPlayers) lst =
     let playerIDs =
         createIDsToLength 1u<PID> nPlayers
         |> List.collect (List.replicate 5)
@@ -1224,13 +1227,14 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
     let getBase = getBaseKnowledge viewerID
     let getDeadCard = getDeadCardKnowledge viewerID
     let getLanePlayerTroops = getLanePlayerTroopKnowledges viewerID
+    let (NPlayers nPlayers) = turnInProgress.NPlayers
     match cardsState.GameStage with
     | Early {Bases = b; DrawPile = dp} ->
         let lanesKnowledge =
             joinMaps b l
             |> Map.map (fun _ (bases, lane) ->
                 let troopKnowledge =
-                    createIDsToLength 1u<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> nPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -1251,7 +1255,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
             l
             |> Map.map (fun laneID lane ->
                 let troopKnowledge =
-                    createIDsToLength 1u<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> nPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -1276,7 +1280,7 @@ let private getBoardKnowledge viewerID cardsState turnInProgress =
             l
             |> Map.map (fun laneID lane ->
                 let troopKnowledge =
-                    createIDsToLength 1u<PID> turnInProgress.NPlayers
+                    createIDsToLength 1u<PID> nPlayers
                     |> List.map (fun playerID ->
                         playerID, getLanePlayerTroops playerID lane
                         )
@@ -2356,8 +2360,9 @@ let private cancelPowerChoiceIfNoChoices state =
         state
 
 let private executeEndingTurnAction cardsState turnState =
+    let (NPlayers nPlayers) = turnState.NPlayers
     let nextPlayer =
-        if turnState.CurrentPlayer = turnState.NPlayers*1u<PID> then
+        if turnState.CurrentPlayer = nPlayers*1u<PID> then
             1u<PID>
         else
             turnState.CurrentPlayer + 1u<PID>
@@ -2453,7 +2458,7 @@ let rec private inProgress: GetInProgress = fun gameState ->
         |> List.map (makeNextActionInfo inProgress)
     InProgress (getDisplayInfo gameState, nextActions)
 
-let private createGame: CreateGame = fun nPlayers nLanes ->
+let private createGame: CreateGame = fun (NPlayers nPlayers) (NLanes nLanes) ->
     let getAbilities = basePowers
     let shuffledDeck =
         createUnshuffledDeck()
@@ -2465,10 +2470,10 @@ let private createGame: CreateGame = fun nPlayers nLanes ->
         |> List.map (fun (cardID, (rank, suit)) -> cardID, rank, suit)
     let bases, notBaseCards =
         cardInfos
-        |> prepareHead (prepareBases getAbilities nLanes) (nPlayers*nLanes)
+        |> prepareHead (prepareBases getAbilities (NLanes nLanes)) (nPlayers*nLanes)
     let handCards, notDeckCards =
         notBaseCards
-        |> prepareHead (prepareHands getAbilities nPlayers) (5u*nPlayers)
+        |> prepareHead (prepareHands getAbilities (NPlayers nPlayers)) (5u*nPlayers)
     let removed, notRemoved =
         notDeckCards
         |> prepareHead prepareRemoved 10u
@@ -2496,7 +2501,7 @@ let private createGame: CreateGame = fun nPlayers nLanes ->
             }
         TurnState = {
             Player = 1u<PID>
-            NPlayers = nPlayers
+            NPlayers = NPlayers nPlayers
             Actions = 2u<action>
             FutureActionCounts = List.empty
             }
@@ -2504,5 +2509,5 @@ let private createGame: CreateGame = fun nPlayers nLanes ->
     inProgress gameState
 
 let api = {
-    NewGame = fun () -> createGame 2u 3u
+    NewGame = fun () -> createGame (NPlayers 2u) (NLanes 3u)
 }
