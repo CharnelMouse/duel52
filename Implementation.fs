@@ -177,10 +177,10 @@ type private TurnInProgress = {
     FutureActionCounts: Actions list
 }
 
-type private TriggerEvent = InstantNonTargetAbility * LaneID * CardID
+type private AbilityEvent = InstantNonTargetAbility * LaneID * CardID
 type private ResolutionEpoch =
 | OrderChoiceEpoch of PowerContext epoch
-| OrderedTriggerEpoch of TriggerEvent epoch
+| OrderedAbilityEpoch of AbilityEvent epoch
 | AbilityChoiceEpoch of AbilityChoiceContext
 type private ResolutionStack = ResolutionEpoch nonEmptyList
 
@@ -273,11 +273,11 @@ let private (|Exhausted|Ready|) (card: ActiveCard) =
 let private maxHealth card =
     match card with
     | InactiveUnit _ -> 2u<health>
-    | ActiveUnit {Abilities = triggers}
-    | PairedUnit {Abilities = triggers} ->
-        triggers.WhileActive
-        |> List.fold (fun state trigger ->
-            match trigger with
+    | ActiveUnit {Abilities = {WhileActive = passiveAbilities}}
+    | PairedUnit {Abilities = {WhileActive = passiveAbilities}} ->
+        passiveAbilities
+        |> List.fold (fun state passiveAbility ->
+            match passiveAbility with
             | MaxHealthIncrease increase ->
                 state + (uint increase)*1u<health>
             | _ -> state
@@ -1966,7 +1966,7 @@ let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cards
         card.Abilities.OnActivation
         |> List.map (fun ability -> ability, laneID, cardID)
         |> NonEmptyList.tryFromList
-        |> Option.map OrderedTriggerEpoch
+        |> Option.map OrderedAbilityEpoch
     maybeStack
     |> NonEmptyList.consOptions maybeAbilitiesEpoch
 
@@ -1999,11 +1999,11 @@ let rec private processResolutionStack cardsState turnState (maybeResolutionStac
                 ResolutionStack = NonEmptyList.tryFromList t
                 }
             }
-        | OrderedTriggerEpoch triggerEvents ->
-            let ({Head = first; Tail = rest}: TriggerEvent epoch) = triggerEvents
+        | OrderedAbilityEpoch triggerEvents ->
+            let ({Head = first; Tail = rest}: AbilityEvent epoch) = triggerEvents
             let remainingHead =
                 NonEmptyList.tryFromList rest
-                |> Option.map OrderedTriggerEpoch
+                |> Option.map OrderedAbilityEpoch
             let remainingStack =
                 NonEmptyList.tryFromList t
                 |> NonEmptyList.consOptions remainingHead
@@ -2019,7 +2019,7 @@ let private resolveActivationPower laneID (ActiveUnitID cardID) cardsState turnS
         card.Abilities.OnActivation
         |> List.map (fun ability -> ability, laneID, cardID)
         |> NonEmptyList.tryFromList
-        |> Option.map OrderedTriggerEpoch
+        |> Option.map OrderedAbilityEpoch
     processResolutionStack cardsState turnState (NonEmptyList.consOptions newEpoch stack)
 
 let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardID) turnState cardsState =
