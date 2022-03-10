@@ -177,8 +177,52 @@ let private displayAbilityChoiceContext context =
     | ReturnDamagePairChoiceContext (_, (cardID1, cardID2), targetCardID) ->
         printfn "pair %i, %i: one takes Retaliate damage from card %i" cardID1 cardID2 targetCardID
 
+let private displayEvent = function
+| DisplayGameStarted -> printfn "Game started"
+| DisplayTurnStarted pid -> printfn "Player %i starts their turn" pid
+| DisplayTurnEnded pid -> printfn "Player %i ends their turn" pid
+| DisplayAbilityChoiceMade (pid, aci) ->
+    match aci with
+    | DiscardChoice (discarderCardID, discardeeCardID) ->
+        printfn "Card %i: Player %i discards card %i" discarderCardID pid discardeeCardID
+    | ViewInactiveChoice (viewerCardID, vieweeCardID) ->
+        printfn "Card %i: Player %i views card %i" viewerCardID pid vieweeCardID
+    | MayMoveAllyToOwnLaneChoice None ->
+        printfn "Player %i doesn't move a card" pid
+    | MayMoveAllyToOwnLaneChoice (Some (destinationLaneID, moverID, originLaneID, moveeCardID)) ->
+        printfn "Card %i: Player %i moves card %i from lane %i to lane %i" moverID pid moveeCardID originLaneID destinationLaneID
+    | DamageExtraTargetChoice (laneID, (SingleCardID attackerCardID), defenderCardID) ->
+        printfn "Player %i: Card %i deals extra damage to %i" pid attackerCardID defenderCardID
+    | DamageExtraTargetChoice (laneID, (PairIDs (attackerCardID1, attackerCardID2)), defenderCardID) ->
+        printfn "Player %i: Card pair %i, %i deals extra damage to %i" pid attackerCardID1 attackerCardID2 defenderCardID
+    | ReturnDamagePairChoice (laneID, returneeUnitIDs, returnerCardID, returneeCardID) ->
+        printfn "Player %i: Card %i returns damage to Card %i" pid returnerCardID returneeCardID
+| DisplayActionChosen (pid, action) ->
+    match action with
+    | Play (laneID, cardID) ->
+        printfn "Player %i plays card %i to lane %i" pid cardID laneID
+    | Activate (laneID, cardID) ->
+        printfn "Player %i activates card %i" pid cardID
+    | SingleAttack (laneID, attackerCardID, defenderInfo) ->
+        match defenderInfo with
+        | InactiveTarget (targetOwnerID, targetCardID)
+        | ActiveSingleTarget (targetOwnerID, targetCardID)
+        | ActivePairMemberTarget (targetOwnerID, targetCardID) ->
+            printfn "Player %i: card %i attacks player %i's card %i" pid attackerCardID targetOwnerID targetCardID
+    | PairAttack (laneID, (attackerCardID1, attackerCardID2), defenderInfo) ->
+        match defenderInfo with
+        | InactiveTarget (targetOwnerID, targetCardID)
+        | ActiveSingleTarget (targetOwnerID, targetCardID)
+        | ActivePairMemberTarget (targetOwnerID, targetCardID) ->
+            printfn "Player %i: card pair %i, %i attacks player %i's card %i" pid attackerCardID1 attackerCardID2 targetOwnerID targetCardID
+    | CreatePair (laneID, pairCardID1, pairCardID2) ->
+        printfn "Player %i creates a pair from cards %i and %i" pid pairCardID1 pairCardID2
+| DisplayStackChoiceMade (pid, (laneID, cardID, (PowerName powerName))) ->
+    printfn "Player %i triggers card %i's %s power" pid cardID powerName
+
+let private displayEvents = List.iter displayEvent
+
 let private displayOngoingGameInfo displayInfo =
-    Console.Clear()
     match displayInfo with
     | AbilityChoiceDisplayInfo acdi ->
         match acdi.BoardKnowledge with
@@ -386,7 +430,11 @@ let rec private getValidInput nActions =
 
 let rec private mainLoop (game: ActionResult) =
     match game with
-    | InProgress (displayInfo, nextActions) ->
+    | InProgress (events, displayInfo, nextActions) ->
+        displayEvents events
+        printf "Press key to continue"
+        Console.ReadKey() |> ignore
+        Console.Clear()
         displayOngoingGameInfo displayInfo
         printfn ""
         displayNextActionsInfo nextActions

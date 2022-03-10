@@ -230,16 +230,25 @@ type private ActionPair =
 | TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
 | StartTurnPair of CardsState * PlayerReady
 
+type private GameEvent =
+| GameStarted
+| TurnStarted of PlayerID
+| TurnEnded of PlayerID
+| StackChoiceMade of PlayerID * PowerContext
+| ActionChosen of PlayerID * ActionChoiceInfo
+| AbilityChoiceMade of PlayerID * AbilityChoiceInfo
+
 type private ExecuteStartTurn = CardsState -> PlayerReady -> GameStateDuringTurn
 type private ExecuteEndTurn = CardsState -> TurnInProgress -> GameStateBetweenTurns
-type private ExecuteTurnAction = ActionChoiceInfo -> CardsState -> TurnInProgress -> GameStateDuringTurn
-type private ExecuteAbilityChoice = AbilityChoiceInfo -> CardsState -> TurnInProgress -> ResolutionStack option -> GameStateDuringTurn
-type private ExecuteStackChoice = CardsState -> TurnInProgress -> StackChoice -> EventID -> GameStateDuringTurn
+type private ExecuteTurnAction = ActionChoiceInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
+type private ExecuteAbilityChoice = AbilityChoiceInfo -> CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
+type private ExecuteStackChoice = CardsState -> TurnInProgress -> StackChoice -> EventID -> GameEvent list * GameStateDuringTurn
 // Game state and ActionInfo go into action pair, just for ActionInfo to come out again at execution, seems silly
 type private CreateGame = NPlayers -> NLanes -> ActionResult
 type private GetPossibleActionPairs = GameState -> ActionPair list
-type private ExecuteAction = ActionPair -> GameState * ActionInfo
-type private GetInProgress = GameState -> ActionResult
+type private ExecuteAction = ActionPair -> GameEvent list * GameState * ActionInfo
+type private GetInProgress = GameEvent list -> GameState -> ActionResult
+type private GameEventToDisplayGameEvent = GameEvent -> DisplayGameEvent
 type private GameStateToDisplayInfo = GameState -> DisplayInfo
 type private CreateUIOutput = GetInProgress -> ActionPair -> CapabilityInfo<ActionInfo, ActionResult>
 
@@ -2047,6 +2056,14 @@ let private resetAllMaxCardActions cardsState =
         |> Map.map (fun _ lane -> resetMaxActionsInLane lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
+let private displayGameEvent: GameEventToDisplayGameEvent = function
+| GameStarted -> DisplayGameStarted
+| TurnStarted pid -> DisplayTurnStarted pid
+| TurnEnded pid -> DisplayTurnEnded pid
+| AbilityChoiceMade (pid, choiceInfo) -> DisplayAbilityChoiceMade (pid, choiceInfo)
+| ActionChosen  (pid, choiceInfo) -> DisplayActionChosen  (pid, choiceInfo)
+| StackChoiceMade  (pid, choiceInfo) -> DisplayStackChoiceMade  (pid, choiceInfo)
+
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
     let id = ts.CurrentPlayer
@@ -2268,6 +2285,7 @@ let private executeAbilityChoice: ExecuteAbilityChoice = fun abilityChoiceInfo c
         TurnStage = ActionChoice
     }
     let playerID = turnState.CurrentPlayer
+    [AbilityChoiceMade (playerID, abilityChoiceInfo)],
     match abilityChoiceInfo with
     | DiscardChoice (_, discardeeCardID) ->
         let (discardeeCard, cs) = removeCardFromHand (HandCardID discardeeCardID) playerID cardsState
@@ -2343,6 +2361,7 @@ let private executeTurnAction: ExecuteTurnAction = fun action cardsState turnSta
             executePairAttackAction laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo cardsState ts
         | CreatePair (laneID, cardID1, cardID2) ->
             executeCreatePairAction laneID (ActiveUnitID cardID1) (ActiveUnitID cardID2) cardsState ts
+    [ActionChosen (playerID, action)],
     match postAction.TurnStage with
     | AbilityChoice _
     | StackChoice _ ->
@@ -2401,6 +2420,7 @@ let private executeStackChoice: ExecuteStackChoice = fun cardsState turnState st
         |> Option.map OrderChoiceEpoch
     let remainingStack = NonEmptyList.consOptions maybeRemainingHead stackChoice.ResolutionStack
     let newState = resolveActivationPower laneID (ActiveUnitID cardID) cardsState turnState remainingStack
+    [StackChoiceMade (turnState.CurrentPlayer, chosen)],
     match newState with
     | {CardsState = cs; TurnState = ts; TurnStage = ActionChoice} ->
         {
@@ -2424,43 +2444,48 @@ let private executeStackChoice: ExecuteStackChoice = fun cardsState turnState st
 let private executeAction: ExecuteAction = function
 // Want to do some checking that we have the right player
 | AbilityChoicePair (cardsState, turnState, resolutionStack, choiceInfo) ->
-    executeAbilityChoice choiceInfo cardsState turnState resolutionStack
-    |> checkForGameEnd,
+    let (events, state) = executeAbilityChoice choiceInfo cardsState turnState resolutionStack
+    events,
+    checkForGameEnd state,
     AbilityChoiceInfo choiceInfo
 | StackChoicePair (cardsState, turnState, stackChoice, (eventID, powerContext)) ->
-    executeStackChoice cardsState turnState stackChoice eventID
-    |> GameStateDuringTurn,
+    let (events, state) = executeStackChoice cardsState turnState stackChoice eventID
+    events,
+    GameStateDuringTurn state,
     StackChoiceInfo (eventID, powerContext)
 | TurnActionChoicePair (gameState, turnState, ActionChoiceInfo choiceInfo) ->
-    executeTurnAction choiceInfo gameState turnState
-    |> checkForGameEnd,
+    let (events, state) = executeTurnAction choiceInfo gameState turnState
+    events,
+    checkForGameEnd state,
     TurnActionInfo (ActionChoiceInfo choiceInfo)
 | TurnActionChoicePair (cardsState, turnState, EndTurn) ->
+    [TurnEnded turnState.CurrentPlayer],
     executeEndingTurnAction cardsState turnState
     |> GameStateBetweenTurns,
     TurnActionInfo EndTurn
 | StartTurnPair (cardsState, turnState) ->
     let startTurn = startPlayerTurn cardsState turnState
+    [TurnStarted turnState.Player],
     {startTurn with CardsState = tryDrawCard turnState.Player cardsState}
     |> GameStateDuringTurn,
     StartTurn
 
 let rec private makeNextActionInfo: CreateUIOutput = fun inProgress actionPair ->
-    let newState, action = executeAction actionPair
+    let gameEvents, newState, action = executeAction actionPair
     let checkedGameState = cancelPowerChoiceIfNoChoices newState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
     // generating the entire game space, blowing the stack
-    let capability() = inProgress checkedGameState
+    let capability() = inProgress gameEvents checkedGameState
     {
         Action = action
         Capability = capability
         }
-let rec private inProgress: GetInProgress = fun gameState ->
+let rec private inProgress: GetInProgress = fun gameEvents gameState ->
     let nextActions =
         getPossibleActionPairs gameState
         |> List.map (makeNextActionInfo inProgress)
-    InProgress (getDisplayInfo gameState, nextActions)
+    InProgress (List.map displayGameEvent gameEvents, getDisplayInfo gameState, nextActions)
 
 let private createGame: CreateGame = fun (NPlayers nPlayers) (NLanes nLanes) ->
     let getAbilities = basePowers
@@ -2510,7 +2535,7 @@ let private createGame: CreateGame = fun (NPlayers nPlayers) (NLanes nLanes) ->
             FutureActionCounts = List.empty
             }
         }
-    inProgress gameState
+    inProgress [GameStarted] gameState
 
 let api: API = {
     NewGame = fun () -> createGame (NPlayers 2u) (NLanes 3u)

@@ -184,6 +184,14 @@ type ActionChoiceInfo =
 | PairAttack of LaneID * (CardID * CardID) * AttackTargetInfo
 | CreatePair of LaneID * CardID * CardID
 
+type DisplayGameEvent =
+| DisplayGameStarted
+| DisplayTurnStarted of PlayerID
+| DisplayTurnEnded of PlayerID
+| DisplayAbilityChoiceMade of PlayerID * AbilityChoiceInfo
+| DisplayActionChosen of PlayerID * ActionChoiceInfo
+| DisplayStackChoiceMade of PlayerID * PowerContext
+
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo
 | EndTurn
@@ -201,7 +209,7 @@ type CapabilityInfo<'Action, 'T> = {
 }
 
 type ActionResult =
-| InProgress of DisplayInfo * CapabilityInfo<ActionInfo, ActionResult> list
+| InProgress of DisplayGameEvent list * DisplayInfo * CapabilityInfo<ActionInfo, ActionResult> list
 | Exit
 type NextActionInfo = CapabilityInfo<ActionInfo, ActionResult>
 type ActionCapability = Capability<ActionResult>
