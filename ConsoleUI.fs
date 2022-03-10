@@ -349,7 +349,7 @@ let private actionString actionInfo =
         "card " + string choiceID + " takes Retaliate damage from card " + string targetCardID
     | StackChoiceInfo (_, (_, cardID, (PowerName powerName))) ->
         string cardID + ": " + powerName
-    | TurnActionInfo (ActionChoiceInfo (Play (cardID, laneID))) ->
+    | TurnActionInfo (ActionChoiceInfo (Play (laneID, cardID))) ->
         "Play card " + string cardID
         + " to lane " + string laneID
     | TurnActionInfo (ActionChoiceInfo (Activate (laneID, cardID))) ->
