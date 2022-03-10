@@ -2397,7 +2397,6 @@ let private executeEndingTurnAction: ExecuteEndTurn = fun cardsState turnState -
             cardsState
             |> resetAllCardActionsUsed
             |> resetAllMaxCardActions
-            |> timeoutOwnedFreezeStates turnState.CurrentPlayer
         TurnState = {
             Player = nextPlayer
             NPlayers = turnState.NPlayers
@@ -2466,7 +2465,11 @@ let private executeAction: ExecuteAction = function
 | StartTurnPair (cardsState, turnState) ->
     let startTurn = startPlayerTurn cardsState turnState
     [TurnStarted turnState.Player],
-    {startTurn with CardsState = tryDrawCard turnState.Player cardsState}
+    {startTurn with
+        CardsState =
+            cardsState
+            |> tryDrawCard turnState.Player
+            |> timeoutOwnedFreezeStates turnState.Player}
     |> GameStateDuringTurn,
     StartTurn
 
