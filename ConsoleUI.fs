@@ -24,6 +24,12 @@ let private deparseRank rank =
     | King -> 'K'
     | Ace -> 'A'
 
+let private deparseSuit = function
+| Spades -> 'S'
+| Diamonds -> 'D'
+| Clubs -> 'C'
+| Hearts -> 'H'
+
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard playerID ->
@@ -219,6 +225,25 @@ let private displayEvent = function
         printfn "Player %i creates a pair from cards %i and %i" pid pairCardID1 pairCardID2
 | DisplayStackChoiceMade (pid, (laneID, cardID, (PowerName powerName))) ->
     printfn "Player %i triggers card %i's %s power" pid cardID powerName
+| DisplayCardPlayed (pid, cardID, laneID) ->
+    printfn "Player %i plays card %i to lane %i" pid cardID laneID
+| DisplayCardActivated (pid, cardID, rank, suit, (PowerName powerName)) ->
+    let rankChar = deparseRank rank
+    let suitChar = deparseSuit suit
+    printfn "Player %i activates card %i: %c%c (%s)" pid cardID rankChar suitChar powerName
+| DisplayCardAttacked (attackerOwner, attackers, targetOwner, target) ->
+    match attackers with
+    | SingleCardID attackerID ->
+        printfn "Player %i: card %i attacks player %i's card %i" attackerOwner attackerID targetOwner target
+    | PairIDs (attackerID1, attackerID2) ->
+        printfn "Player %i: pair %i, %i attacks player %i's card %i" attackerOwner attackerID1 attackerID2 targetOwner target
+| DisplayCardDamaged (damagedOwner, damaged, damage) ->
+    printfn "Player %i's card %i takes %i damage" damagedOwner damaged damage
+| DisplayCardsPaired (owner, cardID1, cardID2, suit1, suit2, rank, (PowerName powerName)) ->
+    let suitChar1 = deparseSuit suit1
+    let suitChar2 = deparseSuit suit2
+    let rankChar = deparseRank rank
+    printfn "Player %i: %c%c and %c%c form a %s pair" owner rankChar suitChar1 rankChar suitChar2 powerName
 
 let private displayEvents = List.iter displayEvent
 

@@ -191,6 +191,11 @@ type DisplayGameEvent =
 | DisplayAbilityChoiceMade of PlayerID * AbilityChoiceInfo
 | DisplayActionChosen of PlayerID * ActionChoiceInfo
 | DisplayStackChoiceMade of PlayerID * PowerContext
+| DisplayCardPlayed of PlayerID * CardID * LaneID
+| DisplayCardActivated of PlayerID * CardID * Rank * Suit * PowerName
+| DisplayCardAttacked of PlayerID * UnitIDs * PlayerID * CardID
+| DisplayCardDamaged of PlayerID * CardID * Damage
+| DisplayCardsPaired of PlayerID * CardID * CardID * Suit * Suit * Rank * PowerName
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo
