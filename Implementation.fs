@@ -1532,15 +1532,17 @@ let private resolveReturnDamage laneID attackerIDs targetCardID cardsState turnS
         }
  
 let private executePlayAction cardID laneID cardsState turnState =
-    let gameState = {CardsState = cardsState; TurnState = turnState; TurnStage = ActionChoice}
-    let playerID = gameState.TurnState.CurrentPlayer
-    let cardsState = gameState.CardsState
+    let playerID = turnState.CurrentPlayer
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
     let newCard = handToInactiveUnit playedCard
-    newCardsState
-    |> addCardToInactiveUnits newCard laneID
-    |> removeHandsIfAllEmpty
-    |> changeCardsState gameState
+    {
+        CardsState =
+            newCardsState
+            |> addCardToInactiveUnits newCard laneID
+            |> removeHandsIfAllEmpty
+        TurnState = turnState
+        TurnStage = ActionChoice
+    }
 
 let private tryDrawCard playerID cardsState =
     match cardsState.GameStage with
