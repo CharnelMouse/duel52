@@ -238,6 +238,12 @@ type private GameEvent =
 | ActionChosen of PlayerID * ActionChoiceInfo
 | AbilityChoiceMade of PlayerID * AbilityChoiceInfo
 
+type private ExecutePlayAction = HandCardID -> LaneID -> CardsState -> TurnInProgress -> GameStateDuringTurn
+type private ExecuteActivateAction = LaneID -> InactiveUnitID -> CardsState -> TurnInProgress -> GameStateDuringTurn
+type private ExecuteSingleAttackAction = LaneID -> ActiveUnitID -> AttackTargetInfo -> CardsState -> TurnInProgress -> GameStateDuringTurn
+type private ExecutePairAttackAction = LaneID -> (PairedUnitID * PairedUnitID) -> AttackTargetInfo -> CardsState -> TurnInProgress -> GameStateDuringTurn
+type private ExecuteCreatePairAction = LaneID -> ActiveUnitID -> ActiveUnitID -> CardsState -> TurnInProgress -> GameStateDuringTurn
+
 type private ExecuteStartTurn = CardsState -> PlayerReady -> GameStateDuringTurn
 type private ExecuteEndTurn = CardsState -> TurnInProgress -> GameStateBetweenTurns
 type private ExecuteTurnAction = ActionChoiceInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
@@ -1531,7 +1537,7 @@ let private resolveReturnDamage laneID attackerIDs targetCardID cardsState turnS
             }
         }
  
-let private executePlayAction cardID laneID cardsState turnState =
+let private executePlayAction: ExecutePlayAction = fun cardID laneID cardsState turnState ->
     let playerID = turnState.CurrentPlayer
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
     let newCard = handToInactiveUnit playedCard
@@ -1842,7 +1848,7 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
     | _ ->
         failwithf "Unrecognised OnAttack + OnKill contents: %A" attackingAbilities
 
-let private executeActivateAction laneID (InactiveUnitID cardID) cardsState turnState =
+let private executeActivateAction: ExecuteActivateAction = fun laneID (InactiveUnitID cardID) cardsState turnState ->
     let removedCard, cs1 = removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
     let newCard = inactiveToActiveUnit removedCard
     resolveActivationPower laneID (ActiveUnitID cardID) (addCardToActiveUnits newCard laneID cs1) turnState None
@@ -1940,7 +1946,7 @@ let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
     let selfDamage = getAttackerSelfDamage attackerAbilities targetAbilities
     targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
-let private executeSingleAttackAction laneID (ActiveUnitID attackerID) targetInfo cardsState turnState =
+let private executeSingleAttackAction: ExecuteSingleAttackAction = fun laneID (ActiveUnitID attackerID) targetInfo cardsState turnState ->
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getSingleAttackInfo attackerID targetInfo (Map.find laneID board.Lanes)
@@ -1950,7 +1956,7 @@ let private executeSingleAttackAction laneID (ActiveUnitID attackerID) targetInf
     |> damageCard (UnitID attackerID) selfDamage laneID
     |> resolveAttackerPassivePower laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID turnState
 
-let private executePairAttackAction laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo cardsState turnState =
+let private executePairAttackAction: ExecutePairAttackAction = fun laneID (PairedUnitID attackerID1, PairedUnitID attackerID2) targetInfo cardsState turnState ->
     let board = cardsState.Board
     let targetID, damage, selfDamage =
         getPairAttackInfo attackerID1 attackerID2 targetInfo (Map.find laneID board.Lanes)
@@ -1962,7 +1968,7 @@ let private executePairAttackAction laneID (ActiveUnitID attackerID1, ActiveUnit
     |> damageCard (UnitID attackerID2) selfDamage laneID
     |> resolveAttackerPassivePower laneID (PairAttackerIDs (PairedUnitID attackerID1, PairedUnitID attackerID2)) targetID turnState
 
-let private executeCreatePairAction laneID cardID1 cardID2 cardsState turnState =
+let private executeCreatePairAction: ExecuteCreatePairAction = fun laneID cardID1 cardID2 cardsState turnState ->
     let card1, card2, newCardsState =
         cardsState
         |> removeCardPairFromActiveUnits cardID1 cardID2 laneID
@@ -2360,7 +2366,7 @@ let private executeTurnAction: ExecuteTurnAction = fun action cardsState turnSta
         | SingleAttack (laneID, attackerID, targetInfo) ->
             executeSingleAttackAction laneID (ActiveUnitID attackerID) targetInfo cardsState ts
         | PairAttack (laneID, (attackerID1, attackerID2), targetInfo) ->
-            executePairAttackAction laneID (ActiveUnitID attackerID1, ActiveUnitID attackerID2) targetInfo cardsState ts
+            executePairAttackAction laneID (PairedUnitID attackerID1, PairedUnitID attackerID2) targetInfo cardsState ts
         | CreatePair (laneID, cardID1, cardID2) ->
             executeCreatePairAction laneID (ActiveUnitID cardID1) (ActiveUnitID cardID2) cardsState ts
     [ActionChosen (playerID, action)],
