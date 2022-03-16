@@ -13,6 +13,7 @@
     <Compile Include="Domain.fs" />
     <Compile Include="PowerMaps.fs" />
     <Compile Include="ImplementationTypes.fs" />
+    <Compile Include="PointFree.fs" />
     <Compile Include="Implementation.fs" />
     <Compile Include="ConsoleUI.fs" />
     <Compile Include="Program.fs" />

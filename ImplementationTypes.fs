@@ -165,11 +165,30 @@ type CardsState = {
     Removed: RemovedCard Set
 }
 
-type CardRemover<'T, 'TID> = 'TID -> LaneID -> CardsState -> 'T * CardsState
-type CardPairRemover<'T, 'TID> = 'TID -> 'TID -> LaneID -> CardsState -> 'T * 'T * CardsState
-type CardsRemover<'T, 'TID> = 'TID list -> LaneID -> CardsState -> 'T list * CardsState
-type CardAdder<'T> = 'T -> LaneID -> CardsState -> CardsState
-type CardsAdder<'T> = 'T list -> LaneID -> CardsState -> CardsState
+type Remover<'Type, 'ID> = 'ID -> LaneID -> CardsState -> 'Type * CardsState
+type PairRemover<'T, 'TID> = Remover<'T * 'T, 'TID * 'TID>
+type ListRemover<'T, 'TID> = Remover<'T list, 'TID list>
+type Adder<'T> = 'T -> LaneID -> CardsState -> CardsState
+type ListAdder<'Card> = Adder<'Card list>
+
+type AbilityEvent = InstantNonTargetAbility * LaneID * CardID
+type ResolutionEpoch =
+| OrderChoiceEpoch of PowerContext epoch
+| OrderedAbilityEpoch of AbilityEvent epoch
+| AbilityChoiceEpoch of AbilityChoiceContext
+type ResolutionStack = ResolutionEpoch nonEmptyList
+type AbilityChoice = {
+    ChoiceContext: AbilityChoiceContext
+    ResolutionStack: ResolutionStack option
+}
+type StackChoice = {
+    EpochEvents: NonEmptyMap<EventID, PowerContext>
+    ResolutionStack: ResolutionStack option
+}
+type TurnStage =
+| ActionChoice
+| AbilityChoice of AbilityChoice
+| StackChoice of StackChoice
 
 type PlayerReady = {
     Player: PlayerID
@@ -183,26 +202,6 @@ type TurnInProgress = {
     ActionsLeft: Actions
     FutureActionCounts: Actions list
 }
-
-type AbilityEvent = InstantNonTargetAbility * LaneID * CardID
-type ResolutionEpoch =
-| OrderChoiceEpoch of PowerContext epoch
-| OrderedAbilityEpoch of AbilityEvent epoch
-| AbilityChoiceEpoch of AbilityChoiceContext
-type ResolutionStack = ResolutionEpoch nonEmptyList
-
-type AbilityChoice = {
-    ChoiceContext: AbilityChoiceContext
-    ResolutionStack: ResolutionStack option
-}
-type StackChoice = {
-    EpochEvents: NonEmptyMap<EventID, PowerContext>
-    ResolutionStack: ResolutionStack option
-}
-type TurnStage =
-| AbilityChoice of AbilityChoice
-| StackChoice of StackChoice
-| ActionChoice
 
 type GameStateBetweenTurns = {
     CardsState: CardsState
@@ -229,10 +228,10 @@ type GameState =
 | GameStateTied of GameStateTied
 
 type ActionPair =
-| AbilityChoicePair of CardsState * TurnInProgress * ResolutionStack option * AbilityChoiceInfo
-| StackChoicePair of CardsState * TurnInProgress * StackChoice * StackChoiceInfo
-| TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
-| StartTurnPair of CardsState * PlayerReady
+| AbilityChoicePair of (CardsState * TurnInProgress * ResolutionStack option) * AbilityChoiceInfo
+| StackChoicePair of (CardsState * TurnInProgress * StackChoice) * StackChoiceInfo
+| TurnActionChoicePair of GameStateDuringTurn * TurnActionInfo
+| StartTurnPair of GameStateBetweenTurns
 
 type GameEvent =
 | GameStarted
@@ -247,17 +246,25 @@ type GameEvent =
 | CardDamaged of UnitCard * Damage
 | CardsPaired of Pair
 
-type ExecutePlayAction = HandCardID -> LaneID -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
-type ExecuteActivateAction = LaneID -> InactiveUnitID -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
-type ExecuteSingleAttackAction = LaneID -> ActiveUnitID -> AttackTargetInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
-type ExecutePairAttackAction = LaneID -> (PairedUnitID * PairedUnitID) -> AttackTargetInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
-type ExecuteCreatePairAction = LaneID -> ActiveUnitID -> ActiveUnitID -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
+type ExecuteTurnActionType<'CardsInfo> = LaneID -> 'CardsInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
+type ExecutePlayAction = ExecuteTurnActionType<HandCardID>
+type ExecuteActivateAction = ExecuteTurnActionType<InactiveUnitID>
+type ExecuteSingleAttackAction = ExecuteTurnActionType<ActiveUnitID * AttackTargetInfo>
+type ExecutePairAttackAction = ExecuteTurnActionType<(PairedUnitID * PairedUnitID) * AttackTargetInfo>
+type ExecuteCreatePairAction = ExecuteTurnActionType<ActiveUnitID * ActiveUnitID>
 
-type ExecuteStartTurn = CardsState -> PlayerReady -> GameStateDuringTurn
-type ExecuteEndTurn = CardsState -> TurnInProgress -> GameStateBetweenTurns
-type ExecuteTurnAction = ActionChoiceInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
-type ExecuteAbilityChoice = AbilityChoiceInfo -> CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
-type ExecuteStackChoice = CardsState -> TurnInProgress -> StackChoice -> EventID -> GameEvent list * GameStateDuringTurn
+type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To
+type StartTurnInput = CardsState * PlayerReady
+type StartTurn = StartTurnInput -> GameStateDuringTurn
+type ExecuteStartTurn = WithAdded<StartTurnInput, GameStateDuringTurn, GameState, GameEvent list>
+type EndTurn = CardsState * TurnInProgress -> GameStateBetweenTurns
+type ExecuteEndTurn = WithAdded<CardsState * TurnInProgress, GameStateBetweenTurns, GameState, GameEvent list>
+
+type ExecuteTurnChoice<'Choice, 'FromState, 'ToState> = 'Choice -> 'FromState -> GameEvent list * 'ToState
+type ExecuteTurnAction = ExecuteTurnChoice<ActionChoiceInfo, CardsState * TurnInProgress, GameStateDuringTurn>
+type ExecuteAbilityChoice = ExecuteTurnChoice<AbilityChoiceInfo, CardsState * TurnInProgress * ResolutionStack option, GameStateDuringTurn>
+type ExecuteStackChoice = ExecuteTurnChoice<EventID, CardsState * TurnInProgress * StackChoice, GameStateDuringTurn>
+
 // Game state and ActionInfo go into action pair, just for ActionInfo to come out again at execution, seems silly
 type CreateGame = NPlayers -> NLanes -> ActionResult
 type GetPossibleActionPairs = GameState -> ActionPair list
