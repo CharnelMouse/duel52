@@ -459,7 +459,7 @@ let private fullPairedToActiveUnit: CardConverter<FullPairedUnit, ActiveUnit> = 
     }
 let private activeUnitsToPair: CardConverter<ActiveUnit * ActiveUnit, Pair> = fun (card1, card2) ->
     if (card1.Rank, card1.Abilities, card1.Owner) <> (card2.Rank, card2.Abilities, card2.Owner) then
-        failwith "Paired cards don't share rank / abilities / owner"
+        failwithf "Paired cards don't share rank / abilities / owner"
     {
         Cards = activeToPairedUnit card1, activeToPairedUnit card2
         Rank = card1.Rank
@@ -1895,9 +1895,8 @@ let private getAttackerSelfDamage attackerAbilities targetAbilities =
     else
         0u<health>
 
-let private getSingleAttackInfo attackerID targetID targetInfo lane =
-    let targetID2 = getTargetIDFromTargetInfo targetInfo
-    if targetID <> targetID2 then failwithf "Single attack target inconsistency"
+let private getSingleAttackInfo attackerID targetInfo lane =
+    let targetID = getTargetIDFromTargetInfo targetInfo
     let attackerCard =
         lane.ActiveUnits
         |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = attackerID)
@@ -1927,9 +1926,8 @@ let private getSingleAttackInfo attackerID targetID targetInfo lane =
     let selfDamage = getAttackerSelfDamage attackerCard.Abilities targetAbilities
     attackerCard, targetCard, targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
-let private getPairAttackInfo pairMemberID1 pairMemberID2 targetID targetInfo lane =
-    let targetID2 = getTargetIDFromTargetInfo targetInfo
-    if targetID <> targetID2 then failwithf "Pair attack target inconsistency"
+let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
+    let targetID = getTargetIDFromTargetInfo targetInfo
     let attackerPair =
         lane.Pairs
         |> List.find (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}} ->
@@ -1966,43 +1964,31 @@ let private getPairAttackInfo pairMemberID1 pairMemberID2 targetID targetInfo la
     attackerPair, targetCard, targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
 
 let private executeSingleAttackAction: ExecuteSingleAttackAction = fun laneID (ActiveUnitID attackerID) targetInfo cardsState turnState ->
-    let currentPlayer = turnState.CurrentPlayer
     let board = cardsState.Board
-    let targetOwner, targetID =
-        match targetInfo with
-        | InactiveTarget (pid, cid)
-        | ActiveSingleTarget (pid, cid)
-        | ActivePairMemberTarget (pid, cid) -> pid, cid
-    let attacker, target, targetID2, damage, selfDamage =
-        getSingleAttackInfo attackerID (UnitID targetID) targetInfo (Map.find laneID board.Lanes)
+    let attacker, target, targetID, damage, selfDamage =
+        getSingleAttackInfo attackerID targetInfo (Map.find laneID board.Lanes)
     let damagedState =
         cardsState
         |> incrementCardActionsUsed attackerID laneID
-        |> damageCard (UnitID targetID) damage laneID
+        |> damageCard targetID damage laneID
         |> damageCard (UnitID attackerID) selfDamage laneID
     [
         CardAttacked (SingleAttacker attacker, target);
         CardDamaged (target, damage);
         CardDamaged (ActiveUnit attacker, selfDamage)
     ],
-    resolveAttackerPassivePower laneID (SingleAttackerID (ActiveUnitID attackerID)) (UnitID targetID) turnState damagedState
+    resolveAttackerPassivePower laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID turnState damagedState
 
 let private executePairAttackAction: ExecutePairAttackAction = fun laneID (PairedUnitID attackerID1, PairedUnitID attackerID2) targetInfo cardsState turnState ->
-    let currentPlayer = turnState.CurrentPlayer
     let board = cardsState.Board
-    let targetOwner, targetID =
-        match targetInfo with
-        | InactiveTarget (pid, cid)
-        | ActiveSingleTarget (pid, cid)
-        | ActivePairMemberTarget (pid, cid) -> pid, cid
-    let attackers, target, targetID2, damage, selfDamage =
-        getPairAttackInfo attackerID1 attackerID2 (UnitID targetID) targetInfo (Map.find laneID board.Lanes)
+    let attackers, target, targetID, damage, selfDamage =
+        getPairAttackInfo attackerID1 attackerID2 targetInfo (Map.find laneID board.Lanes)
     let (attacker1, attacker2) = pairToFullPairedUnits attackers
     let damagedState =
         cardsState
         |> incrementCardActionsUsed attackerID1 laneID
         |> incrementCardActionsUsed attackerID2 laneID
-        |> damageCard (UnitID targetID) damage laneID
+        |> damageCard targetID damage laneID
         |> damageCard (UnitID attackerID1) selfDamage laneID
         |> damageCard (UnitID attackerID2) selfDamage laneID
     [
@@ -2011,7 +1997,7 @@ let private executePairAttackAction: ExecutePairAttackAction = fun laneID (Paire
         CardDamaged (PairedUnit attacker1, selfDamage)
         CardDamaged (PairedUnit attacker2, selfDamage)
     ],
-    resolveAttackerPassivePower laneID (PairAttackerIDs (PairedUnitID attackerID1, PairedUnitID attackerID2)) (UnitID targetID) turnState damagedState
+    resolveAttackerPassivePower laneID (PairAttackerIDs (PairedUnitID attackerID1, PairedUnitID attackerID2)) targetID turnState damagedState
 
 let private executeCreatePairAction: ExecuteCreatePairAction = fun laneID cardID1 cardID2 cardsState turnState ->
     let card1, card2, newCardsState =
