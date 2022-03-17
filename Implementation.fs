@@ -394,6 +394,9 @@ let private findActiveCardInLane = fun predicate lane ->
         |> List.map Paired
     List.find predicate (active @ paired)
 
+let private findInactiveCardInLane = fun predicate lane ->
+    List.find predicate lane.InactiveUnits
+
 let private removeCardsInLane = fun cardIDs lane ->
     let fIn {InactiveUnitID = InactiveUnitID cardID} = List.contains (UnitID cardID) cardIDs
     let fAct {ActiveUnitID = ActiveUnitID cardID} = List.contains (UnitID cardID) cardIDs
@@ -1383,6 +1386,11 @@ let private addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUn
         List.map (fst >> CardReactivated) lst,
         (cardsState, turnState, lst |> List.map snd |> fromList |> OrderChoiceEpoch |> Some)
 
+let private flipCard eventType laneID (InactiveUnitID cardID) cardsState =
+    removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
+    |> opLeft (inactiveToActiveUnit >> dup >> opLeft (eventType >> List.singleton))
+    |> flattenLeft
+
 let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     fun event cardsState turnState ->
     let playerID = turnState.CurrentPlayer
@@ -1441,7 +1449,14 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} -> cid = cardID
         let card = findCardInLane matchID lane
         [CardHealedSelf card], (cs, turnState, None)
-    | ActivateSelf -> [], (cardsState, turnState, None)
+    | ActivateSelf ->
+        let (events, card, cs) = flipCard CardActivatedSelf laneID (InactiveUnitID cardID) cardsState
+        let epoch =
+            card.Abilities.OnActivation
+            |> List.map (swapIn pair (laneID, cardID) >> flattenRight)
+            |> fromList
+            |> OrderedAbilityEpoch
+        events, (cs, turnState, Some epoch)
 
 let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cardsState maybeStack =
     let {Board = board} = cardsState
@@ -1584,9 +1599,7 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
 
 let private executeActivateAction: ExecuteActivateAction = fun laneID (InactiveUnitID cardID) cardsState turnState ->
     let (events, newCard, cs1) =
-        removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
-        |> opLeft (inactiveToActiveUnit >> dup >> opLeft (CardActivated >> List.singleton))
-        |> flattenLeft
+        flipCard CardActivated laneID (InactiveUnitID cardID) cardsState
     streamEvents
         events
         (resolveActivationPower laneID (ActiveUnitID cardID) (addCardToActiveUnits newCard laneID cs1) turnState None)
@@ -1904,6 +1917,9 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
     | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage} ->
         DisplayCardHealedSelf (rank, suit, powerName, damage)
+| CardActivatedSelf activeUnit ->
+    let {ActiveUnitID = ActiveUnitID cid; Rank = rank; Suit = suit; Abilities = {Name = powerName}} = activeUnit
+    DisplayCardActivatedSelf (cid, rank, suit, powerName)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
