@@ -206,6 +206,7 @@ type DisplayGameEvent =
 | DisplayCardHealed of Rank * Suit * PowerName * Damage
 | DisplayCardReactivated of Rank * Suit * PowerName
 | DisplayCardFullyHealedSelf of Rank * Suit * PowerName
+| DisplayCardHealedSelf of Rank * Suit * PowerName * Damage
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo

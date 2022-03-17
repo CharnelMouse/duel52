@@ -1429,7 +1429,18 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} -> cid = cardID
         let card = findCardInLane matchID lane
         [CardFullyHealedSelf card], (cs, turnState, None)
-    | HealSelf _
+    | HealSelf n ->
+        let lane = Map.find laneID cardsState.Board.Lanes
+        let fIn = healInactiveCard (n*1u<health>)
+        let fAct = healActiveCard (n*1u<health>)
+        let fPair = healPairedCard (n*1u<health>)
+        let cs = changeInPlace (changeCardInLane (fIn, fAct, fPair) cardID) laneID cardsState
+        let matchID = function
+        | InactiveUnit {InactiveUnitID = InactiveUnitID cid} -> cid = cardID
+        | ActiveUnit {ActiveUnitID = ActiveUnitID cid} -> cid = cardID
+        | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} -> cid = cardID
+        let card = findCardInLane matchID lane
+        [CardHealedSelf card], (cs, turnState, None)
     | ActivateSelf -> [], (cardsState, turnState, None)
 
 let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cardsState maybeStack =
@@ -1887,6 +1898,12 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}}
     | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}} ->
         DisplayCardFullyHealedSelf (rank, suit, powerName)
+| CardHealedSelf unitCard ->
+    match unitCard with
+    | InactiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
+    | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
+    | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage} ->
+        DisplayCardHealedSelf (rank, suit, powerName, damage)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->

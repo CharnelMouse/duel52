@@ -255,6 +255,7 @@ type GameEvent =
 | CardHealed of UnitCard
 | CardReactivated of ActiveCard
 | CardFullyHealedSelf of UnitCard
+| CardHealedSelf of UnitCard
 
 type EventStreamer<'From, 'To> = ('From -> GameEvent list * 'To) -> GameEvent list * 'From -> GameEvent list * 'To
 type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To

@@ -259,11 +259,13 @@ let private displayEvent = function
 | DisplayCardFrozen (rank, suit, PowerName powerName, owner) ->
     printfn "Player %i's %c%c (%s) is frozen" owner (deparseRank rank) (deparseSuit suit) powerName
 | DisplayCardHealed (rank, suit, (PowerName powerName), damage) ->
-    printfn "%c%c (%s) healed, %i damage remaining" (deparseRank rank) (deparseSuit suit) powerName damage
+    printfn "%c%c (%s) is healed, %i damage remaining" (deparseRank rank) (deparseSuit suit) powerName damage
 | DisplayCardReactivated (rank, suit, (PowerName powerName)) ->
     printfn "%c%c (%s) reactivated" (deparseRank rank) (deparseSuit suit) powerName
 | DisplayCardFullyHealedSelf (rank, suit, (PowerName powerName)) ->
     printfn "%c%c (%s) fully healed itself" (deparseRank rank) (deparseSuit suit) powerName
+| DisplayCardHealedSelf (rank, suit, (PowerName powerName), damage) ->
+    printfn "%c%c (%s) heals itself, %i damage remaining" (deparseRank rank) (deparseSuit suit) powerName damage
 
 let private displayEvents = List.iter displayEvent
 
