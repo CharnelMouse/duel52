@@ -247,6 +247,9 @@ type GameEvent =
 | CardsPaired of Pair
 | ActionsGained of PlayerID * Actions
 | AttacksSet of PlayerID * ActiveCard * Actions // I want an active card here
+| CannotDraw of PlayerID
+| CardDrawn of PlayerID
+| DrawPileExhausted
 
 type EventStreamer<'From, 'To> = ('From -> GameEvent list * 'To) -> GameEvent list * 'From -> GameEvent list * 'To
 type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To
@@ -263,8 +266,7 @@ type ExecutePairAttackAction = ExecuteTurnActionType<(PairedUnitID * PairedUnitI
 type ExecuteCreatePairAction = ExecuteTurnActionType<ActiveUnitID * ActiveUnitID>
 
 type StartTurnInput = CardsState * PlayerReady
-type StartTurn = StartTurnInput -> GameStateDuringTurn
-type ExecuteStartTurn = WithAdded<StartTurnInput, GameStateDuringTurn, GameState, GameEvent list>
+type StartTurn = StartTurnInput -> GameEvent list * GameStateDuringTurn
 type TurnActionInput = CardsState * TurnInProgress
 type EndTurn = TurnActionInput -> GameStateBetweenTurns
 type ExecuteEndTurn = WithAdded<TurnActionInput, GameStateBetweenTurns, GameState, GameEvent list>

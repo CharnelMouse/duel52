@@ -1188,7 +1188,7 @@ let private tryDrawCard playerID cardsState =
                     Board = flipBasesOnBoard preInfo.Bases boardInfo
                     GameStage = DrawPileEmpty {HandCards = newHandCards; LaneWins = Map.empty}
                 }
-            newCards
+            [CardDrawn playerID; DrawPileExhausted], newCards
         | newTopCard :: newRest ->
             let newHandCards =
                 hands
@@ -1207,10 +1207,10 @@ let private tryDrawCard playerID cardsState =
                                 HandCards = newHandCards
                             }
                 }
-            newCards
+            [CardDrawn playerID], newCards
     | DrawPileEmpty _
     | HandsEmpty _ ->
-        cardsState
+        [CannotDraw playerID], cardsState
 
 let private healOwnUnitsInLane playerID amount (lane: Lane) =
     {lane with
@@ -1318,7 +1318,9 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     let playerID = turnState.CurrentPlayer
     let ability, laneID, cardID = event
     match ability with
-    | Draw -> [], (tryDrawCard playerID cardsState, turnState, None)
+    | Draw ->
+        let (events, cs) = tryDrawCard playerID cardsState
+        events, (cs, turnState, None)
     | Discard -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID)))
     | ViewInactive -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
     | FreezeEnemiesInLane -> [], (freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None)
@@ -1328,8 +1330,8 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
         [ActionsGained (playerID, 1u<action>)], (cardsState, newTurnState, None)
     | ChangeMaxAttacksThisTurn n ->
-        let actions, cs = setMaxCardActions cardID (n*1u<action>) laneID cardsState
-        actions, (cs, turnState, None)
+        let events, cs = setMaxCardActions cardID (n*1u<action>) laneID cardsState
+        events, (cs, turnState, None)
     | ActivateAlliesInLane -> [], flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
         [], addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
@@ -1768,6 +1770,9 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
         | Paired {FullPairedUnitID = FullPairedUnitID cid; Rank = rank; Suit = suit; Abilities = {Name = pn}} ->
             cid, rank, suit, pn
     DisplayAttacksSet (pid, cardID, rank, suit, powerName, n)
+| CannotDraw pid -> DisplayCannotDraw pid
+| CardDrawn pid -> DisplayCardDrawn pid
+| DrawPileExhausted -> DisplayDrawPileExhausted
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
@@ -2076,11 +2081,13 @@ let private executeTurnAction: ExecuteTurnAction = fun action (cardsState, turnS
 
 let private startPlayerTurn: StartTurn = fun (cs, ts) ->
     let playerID = ts.Player
+    let events, cs2 =
+        cs
+        |> tryDrawCard playerID
+        |> opRight (timeoutOwnedFreezeStates playerID)
+    events,
     {
-        CardsState =
-            cs
-            |> tryDrawCard playerID
-            |> timeoutOwnedFreezeStates playerID
+        CardsState = cs2
         TurnState = {
             CurrentPlayer = playerID
             NPlayers = ts.NPlayers
@@ -2131,9 +2138,8 @@ let private executeStackChoice: ExecuteStackChoice = fun eventID (cardsState, tu
     |> streamEvents [StackChoiceMade (turnState.CurrentPlayer, chosen)]
 
 let private executeTurnChange = fun eventType -> splitFun (snd >> eventType >> List.singleton)
-let private executeStartTurn: ExecuteStartTurn = fun startPlayerTurn ->
-    let getPlayer ts = ts.Player
-    executeTurnChange (getPlayer >> TurnStarted) (startPlayerTurn >> GameStateDuringTurn)
+let private executeStartTurn (startPlayerTurn: StartTurn) =
+    startPlayerTurn >> opRight GameStateDuringTurn
 let private executeEndTurn: ExecuteEndTurn = fun endPlayerTurn ->
     let getCurrentPlayer ts = ts.CurrentPlayer
     executeTurnChange (getCurrentPlayer >> TurnEnded) (endPlayerTurn >> GameStateBetweenTurns)

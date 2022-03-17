@@ -197,7 +197,10 @@ type DisplayGameEvent =
 | DisplayCardDamaged of PlayerID * CardID * Damage
 | DisplayCardsPaired of PlayerID * CardID * CardID * Suit * Suit * Rank * PowerName
 | DisplayActionsGained of PlayerID * Actions
-| DisplayAttacksSet of PlayerID * CardID * Rank * Suit * PowerName * Actions // Want other card info here
+| DisplayAttacksSet of PlayerID * CardID * Rank * Suit * PowerName * Actions
+| DisplayCannotDraw of PlayerID
+| DisplayCardDrawn of PlayerID
+| DisplayDrawPileExhausted
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo

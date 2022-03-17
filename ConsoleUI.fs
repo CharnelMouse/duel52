@@ -248,6 +248,12 @@ let private displayEvent = function
     printfn "Player %i gains %i actions" player actions
 | DisplayAttacksSet (player, cardID, rank, suit, (PowerName powerName), attacks) ->
     printfn "Card %c%c (%s) can attack %i times in total this turn" (deparseRank rank) (deparseSuit suit) powerName attacks
+| DisplayCannotDraw player ->
+    printfn "Player %i can't draw: drawpile exhausted" player
+| DisplayCardDrawn player ->
+    printfn "Player %i draws a card" player
+| DisplayDrawPileExhausted ->
+    printfn "Draw pile exhausted, bases are now normal cards"
 
 let private displayEvents = List.iter displayEvent
 
