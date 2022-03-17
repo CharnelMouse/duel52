@@ -601,20 +601,23 @@ let private flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID
     |> opLeft (
         List.map inactiveToActiveUnit
         >> dup
-        >> opLeft (
-            List.choose (fun {ActiveUnitID = ActiveUnitID id; Abilities = abilities} ->
+        >> opLeft dup
+        >> flattenLeft
+        >> (fun (a, b, c) ->
+            List.map CardActivated a,
+            b
+            |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Abilities = abilities} ->
                 match abilities.OnActivation with
                 | [] -> None
                 | _ -> Some (PowerContext (laneID, id, abilities.Name))
                 )
-            >> tryFromList
+            |> tryFromList,
+            c
             )
         )
-    |> flattenLeft
+    |> (fun ((a, b, c), d) -> a, addCardsToActiveUnits c laneID d, Option.map OrderChoiceEpoch b)
     |> unflattenRight
-    |> opPair (Option.map OrderChoiceEpoch) (uncurry (swapIn addCardsToActiveUnits laneID))
-    |> swap
-    |> toMiddle turnState
+    |> opRight (toMiddle turnState)
 
 let private toActionChoice gameState =
     {
@@ -1395,7 +1398,6 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         setMaxCardActions cardID (n*1u<action>) laneID cardsState
         |> opRight (fun cs -> cs, turnState, None)
     | ActivateAlliesInLane ->
-        [],
         flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
         [],
