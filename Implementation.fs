@@ -1370,26 +1370,36 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     let ability, laneID, cardID = event
     match ability with
     | Draw ->
-        let (events, cs) = tryDrawCard playerID cardsState
-        events, (cs, turnState, None)
-    | Discard -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID)))
-    | ViewInactive -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
+        tryDrawCard playerID cardsState
+        |> opRight (fun cs -> (cs, turnState, None))
+    | Discard ->
+        [],
+        (cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID)))
+    | ViewInactive ->
+        [],
+        (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
     | FreezeEnemiesInLane ->
-        let (events, cs) = freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState
-        streamEvents [LaneFrozen laneID] (events, (cs, turnState, None))
+        freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState
+        |> opRight (fun cs -> cs, turnState, None)
+        |> streamEvents [LaneFrozen laneID]
     | HealAllAllies n ->
-        let (events, cs) = healOwnUnits playerID (n*1u<health>) cardsState
-        events, (cs, turnState, None)
-    | MayMoveAllyToOwnLane -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID))))
+        healOwnUnits playerID (n*1u<health>) cardsState
+        |> opRight (fun cs -> cs, turnState, None)
+    | MayMoveAllyToOwnLane ->
+        [],
+        (cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID))))
     | ExtraActions n ->
-        let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
+        let newTurnState = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
         [ActionsGained (playerID, 1u<action>)], (cardsState, newTurnState, None)
     | ChangeMaxAttacksThisTurn n ->
-        let events, cs = setMaxCardActions cardID (n*1u<action>) laneID cardsState
-        events, (cs, turnState, None)
-    | ActivateAlliesInLane -> [], flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
+        setMaxCardActions cardID (n*1u<action>) laneID cardsState
+        |> opRight (fun cs -> cs, turnState, None)
+    | ActivateAlliesInLane ->
+        [],
+        flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
-        [], addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
+        [],
+        addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
     | FullyHealSelf
     | HealSelf _
     | ActivateSelf -> [], (cardsState, turnState, None)
