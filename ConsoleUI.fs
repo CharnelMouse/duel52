@@ -244,6 +244,10 @@ let private displayEvent = function
     let suitChar2 = deparseSuit suit2
     let rankChar = deparseRank rank
     printfn "Player %i: %c%c and %c%c form a %s pair" owner rankChar suitChar1 rankChar suitChar2 powerName
+| DisplayActionsGained (player, actions) ->
+    printfn "Player %i gains %i actions" player actions
+| DisplayAttacksSet (player, cardID, rank, suit, (PowerName powerName), attacks) ->
+    printfn "Card %c%c (%s) can attack %i times in total this turn" (deparseRank rank) (deparseSuit suit) powerName attacks
 
 let private displayEvents = List.iter displayEvent
 

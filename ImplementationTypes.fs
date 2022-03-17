@@ -245,6 +245,15 @@ type GameEvent =
 | CardAttacked of Attacker * UnitCard
 | CardDamaged of UnitCard * Damage
 | CardsPaired of Pair
+| ActionsGained of PlayerID * Actions
+| AttacksSet of PlayerID * ActiveCard * Actions // I want an active card here
+
+type EventStreamer<'From, 'To> = ('From -> GameEvent list * 'To) -> GameEvent list * 'From -> GameEvent list * 'To
+type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To
+
+type ResolveInstantNonTargetAbility = (InstantNonTargetAbility * LaneID * CardID) -> CardsState -> TurnInProgress -> GameEvent list * (CardsState * TurnInProgress * ResolutionEpoch option)
+type ProcessResolutionStack = CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
+type ResolveActivationPower = LaneID -> ActiveUnitID -> CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
 
 type ExecuteTurnActionType<'CardsInfo> = LaneID -> 'CardsInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
 type ExecutePlayAction = ExecuteTurnActionType<HandCardID>
@@ -253,15 +262,15 @@ type ExecuteSingleAttackAction = ExecuteTurnActionType<ActiveUnitID * AttackTarg
 type ExecutePairAttackAction = ExecuteTurnActionType<(PairedUnitID * PairedUnitID) * AttackTargetInfo>
 type ExecuteCreatePairAction = ExecuteTurnActionType<ActiveUnitID * ActiveUnitID>
 
-type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To
 type StartTurnInput = CardsState * PlayerReady
 type StartTurn = StartTurnInput -> GameStateDuringTurn
 type ExecuteStartTurn = WithAdded<StartTurnInput, GameStateDuringTurn, GameState, GameEvent list>
-type EndTurn = CardsState * TurnInProgress -> GameStateBetweenTurns
-type ExecuteEndTurn = WithAdded<CardsState * TurnInProgress, GameStateBetweenTurns, GameState, GameEvent list>
+type TurnActionInput = CardsState * TurnInProgress
+type EndTurn = TurnActionInput -> GameStateBetweenTurns
+type ExecuteEndTurn = WithAdded<TurnActionInput, GameStateBetweenTurns, GameState, GameEvent list>
 
 type ExecuteTurnChoice<'Choice, 'FromState, 'ToState> = 'Choice -> 'FromState -> GameEvent list * 'ToState
-type ExecuteTurnAction = ExecuteTurnChoice<ActionChoiceInfo, CardsState * TurnInProgress, GameStateDuringTurn>
+type ExecuteTurnAction = ExecuteTurnChoice<ActionChoiceInfo, TurnActionInput, GameStateDuringTurn>
 type ExecuteAbilityChoice = ExecuteTurnChoice<AbilityChoiceInfo, CardsState * TurnInProgress * ResolutionStack option, GameStateDuringTurn>
 type ExecuteStackChoice = ExecuteTurnChoice<EventID, CardsState * TurnInProgress * StackChoice, GameStateDuringTurn>
 

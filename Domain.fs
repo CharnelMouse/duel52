@@ -196,6 +196,8 @@ type DisplayGameEvent =
 | DisplayCardAttacked of PlayerID * UnitIDs * PlayerID * CardID
 | DisplayCardDamaged of PlayerID * CardID * Damage
 | DisplayCardsPaired of PlayerID * CardID * CardID * Suit * Suit * Rank * PowerName
+| DisplayActionsGained of PlayerID * Actions
+| DisplayAttacksSet of PlayerID * CardID * Rank * Suit * PowerName * Actions // Want other card info here
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo

@@ -371,6 +371,16 @@ let private removeFromLane = fun (fIn, fAct, fPair) lane ->
         Pairs = List.map fullPairedUnitsToPair pairs
         }
 
+let private findActiveCardInLane = fun predicate lane ->
+    let active =
+        lane.ActiveUnits
+        |> List.map Solo
+    let paired =
+        lane.Pairs
+        |> List.collect (pairToFullPairedUnits >> twoToList)
+        |> List.map Paired
+    List.find predicate (active @ paired)
+
 let private removeCardsInLane = fun cardIDs lane ->
     let fIn {InactiveUnitID = InactiveUnitID cardID} = List.contains (UnitID cardID) cardIDs
     let fAct {ActiveUnitID = ActiveUnitID cardID} = List.contains (UnitID cardID) cardIDs
@@ -468,11 +478,23 @@ let private incrementCardActionsUsed cardID =
     let changeLane = changeCardInLane (id, incAct, incPair)
     changeInPlace (changeLane cardID)
 
-let private setMaxCardActions cardID left =
+let private setMaxCardActions (cardID: CardID) left laneID cardsState =
     let setAct card = ({card with MaxActions = left}: ActiveUnit)
     let setPair card = ({card with MaxActions = left}: PairedUnit)
+    let lane = Map.find laneID cardsState.Board.Lanes
+    let matchesID = function
+    | Solo {ActiveUnitID = ActiveUnitID cid}
+    | Paired {FullPairedUnitID = FullPairedUnitID cid} ->
+        cid = cardID
+    let (card: ActiveCard) = findActiveCardInLane matchesID lane
+    let playerID =
+        match card with
+        | Solo {Owner = pid}
+        | Paired {Owner = pid} ->
+            pid
     let changeLane = changeCardInLane (id, setAct, setPair)
-    changeInPlace (changeLane cardID)
+    [AttacksSet (playerID, card, left)],
+    changeInPlace (changeLane (cardID)) laneID cardsState
 
 let private makeCardKnown cardID playerID cardsState =
     let setIn card = ({card with KnownBy = card.KnownBy |> Set.add playerID}: InactiveUnit)
@@ -1291,26 +1313,29 @@ let private addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUn
     | None -> cardsState, turnState, None
     | Some pc -> cardsState, turnState, Some (OrderChoiceEpoch pc)
 
-let private resolveInstantNonTargetAbility event cardsState turnState =
+let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
+    fun event cardsState turnState ->
     let playerID = turnState.CurrentPlayer
     let ability, laneID, cardID = event
     match ability with
-    | Draw -> tryDrawCard playerID cardsState, turnState, None
-    | Discard -> cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID))
-    | ViewInactive -> cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID))
-    | FreezeEnemiesInLane -> freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None
-    | HealAllAllies n -> healOwnUnits playerID (n*1u<health>) cardsState, turnState, None
-    | MayMoveAllyToOwnLane -> cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID)))
+    | Draw -> [], (tryDrawCard playerID cardsState, turnState, None)
+    | Discard -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID)))
+    | ViewInactive -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
+    | FreezeEnemiesInLane -> [], (freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None)
+    | HealAllAllies n -> [], (healOwnUnits playerID (n*1u<health>) cardsState, turnState, None)
+    | MayMoveAllyToOwnLane -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID))))
     | ExtraActions n ->
         let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
-        cardsState, newTurnState, None
-    | ChangeMaxAttacksThisTurn n -> setMaxCardActions cardID (n*1u<action>) laneID cardsState, turnState, None
-    | ActivateAlliesInLane -> flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
+        [ActionsGained (playerID, 1u<action>)], (cardsState, newTurnState, None)
+    | ChangeMaxAttacksThisTurn n ->
+        let actions, cs = setMaxCardActions cardID (n*1u<action>) laneID cardsState
+        actions, (cs, turnState, None)
+    | ActivateAlliesInLane -> [], flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
-        addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
+        [], addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
     | FullyHealSelf
     | HealSelf _
-    | ActivateSelf -> cardsState, turnState, None
+    | ActivateSelf -> [], (cardsState, turnState, None)
 
 let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cardsState maybeStack =
     let {Board = board} = cardsState
@@ -1324,34 +1349,44 @@ let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cards
     maybeStack
     |> NonEmptyList.consOptions maybeAbilitiesEpoch
 
-let rec private processResolutionStack cardsState turnState (maybeResolutionStack: ResolutionStack option) =
+let private streamEvents previousEvents (newEvents, state) =
+    (previousEvents @ newEvents), state
+
+let rec private processResolutionStack: ProcessResolutionStack =
+    fun cardsState turnState (maybeResolutionStack: ResolutionStack option) ->
     match maybeResolutionStack with
-    | None -> {
-        CardsState = cardsState
-        TurnState = turnState
-        TurnStage = ActionChoice
+    | None ->
+        [],
+        {
+            CardsState = cardsState
+            TurnState = turnState
+            TurnStage = ActionChoice
         }
     | Some {Head = h; Tail = t} ->
         match h with
-        | OrderChoiceEpoch activationPowerContexts -> {
-            CardsState = cardsState
-            TurnState = turnState
-            TurnStage = StackChoice {
-                EpochEvents =
-                    activationPowerContexts
-                    |> NonEmptyList.toList
-                    |> createIDMap 1u<EID>
-                    |> NonEmptyMap.fromMap
-                ResolutionStack = NonEmptyList.tryFromList t
-                }
+        | OrderChoiceEpoch activationPowerContexts ->
+            [],
+            {
+                CardsState = cardsState
+                TurnState = turnState
+                TurnStage = StackChoice {
+                    EpochEvents =
+                        activationPowerContexts
+                        |> NonEmptyList.toList
+                        |> createIDMap 1u<EID>
+                        |> NonEmptyMap.fromMap
+                    ResolutionStack = NonEmptyList.tryFromList t
+                    }
             }
-        | AbilityChoiceEpoch choiceContext -> {
-            CardsState = cardsState
-            TurnState = turnState
-            TurnStage = AbilityChoice {
-                ChoiceContext = choiceContext
-                ResolutionStack = NonEmptyList.tryFromList t
-                }
+        | AbilityChoiceEpoch choiceContext ->
+            [],
+            {
+                CardsState = cardsState
+                TurnState = turnState
+                TurnStage = AbilityChoice {
+                    ChoiceContext = choiceContext
+                    ResolutionStack = NonEmptyList.tryFromList t
+                    }
             }
         | OrderedAbilityEpoch triggerEvents ->
             let ({Head = first; Tail = rest}: AbilityEvent epoch) = triggerEvents
@@ -1361,20 +1396,21 @@ let rec private processResolutionStack cardsState turnState (maybeResolutionStac
             let remainingStack =
                 NonEmptyList.tryFromList t
                 |> NonEmptyList.consOptions remainingHead
-            let cs, ts, maybeNewEpoch = resolveInstantNonTargetAbility first cardsState turnState
+            let events, (cs, ts, maybeNewEpoch) = resolveInstantNonTargetAbility first cardsState turnState
             let newStack = NonEmptyList.consOptions maybeNewEpoch remainingStack
-            processResolutionStack cs ts newStack
+            streamEvents events (processResolutionStack cs ts newStack)
 
-let private resolveActivationPower laneID (ActiveUnitID cardID) cardsState turnState stack =
-    let {Board = board} = cardsState
-    let lane = Map.find laneID board.Lanes
-    let card = List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID) lane.ActiveUnits
-    let newEpoch =
-        card.Abilities.OnActivation
-        |> List.map (fun ability -> ability, laneID, cardID)
-        |> NonEmptyList.tryFromList
-        |> Option.map OrderedAbilityEpoch
-    processResolutionStack cardsState turnState (NonEmptyList.consOptions newEpoch stack)
+let private resolveActivationPower: ResolveActivationPower =
+    fun laneID (ActiveUnitID cardID) cardsState turnState stack ->
+        let {Board = board} = cardsState
+        let lane = Map.find laneID board.Lanes
+        let card = List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = cardID) lane.ActiveUnits
+        let newEpoch =
+            card.Abilities.OnActivation
+            |> List.map (fun ability -> ability, laneID, cardID)
+            |> NonEmptyList.tryFromList
+            |> Option.map OrderedAbilityEpoch
+        processResolutionStack cardsState turnState (NonEmptyList.consOptions newEpoch stack)
 
 let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardID) turnState cardsState =
     let lane = Map.find laneID cardsState.Board.Lanes
@@ -1448,8 +1484,9 @@ let private executeActivateAction: ExecuteActivateAction = fun laneID (InactiveU
         removeCardFromInactiveUnits (InactiveUnitID cardID) laneID cardsState
         |> opLeft (inactiveToActiveUnit >> dup >> opLeft (CardActivated >> List.singleton))
         |> flattenLeft
-    events,
-    resolveActivationPower laneID (ActiveUnitID cardID) (addCardToActiveUnits newCard laneID cs1) turnState None
+    streamEvents
+        events
+        (resolveActivationPower laneID (ActiveUnitID cardID) (addCardToActiveUnits newCard laneID cs1) turnState None)
 
 let private getBonusDefenderDamage attackerAbilities targetAbilities =
     let hasBonusHealth =
@@ -1722,6 +1759,15 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     let {PairedUnitID = PairedUnitID cardID1; Suit = suit1} = card1
     let {PairedUnitID = PairedUnitID cardID2; Suit = suit2} = card2
     DisplayCardsPaired (pid, cardID1, cardID2, suit1, suit2, rank, powerName)
+| ActionsGained (pid, n) ->
+    DisplayActionsGained (pid, n)
+| AttacksSet (pid, (card: ActiveCard), n) ->
+    let (cardID, rank, suit, powerName) =
+        match card with
+        | Solo {ActiveUnitID = ActiveUnitID cid; Rank = rank; Suit = suit; Abilities = {Name = pn}}
+        | Paired {FullPairedUnitID = FullPairedUnitID cid; Rank = rank; Suit = suit; Abilities = {Name = pn}} ->
+            cid, rank, suit, pn
+    DisplayAttacksSet (pid, cardID, rank, suit, powerName, n)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
@@ -2082,7 +2128,7 @@ let private executeStackChoice: ExecuteStackChoice = fun eventID (cardsState, tu
     stackChoice.ResolutionStack
     |> NonEmptyList.consOptions (getMaybeRemainingHead remaining)
     |> resolveActivationPower laneID (ActiveUnitID cardID) cardsState turnState
-    |> pair [StackChoiceMade (turnState.CurrentPlayer, chosen)]
+    |> streamEvents [StackChoiceMade (turnState.CurrentPlayer, chosen)]
 
 let private executeTurnChange = fun eventType -> splitFun (snd >> eventType >> List.singleton)
 let private executeStartTurn: ExecuteStartTurn = fun startPlayerTurn ->
