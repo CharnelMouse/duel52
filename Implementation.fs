@@ -1213,39 +1213,75 @@ let private tryDrawCard playerID cardsState =
         [CannotDraw playerID], cardsState
 
 let private healOwnUnitsInLane playerID amount (lane: Lane) =
+    let healedInactives, newInactives =
+        lane.InactiveUnits
+        |> List.map (fun card ->
+            if card.Owner = playerID && card.Damage > 0u<health> then
+                let healed = healInactiveCard amount card
+                Some healed, healed
+            else
+                None, card
+            )
+        |> List.unzip
+        |> opLeft (List.choose id >> List.map InactiveUnit)
+    let healedActives, newActives =
+        lane.ActiveUnits
+        |> List.map (fun card ->
+            if card.Owner = playerID && card.Damage > 0u<health> then
+                let healed = healActiveCard amount card
+                Some healed, healed
+            else
+                None, card
+            )
+        |> List.unzip
+        |> opLeft (List.choose id >> List.map ActiveUnit)
+    let healedPairedUnits, newPairs =
+        lane.Pairs
+        |> List.map (fun pair ->
+            let {Cards = (card1, card2); Owner = owner} = pair
+            if owner = playerID then
+                match card1.Damage > 0u<health>, card2.Damage > 0u<health> with
+                | false, false ->
+                    None, pair
+                | true, false ->
+                    let newPair = {pair with Cards = healPairedCard amount card1, card2}
+                    newPair
+                    |> dup
+                    |> opLeft (pairToFullPairedUnits >> fst >> List.singleton >> Some)
+                | false, true ->
+                    let newPair = {pair with Cards = card1, healPairedCard amount card2}
+                    newPair
+                    |> dup
+                    |> opLeft (pairToFullPairedUnits >> snd >> List.singleton >> Some)
+                | true, true ->
+                    let newPair = {pair with Cards = healPairedCard amount card1, healPairedCard amount card2}
+                    newPair
+                    |> dup
+                    |> opLeft (pairToFullPairedUnits >> twoToList  >> Some)
+            else
+                None, pair
+            )
+        |> List.unzip
+        |> opLeft (List.choose id >> List.collect (List.map PairedUnit))
+    (healedInactives @ healedActives @ healedPairedUnits)
+    |> List.map CardHealed,
     {lane with
-        InactiveUnits =
-            lane.InactiveUnits
-            |> List.map (fun card ->
-                if card.Owner = playerID then
-                    healInactiveCard amount card
-                else
-                    card
-                )
-        ActiveUnits =
-            lane.ActiveUnits
-            |> List.map (fun card ->
-                if card.Owner = playerID then
-                    healActiveCard amount card
-                else
-                    card
-                )
-        Pairs =
-            lane.Pairs
-            |> List.map (fun pair ->
-                let {Cards = (card1, card2); Owner = owner} = pair
-                if owner = playerID then
-                    {pair with Cards = healPairedCard amount card1, healPairedCard amount card2}
-                else
-                    pair
-                )
+        InactiveUnits = newInactives
+        ActiveUnits = newActives
+        Pairs = newPairs
         }
 let private healOwnUnits playerID amount cardsState =
     let board = cardsState.Board
-    let newLanes =
+    let events, newLanes =
         board.Lanes
-        |> Map.map (fun _ lane -> healOwnUnitsInLane playerID amount lane)
-    {cardsState with Board = {board with Lanes = newLanes}}
+        |> Map.toList
+        |> List.map (fun (laneID, lane) ->
+            let (events, newLane) = healOwnUnitsInLane playerID amount lane
+            events, (laneID, newLane)
+            )
+        |> List.unzip
+        |> opPair (List.collect id) (Map.ofList)
+    events, {cardsState with Board = {board with Lanes = newLanes}}
 
 let private streamEvents previousEvents (newEvents, state) =
     (previousEvents @ newEvents), state
@@ -1341,7 +1377,9 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     | FreezeEnemiesInLane ->
         let (events, cs) = freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState
         streamEvents [LaneFrozen laneID] (events, (cs, turnState, None))
-    | HealAllAllies n -> [], (healOwnUnits playerID (n*1u<health>) cardsState, turnState, None)
+    | HealAllAllies n ->
+        let (events, cs) = healOwnUnits playerID (n*1u<health>) cardsState
+        events, (cs, turnState, None)
     | MayMoveAllyToOwnLane -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID))))
     | ExtraActions n ->
         let (newTurnState: TurnInProgress) = {turnState with ActionsLeft = turnState.ActionsLeft + n*1u<action>}
@@ -1794,6 +1832,12 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Owner = owner}
     | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Owner = owner} ->
         DisplayCardFrozen (rank, suit, powerName, owner)
+| CardHealed unitCard ->
+    match unitCard with
+    | InactiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
+    | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
+    | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage} ->
+        DisplayCardHealed (rank, suit, powerName, damage)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
