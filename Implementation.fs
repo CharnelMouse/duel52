@@ -1345,27 +1345,30 @@ let private addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUn
             | Paired {FullPairedUnitID = FullPairedUnitID id; Owner = owner} -> owner = playerID && id <> empowererCardID
             )
         |> List.choose (function
-            | Solo {ActiveUnitID = ActiveUnitID id; Abilities = abilities} ->
+            | Solo card ->
+                let {ActiveUnitID = ActiveUnitID id; Abilities = abilities} = card
                 match abilities.OnActivation with
                 | [] -> None
                 | oa ->
                     if List.contains ReactivateNonEmpowerActivationPowersInLane oa then
                         None
                     else
-                        Some (PowerContext (laneID, id, abilities.Name))
-            | Paired {FullPairedUnitID = FullPairedUnitID id; Abilities = abilities} ->
+                        Some (Solo card, PowerContext (laneID, id, abilities.Name))
+            | Paired card ->
+                let {FullPairedUnitID = FullPairedUnitID id; Abilities = abilities} = card
                 match abilities.OnActivation with
                 | [] -> None
                 | oa ->
                     if List.contains ReactivateNonEmpowerActivationPowersInLane oa then
                         None
                     else
-                        Some (PowerContext (laneID, id, abilities.Name))
+                        Some (Paired card, PowerContext (laneID, id, abilities.Name))
             )
-        |> NonEmptyList.tryFromList
     match powerChoices with
-    | None -> cardsState, turnState, None
-    | Some pc -> cardsState, turnState, Some (OrderChoiceEpoch pc)
+    | [] -> [], (cardsState, turnState, None)
+    | lst ->
+        List.map (fst >> CardReactivated) lst,
+        (cardsState, turnState, lst |> List.map snd |> fromList |> OrderChoiceEpoch |> Some)
 
 let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     fun event cardsState turnState ->
@@ -1400,7 +1403,6 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
     | ActivateAlliesInLane ->
         flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
-        [],
         addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
     | FullyHealSelf
     | HealSelf _
@@ -1850,6 +1852,11 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage}
     | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Damage = damage} ->
         DisplayCardHealed (rank, suit, powerName, damage)
+| CardReactivated activeCard ->
+    match activeCard with
+    | Solo {Rank = rank; Suit = suit; Abilities = {Name = powerName}}
+    | Paired {Rank = rank; Suit = suit; Abilities = {Name = powerName}} ->
+        DisplayCardReactivated (rank, suit, powerName)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->

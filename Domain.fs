@@ -204,6 +204,7 @@ type DisplayGameEvent =
 | DisplayLaneFrozen of LaneID
 | DisplayCardFrozen of Rank * Suit * PowerName * PlayerID
 | DisplayCardHealed of Rank * Suit * PowerName * Damage
+| DisplayCardReactivated of Rank * Suit * PowerName
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo
