@@ -250,6 +250,8 @@ type GameEvent =
 | CannotDraw of PlayerID
 | CardDrawn of PlayerID
 | DrawPileExhausted
+| LaneFrozen of LaneID
+| CardFrozen of UnitCard
 
 type EventStreamer<'From, 'To> = ('From -> GameEvent list * 'To) -> GameEvent list * 'From -> GameEvent list * 'To
 type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To

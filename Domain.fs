@@ -201,6 +201,8 @@ type DisplayGameEvent =
 | DisplayCannotDraw of PlayerID
 | DisplayCardDrawn of PlayerID
 | DisplayDrawPileExhausted
+| DisplayLaneFrozen of LaneID
+| DisplayCardFrozen of Rank * Suit * PowerName * PlayerID
 
 type TurnActionInfo =
 | ActionChoiceInfo of ActionChoiceInfo

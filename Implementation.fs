@@ -1247,37 +1247,52 @@ let private healOwnUnits playerID amount cardsState =
         |> Map.map (fun _ lane -> healOwnUnitsInLane playerID amount lane)
     {cardsState with Board = {board with Lanes = newLanes}}
 
+let private streamEvents previousEvents (newEvents, state) =
+    (previousEvents @ newEvents), state
+
 let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
     let board = cardsState.Board
     let lane = Map.find laneID board.Lanes
-    let newInactiveUnits =
+    let frozenInactives, newInactiveUnits =
         lane.InactiveUnits
         |> List.map (fun card ->
             if card.Owner <> playerID then
-                {card with FreezeStatus = FrozenBy playerID}
+                let newCard = {card with FreezeStatus = FrozenBy playerID}
+                Some newCard, newCard
             else
-                card
+                None, card
             )
-    let newActiveUnits =
+        |> List.unzip
+        |> opLeft (List.choose id >> List.map InactiveUnit)
+    let frozenActives, newActiveUnits =
         lane.ActiveUnits
         |> List.map (fun card ->
             if card.Owner <> playerID && not (List.contains (InstantNonTargetAbility FreezeEnemiesInLane) card.Abilities.Ignores) then
-                {card with FreezeStatus = FrozenBy playerID}
+                let newCard = {card with FreezeStatus = FrozenBy playerID}
+                Some newCard, newCard
             else
-                card
+                None, card
             )
-    let newPairs =
+        |> List.unzip
+        |> opLeft (List.choose id >> List.map ActiveUnit)
+    let frozenPairedUnits, newPairs =
         lane.Pairs
         |> List.map (fun pair ->
             let {Cards = c1, c2; Owner = owner; Abilities = {Ignores = ignores}} = pair
             if owner <> playerID && not (List.contains (InstantNonTargetAbility FreezeEnemiesInLane) ignores) then
                 let newCards = {c1 with FreezeStatus = FrozenBy playerID}, {c2 with FreezeStatus = FrozenBy playerID}
-                {pair with Cards = newCards}
+                let newPair = {pair with Cards = newCards}
+                Some (pairToFullPairedUnits newPair), newPair
             else
-                pair
+                None, pair
             )
+        |> List.unzip
+        |> opLeft (List.choose id >> List.collect twoToList >> List.map PairedUnit)
+    let events =
+        (frozenInactives @ frozenActives @ frozenPairedUnits)
+        |> List.map CardFrozen
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
-    {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+    events, {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
 
 let private addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID empowererCardID) cardsState turnState =
     let playerID = turnState.CurrentPlayer
@@ -1323,7 +1338,9 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         events, (cs, turnState, None)
     | Discard -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (DiscardChoiceContext cardID)))
     | ViewInactive -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
-    | FreezeEnemiesInLane -> [], (freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState, turnState, None)
+    | FreezeEnemiesInLane ->
+        let (events, cs) = freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState
+        streamEvents [LaneFrozen laneID] (events, (cs, turnState, None))
     | HealAllAllies n -> [], (healOwnUnits playerID (n*1u<health>) cardsState, turnState, None)
     | MayMoveAllyToOwnLane -> [], (cardsState, turnState, Some (AbilityChoiceEpoch (MayMoveAllyToOwnLaneChoiceContext (laneID, cardID))))
     | ExtraActions n ->
@@ -1350,9 +1367,6 @@ let private addCardActivationAbilitiesToStack laneID (ActiveUnitID cardID) cards
         |> Option.map OrderedAbilityEpoch
     maybeStack
     |> NonEmptyList.consOptions maybeAbilitiesEpoch
-
-let private streamEvents previousEvents (newEvents, state) =
-    (previousEvents @ newEvents), state
 
 let rec private processResolutionStack: ProcessResolutionStack =
     fun cardsState turnState (maybeResolutionStack: ResolutionStack option) ->
@@ -1773,6 +1787,13 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
 | CannotDraw pid -> DisplayCannotDraw pid
 | CardDrawn pid -> DisplayCardDrawn pid
 | DrawPileExhausted -> DisplayDrawPileExhausted
+| LaneFrozen laneID -> DisplayLaneFrozen laneID
+| CardFrozen unitCard ->
+    match unitCard with
+    | InactiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Owner = owner}
+    | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Owner = owner}
+    | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}; Owner = owner} ->
+        DisplayCardFrozen (rank, suit, powerName, owner)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->

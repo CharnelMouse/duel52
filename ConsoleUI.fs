@@ -254,6 +254,10 @@ let private displayEvent = function
     printfn "Player %i draws a card" player
 | DisplayDrawPileExhausted ->
     printfn "Draw pile exhausted, bases are now normal cards"
+| DisplayLaneFrozen lane ->
+    printfn "Lane %i is frozen" lane
+| DisplayCardFrozen (rank, suit, PowerName powerName, owner) ->
+    printfn "Player %i's %c%c (%s) is frozen" owner (deparseRank rank) (deparseSuit suit) powerName
 
 let private displayEvents = List.iter displayEvent
 
