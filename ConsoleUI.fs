@@ -262,6 +262,8 @@ let private displayEvent = function
     printfn "%c%c (%s) healed, %i damage remaining" (deparseRank rank) (deparseSuit suit) powerName damage
 | DisplayCardReactivated (rank, suit, (PowerName powerName)) ->
     printfn "%c%c (%s) reactivated" (deparseRank rank) (deparseSuit suit) powerName
+| DisplayCardFullyHealedSelf (rank, suit, (PowerName powerName)) ->
+    printfn "%c%c (%s) fully healed itself" (deparseRank rank) (deparseSuit suit) powerName
 
 let private displayEvents = List.iter displayEvent
 

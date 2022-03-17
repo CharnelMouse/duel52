@@ -371,6 +371,19 @@ let private removeFromLane = fun (fIn, fAct, fPair) lane ->
         Pairs = List.map fullPairedUnitsToPair pairs
         }
 
+let private findCardInLane = fun predicate lane ->
+    let inactive =
+        lane.InactiveUnits
+        |> List.map InactiveUnit
+    let active =
+        lane.ActiveUnits
+        |> List.map ActiveUnit
+    let paired =
+        lane.Pairs
+        |> List.collect (pairToFullPairedUnits >> twoToList)
+        |> List.map PairedUnit
+    List.find predicate (inactive @ active @ paired)
+
 let private findActiveCardInLane = fun predicate lane ->
     let active =
         lane.ActiveUnits
@@ -1404,7 +1417,18 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         flipInactiveCardsInLaneAndAddActivationPowersToStack playerID laneID cardsState turnState
     | ReactivateNonEmpowerActivationPowersInLane ->
         addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID cardID) cardsState turnState
-    | FullyHealSelf
+    | FullyHealSelf ->
+        let lane = Map.find laneID cardsState.Board.Lanes
+        let fIn (card: InactiveUnit) = {card with Damage = 0u<health>}
+        let fAct (card: ActiveUnit) = {card with Damage = 0u<health>}
+        let fPair (card: PairedUnit) = {card with Damage = 0u<health>}
+        let cs = changeInPlace (changeCardInLane (fIn, fAct, fPair) cardID) laneID cardsState
+        let matchID = function
+        | InactiveUnit {InactiveUnitID = InactiveUnitID cid} -> cid = cardID
+        | ActiveUnit {ActiveUnitID = ActiveUnitID cid} -> cid = cardID
+        | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} -> cid = cardID
+        let card = findCardInLane matchID lane
+        [CardFullyHealedSelf card], (cs, turnState, None)
     | HealSelf _
     | ActivateSelf -> [], (cardsState, turnState, None)
 
@@ -1857,6 +1881,12 @@ let private displayGameEvent: GameEventToDisplayGameEvent = function
     | Solo {Rank = rank; Suit = suit; Abilities = {Name = powerName}}
     | Paired {Rank = rank; Suit = suit; Abilities = {Name = powerName}} ->
         DisplayCardReactivated (rank, suit, powerName)
+| CardFullyHealedSelf unitCard ->
+    match unitCard with
+    | InactiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}}
+    | ActiveUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}}
+    | PairedUnit {Rank = rank; Suit = suit; Abilities = {Name = powerName}} ->
+        DisplayCardFullyHealedSelf (rank, suit, powerName)
 
 let private getDisplayInfo: GameStateToDisplayInfo = function
 | GameStateDuringTurn {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice tg} ->
