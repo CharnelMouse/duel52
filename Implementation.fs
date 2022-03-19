@@ -180,7 +180,7 @@ let private pairToFullPairedUnits: CardConverter<Pair, FullPairedUnit * FullPair
             Abilities = abilities
             Owner = owner
         }
-    opPair toFull toFull cards
+    opBoth toFull cards
 let private activeToPairedUnit: CardConverter<ActiveUnit, PairedUnit> = fun card ->
     let {ActiveUnitID = ActiveUnitID cardID} = card
     {
@@ -349,7 +349,7 @@ let private removeFromPairedStructure = fun toTwople singleTransform f ->
     List.map (
         toTwople
         >> dup
-        >> opLeft (opPair f f)
+        >> opLeft (opBoth f)
         >> function
         | (false, false), p -> [], [], Some p
         | (true, false), (l, r) -> [singleTransform l], [singleTransform r], None

@@ -8,6 +8,7 @@ let dup a = a, a
 let opLeft f (a, b) = f a, b
 let opRight f (a, b) = a, f b
 let opPair f g = opLeft f >> opRight g
+let opBoth f = opPair f f
 let splitFun f g = dup >> opPair f g
 
 let toMiddle c (a, b) = a, c, b
