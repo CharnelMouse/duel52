@@ -8,13 +8,12 @@ let getHandCardInfo {HandCardID = HandCardID id; Rank = r; Suit = s; Abilities =
     HandCardInfo (id, r, s, a.Name)
 
 let unitID = function
-| InactiveUnit {InactiveUnitID = InactiveUnitID cardID}
-| ActiveUnit {ActiveUnitID = ActiveUnitID cardID}
-| PairedUnit {FullPairedUnitID = FullPairedUnitID cardID} ->
-    UnitID cardID
+    | InactiveUnit {InactiveUnitID = InactiveUnitID cardID}
+    | ActiveUnit {ActiveUnitID = ActiveUnitID cardID}
+    | PairedUnit {FullPairedUnitID = FullPairedUnitID cardID} ->
+        UnitID cardID
 
-let (|Exhausted|Ready|) (card: ActiveCard) =
-    match card with
+let (|Exhausted|Ready|) = function
     | Solo {ActionsSpent = spent; MaxActions = m}
     | Paired {ActionsSpent = spent; MaxActions = m} ->
         if spent >= m then
@@ -22,9 +21,8 @@ let (|Exhausted|Ready|) (card: ActiveCard) =
         else
             Ready
 
-let maxHealth card =
-    match card with
-    | InactiveUnit _ -> 2u<health>
+let private extraHealth = function
+    | InactiveUnit _ -> 0u<health>
     | ActiveUnit {Abilities = {WhileActive = passiveAbilities}}
     | PairedUnit {Abilities = {WhileActive = passiveAbilities}} ->
         passiveAbilities
@@ -33,21 +31,19 @@ let maxHealth card =
             | MaxHealthIncrease increase ->
                 state + (uint increase)*1u<health>
             | _ -> state
-        ) 2u<health>
-let (|Dead|Alive|) (card: UnitCard) =
-    let damage =
-        match card with
-        | InactiveUnit {Damage = damage}
-        | ActiveUnit {Damage = damage}
-        | PairedUnit {Damage = damage} -> damage
-    if damage < maxHealth card then
-        Alive
-    else
-        Dead
-let isDead (card: UnitCard) =
-    match card with
-    | Alive -> false
-    | Dead -> true
+        ) 0u<health>
+let maxHealth = extraHealth >> (+) 2u<health>
+let cardDamage = function
+    | InactiveUnit {Damage = damage}
+    | ActiveUnit {Damage = damage}
+    | PairedUnit {Damage = damage} -> damage
+let isDead =
+    dup
+    >> opPair cardDamage maxHealth
+    >> uncurry (>=)
+let (|Dead|Alive|) =
+    isDead
+    >> (function | true -> Dead | false -> Alive)
 
 let deckCard (cardID, rank, suit) = {
     DeckCardID = DeckCardID cardID
@@ -122,20 +118,20 @@ let inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun inactive
         FreezeStatus = inactiveUnit.FreezeStatus
     }
 let unitToDiscardedCard: CardConverter<UnitCard, DiscardedCard> = function
-| InactiveUnit {InactiveUnitID = InactiveUnitID id; Owner = pid; Rank = rank; Suit = suit; KnownBy = knownBy} ->
-    FaceDownDiscardedCard {
-        DiscardedCardID = DiscardedCardID id
-        Rank = rank
-        Suit = suit
-        KnownBy = Set.add pid knownBy // player checks unknown base in case it's a Trap
-    }
-| ActiveUnit {ActiveUnitID = ActiveUnitID id; Rank = rank; Suit = suit}
-| PairedUnit {FullPairedUnitID = FullPairedUnitID id; Rank = rank; Suit = suit} ->
-    FaceUpDiscardedCard {
-        DiscardedCardID = DiscardedCardID id
-        Rank = rank
-        Suit = suit
-    }
+    | InactiveUnit {InactiveUnitID = InactiveUnitID id; Owner = pid; Rank = rank; Suit = suit; KnownBy = knownBy} ->
+        FaceDownDiscardedCard {
+            DiscardedCardID = DiscardedCardID id
+            Rank = rank
+            Suit = suit
+            KnownBy = Set.add pid knownBy // player checks unknown base in case it's a Trap
+        }
+    | ActiveUnit {ActiveUnitID = ActiveUnitID id; Rank = rank; Suit = suit}
+    | PairedUnit {FullPairedUnitID = FullPairedUnitID id; Rank = rank; Suit = suit} ->
+        FaceUpDiscardedCard {
+            DiscardedCardID = DiscardedCardID id
+            Rank = rank
+            Suit = suit
+        }
 let pairToFullPairedUnits: CardConverter<Pair, FullPairedUnit * FullPairedUnit> = fun {Cards = cards; Rank = rank; Abilities = abilities; Owner = owner} ->
     let toFull card =
         let {PairedUnitID = PairedUnitID cardID} = card
@@ -245,12 +241,12 @@ let decrementActiveCardDamage = healActiveCard 1u<health>
 let decrementPairedCardDamage = healPairedCard 1u<health>
 
 let getActionability = function
-| InactiveUnit {FreezeStatus = fs}
-| ActiveUnit {FreezeStatus = fs}
-| PairedUnit {FreezeStatus = fs} ->
-    match fs with
-    | FrozenBy _ -> Frozen
-    | NotFrozen -> Normal
+    | InactiveUnit {FreezeStatus = fs}
+    | ActiveUnit {FreezeStatus = fs}
+    | PairedUnit {FreezeStatus = fs} ->
+        match fs with
+        | FrozenBy _ -> Frozen
+        | NotFrozen -> Normal
 
 let getBaseKnowledge playerID (baseCard: BaseCard) =
     if Set.contains playerID baseCard.KnownBy then
@@ -272,10 +268,10 @@ let getPairKnowledge pair : PairKnowledge =
     actionability1, actionability2
 
 let getDeadCardKnowledge playerID = function
-| FaceDownDiscardedCard {Rank = r; Suit = s; KnownBy = kb} ->
-    if Set.contains playerID kb then
-        KnownFaceDownDeadCard (r, s)
-    else
-        UnknownDeadCard
-| FaceUpDiscardedCard {Rank = r; Suit = s} ->
-    KnownFaceUpDeadCard (r, s)
+    | FaceDownDiscardedCard {Rank = r; Suit = s; KnownBy = kb} ->
+        if Set.contains playerID kb then
+            KnownFaceDownDeadCard (r, s)
+        else
+            UnknownDeadCard
+    | FaceUpDiscardedCard {Rank = r; Suit = s} ->
+        KnownFaceUpDeadCard (r, s)
