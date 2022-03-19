@@ -1634,109 +1634,82 @@ let private getAttackerSelfDamage attackerAbilities targetAbilities =
     else
         0u<health>
 
-let private getSingleAttackInfo attackerID targetInfo lane =
+let private laneCards lane =
+    (lane.InactiveUnits |> List.map InactiveUnit)
+    @ (lane.ActiveUnits |> List.map ActiveUnit)
+    @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map PairedUnit))
+
+let private getAttackInfo findAttackerCards getAbilities baseDamage attackerIDs targetInfo lane =
+    let attacker = findAttackerCards attackerIDs lane
+    let attackerAbilities = getAbilities attacker
     let targetID = getTargetIDFromTargetInfo targetInfo
-    let attackerCard =
-        lane.ActiveUnits
-        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = attackerID)
-    let targetList =
-        (lane.InactiveUnits |> List.map InactiveUnit)
-        @ (lane.ActiveUnits |> List.map ActiveUnit)
-        @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map PairedUnit))
     let (targetCard, targetAbilities) =
-        targetList
-        |> List.find (fun card ->
-            match card with
+        laneCards lane
+        |> List.find (function
             | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
             | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
             | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} ->
                 UnitID cid = targetID
             )
-        |> (function
-            | InactiveUnit card ->
-                InactiveUnit card, card.Abilities
-            | ActiveUnit card ->
-                ActiveUnit card, card.Abilities
-            | PairedUnit card ->
-                PairedUnit card, card.Abilities
+        |> dup
+        |> opRight (function
+            | InactiveUnit {Abilities = a}
+            | ActiveUnit {Abilities = a}
+            | PairedUnit {Abilities = a} ->
+                a
             )
-    let baseDefenderDamage = 1u<health>
-    let bonusDefenderDamage = getBonusDefenderDamage attackerCard.Abilities targetAbilities
-    let selfDamage = getAttackerSelfDamage attackerCard.Abilities targetAbilities
-    attackerCard, targetCard, targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
+    let (attackDamage, selfDamage) =
+        (attackerAbilities, targetAbilities)
+        |> splitFun (uncurry getBonusDefenderDamage) (uncurry getAttackerSelfDamage)
+        |> opLeft ((+) baseDamage)
+    attacker, targetCard, targetID, attackDamage, selfDamage
 
-let private getPairAttackInfo pairMemberID1 pairMemberID2 targetInfo lane =
-    let targetID = getTargetIDFromTargetInfo targetInfo
-    let attackerPair =
+let private getSingleAttackInfo =
+    let findAttackerCards (ActiveUnitID attackerIDs) lane =
+        lane.ActiveUnits
+        |> List.find (fun {ActiveUnitID = ActiveUnitID id} -> id = attackerIDs)
+    let getAbilities (card: ActiveUnit) = card.Abilities
+    getAttackInfo findAttackerCards getAbilities 1u<health>
+
+let private getPairAttackInfo =
+    let findAttackerCards (PairedUnitID pid1, PairedUnitID pid2) lane =
         lane.Pairs
         |> List.find (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}} ->
-            (id1, id2) = (pairMemberID1, pairMemberID2)
+            (id1, id2) = (pid1, pid2)
         )
-    let attackerAbilities =
-        attackerPair
-        |> (fun {Abilities = abilities} -> abilities)
-    let targetList =
-        (lane.InactiveUnits |> List.map InactiveUnit)
-        @ (lane.ActiveUnits |> List.map ActiveUnit)
-        @ (lane.Pairs |> List.collect (pairToFullPairedUnits >> twoToList >> List.map PairedUnit))
-    let targetCard =
-        targetList
-        |> List.find (fun card ->
-            match card with
-            | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
-            | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
-            | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} ->
-                UnitID cid = targetID
-            )
-    let targetAbilities =
-        targetCard
-        |> (fun card ->
-            match card with
-            | InactiveUnit {Abilities = abilities}
-            | ActiveUnit {Abilities = abilities}
-            | PairedUnit {Abilities = abilities} ->
-                abilities
-            )
-    let baseDefenderDamage = 2u<health>
-    let bonusDefenderDamage = getBonusDefenderDamage attackerAbilities targetAbilities
-    let selfDamage = getAttackerSelfDamage attackerAbilities targetAbilities
-    attackerPair, targetCard, targetID, baseDefenderDamage + bonusDefenderDamage, selfDamage
+    let getAbilities (pair: Pair) = pair.Abilities
+    getAttackInfo findAttackerCards getAbilities 2u<health>
 
-let private executeSingleAttackAction: ExecuteSingleAttackAction = fun laneID (ActiveUnitID attackerID, targetInfo) cardsState turnState ->
+let private executeAttackAction getAttackInfo getAttackerIDList getAttackerList attackerType attackerUnitType attackerIDType laneID (attackerIDs, targetInfo) cardsState turnState =
     let board = cardsState.Board
+    let attackerIDList = getAttackerIDList attackerIDs
     let attacker, target, targetID, damage, selfDamage =
-        getSingleAttackInfo attackerID targetInfo (Map.find laneID board.Lanes)
+        getAttackInfo attackerIDs targetInfo (Map.find laneID board.Lanes)
+    let attackerList = getAttackerList attacker
     let damagedState =
         cardsState
-        |> incrementCardActionsUsed attackerID laneID
+        |> (fun cs -> List.fold (fun state cid -> incrementCardActionsUsed cid laneID state) cs attackerIDList)
         |> damageCard targetID damage laneID
-        |> damageCard (UnitID attackerID) selfDamage laneID
+        |> (fun cs -> List.fold (fun state cid -> damageCard (UnitID cid) selfDamage laneID state) cs attackerIDList)
     [
-        CardAttacked (SingleAttacker attacker, target);
-        CardDamaged (target, damage);
-        CardDamaged (ActiveUnit attacker, selfDamage)
-    ],
-    resolveAttackerPassivePower laneID (SingleAttackerID (ActiveUnitID attackerID)) targetID turnState damagedState
+        CardAttacked (attackerType attacker, target)
+        CardDamaged (target, damage)
+    ]
+    @ List.map (fun attacker -> CardDamaged (attackerUnitType attacker, selfDamage)) attackerList
+    ,
+    resolveAttackerPassivePower laneID (attackerIDType attackerIDs) targetID turnState damagedState
 
-let private executePairAttackAction: ExecutePairAttackAction = fun laneID ((PairedUnitID attackerID1, PairedUnitID attackerID2), targetInfo) cardsState turnState ->
-    let board = cardsState.Board
-    let attackers, target, targetID, damage, selfDamage =
-        getPairAttackInfo attackerID1 attackerID2 targetInfo (Map.find laneID board.Lanes)
-    let (attacker1, attacker2) = pairToFullPairedUnits attackers
-    let damagedState =
-        cardsState
-        |> incrementCardActionsUsed attackerID1 laneID
-        |> incrementCardActionsUsed attackerID2 laneID
-        |> damageCard targetID damage laneID
-        |> damageCard (UnitID attackerID1) selfDamage laneID
-        |> damageCard (UnitID attackerID2) selfDamage laneID
-    [
-        CardAttacked (PairAttacker attackers, target);
-        CardDamaged (target, damage);
-        CardDamaged (PairedUnit attacker1, selfDamage)
-        CardDamaged (PairedUnit attacker2, selfDamage)
-    ],
-    resolveAttackerPassivePower laneID (PairAttackerIDs (PairedUnitID attackerID1, PairedUnitID attackerID2)) targetID turnState damagedState
+let private executeSingleAttackAction: ExecuteSingleAttackAction =
+    let getAttackerIDList (ActiveUnitID attackerID) = [attackerID]
+    let getAttackerList = List.singleton
+    executeAttackAction
+        getSingleAttackInfo getAttackerIDList getAttackerList SingleAttacker ActiveUnit SingleAttackerID
+
+let private executePairAttackAction: ExecutePairAttackAction =
+    let getAttackerIDList (PairedUnitID cid1, PairedUnitID cid2) = [cid1; cid2]
+    let getAttackerList = pairToFullPairedUnits >> twoToList
+    executeAttackAction
+        getPairAttackInfo getAttackerIDList getAttackerList PairAttacker PairedUnit PairAttackerIDs
 
 let private executeCreatePairAction: ExecuteCreatePairAction = fun laneID (cardID1, cardID2) cardsState turnState ->
     let cards, newCardsState =
