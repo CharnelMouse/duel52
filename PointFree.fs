@@ -3,6 +3,7 @@ module PointFree
 let pair a b = a, b
 let pairRev b a = a, b
 let swap (a, b) = b, a
+let pairToList (a, b) = [a; b]
 
 let dup a = a, a
 let opLeft f (a, b) = f a, b
@@ -19,8 +20,9 @@ let unflattenLeft (a, b, c) = (a, b), c
 let unflattenRight (a, b, c) = (a, (b, c))
 
 let call (f, a) = f a
-let swapIn (f: 'a -> 'b -> 'c) b a = f a b
-let uncurry (f: 'a -> 'b -> 'c) (a, b) = f a b
+let swapIn f b a = f a b
+let uncurry f (a, b) = f a b
+let curry f a b = f (a, b)
 
 let prepare f =
     opRight f
