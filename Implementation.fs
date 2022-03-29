@@ -568,7 +568,7 @@ let rec private shuffleRec unshuffled shuffled (sampler: System.Random) =
             |> List.indexed
             |> List.choose (function
                 | n, _ when n = index -> None
-                | _, el -> Some el 
+                | _, el -> Some el
             )
         shuffleRec newUnshuffled (unshuffled.[index] :: shuffled) sampler
 
@@ -896,7 +896,7 @@ let private resolveReturnDamage laneID attackerIDs targetCardID cardsState turnS
                 ResolutionStack = resolutionStack
             }
         }
- 
+
 let private executePlayAction: ExecutePlayAction = fun laneID cardID cardsState turnState ->
     let playerID = turnState.CurrentPlayer
     let playedCard, newCardsState = removeCardFromHand cardID playerID cardsState
@@ -1319,6 +1319,7 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
         |> triggerTargetInactiveDeathPowers
         |> healAttackersIfDefenderDying attackerIDs (UnitID attackedCardID) laneID
         |> moveDeadCardsToDiscard
+    // Need an entry for Nimble cards
     | _ ->
         failwithf "Unrecognised OnAttack + OnKill contents: %A" attackingAbilities
 
@@ -1964,7 +1965,7 @@ let private executeEndingTurnAction: EndTurn = fun (cardsState, turnState) ->
             Actions = actions
             FutureActionCounts = nextFutureActionCounts
             }
-        }    
+        }
 
 let private executeStackChoice: ExecuteStackChoice = fun eventID (cardsState, turnState, stackChoice) ->
     let chosen, remaining =

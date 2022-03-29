@@ -1,5 +1,13 @@
+// Console
+//[<EntryPoint>]
+//let main argv =
+//    let api = Implementation.api
+//    ConsoleUI.startGame api
+//    0
+
+// MonoGame
 [<EntryPoint>]
-let main argv =
+let main _ =
     let api = Implementation.api
-    ConsoleUI.startGame api
+    MonoGameUI.startGame api
     0

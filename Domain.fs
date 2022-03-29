@@ -28,7 +28,7 @@ type Suit =
 [<Measure>] type CID
 [<Measure>] type EID
 [<Measure>] type action
- 
+
 type Damage = uint<health>
 type PlayerID = uint<PID>
 type LaneID = uint<LID>
@@ -58,8 +58,8 @@ type ActiveStatus =
 | Active // face-up
 
 type BaseKnowledge =
-| UnknownBaseCard of PlayerID
-| KnownBaseCard of PlayerID * Rank * Suit * PowerName
+| UnknownBaseCard of CardID * PlayerID
+| KnownBaseCard of CardID * PlayerID * Rank * Suit * PowerName
 
 type DeadCardKnowledge =
 | UnknownDeadCard

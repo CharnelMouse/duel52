@@ -1,6 +1,13 @@
 A program for playing Duel 52, to practise domain modelling for card games.
 
-Work in progress: primitive UI in place, basic play rules implemented. Need to implement card abilities.
+Work in progress: primitive UI in place, basic play ruleset implemented.
+Fixes to do:
+- Something is wrong with stack resolution, e.g. 2 and 4 flipped by 5, pick 2, don't get 4 after.
+- Nimble attacks crash due to unrecognised ability set
+- Base cards should have "Frozen?" information
+- Twinstrike can't deal extra damage to the partner of the initial target
+
+Notes on ruleset
 
 - Basic actions: play card, activate, attack, make pair. Cards ready at the end of the turn.
 - Players only see known information (except who's peeked at face-down cards, the console UI is verbose enough as it is).

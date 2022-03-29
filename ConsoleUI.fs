@@ -32,9 +32,9 @@ let private deparseSuit = function
 
 let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
-    | UnknownBaseCard playerID ->
+    | UnknownBaseCard _ ->
         printf "?"
-    | KnownBaseCard (playerID, rank, suit, abilities) ->
+    | KnownBaseCard (_, _, rank, _, _) ->
         printf "%c" (deparseRank rank)
 
 let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKnowledge) =

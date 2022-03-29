@@ -3,5 +3,7 @@
 /obj
 .fake
 /.vs
+/Content/bin
+/Content/obj
 *.sln
 *.fsproj.user

@@ -249,10 +249,11 @@ let getActionability = function
         | NotFrozen -> Normal
 
 let getBaseKnowledge playerID (baseCard: BaseCard) =
+    let (BaseCardID cardID) = baseCard.BaseCardID
     if Set.contains playerID baseCard.KnownBy then
-        KnownBaseCard (baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name)
+        KnownBaseCard (cardID, baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name)
     else
-        UnknownBaseCard baseCard.Owner
+        UnknownBaseCard (cardID, baseCard.Owner)
 
 let getPairKnowledge pair : PairKnowledge =
     let (fullCard1, fullCard2) = pairToFullPairedUnits pair
