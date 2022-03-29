@@ -42,6 +42,7 @@ type BaseCard = {
     Abilities: Abilities
     Owner: PlayerID
     KnownBy: PlayerID Set
+    FreezeStatus: FreezeStatus
 }
 type InactiveUnit = {
     InactiveUnitID: InactiveUnitID

@@ -1030,8 +1030,28 @@ let private healOwnUnits playerID amount cardsState =
 let private streamEvents previousEvents (newEvents, state) =
     (previousEvents @ newEvents), state
 
-let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
+let private freezeEnemyNonActiveNimbleCardsInLane playerID laneID cardsState =
     let board = cardsState.Board
+    let gameStage = cardsState.GameStage
+    let newGameStage =
+        match gameStage with
+        | Early gs ->
+            let newBases =
+                gs.Bases
+                |> Map.add laneID (
+                    gs.Bases
+                    |> Map.find laneID
+                    |> List.map (fun baseCard ->
+                        if baseCard.Owner = playerID then
+                            baseCard
+                        else
+                            {baseCard with FreezeStatus = FrozenBy playerID}
+                        )
+                    )
+            Early {gs with Bases = newBases}
+        | DrawPileEmpty _
+        | HandsEmpty _ ->
+            gameStage
     let lane = Map.find laneID board.Lanes
     let frozenInactives, newInactiveUnits =
         lane.InactiveUnits
@@ -1072,7 +1092,12 @@ let private freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState =
         (frozenInactives @ frozenActives @ frozenPairedUnits)
         |> List.map CardFrozen
     let newLane = {lane with InactiveUnits = newInactiveUnits; ActiveUnits = newActiveUnits; Pairs = newPairs}
-    events, {cardsState with Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}}
+    events,
+    {
+        cardsState with
+            Board = {board with Lanes = board.Lanes |> Map.add laneID newLane}
+            GameStage = newGameStage
+        }
 
 let private addActiveNonEmpowerActivationAbilitiesInLaneToStack laneID (ActiveUnitID empowererCardID) cardsState turnState =
     let playerID = turnState.CurrentPlayer
@@ -1131,7 +1156,7 @@ let private resolveInstantNonTargetAbility: ResolveInstantNonTargetAbility =
         [],
         (cardsState, turnState, Some (AbilityChoiceEpoch (ViewInactiveChoiceContext cardID)))
     | FreezeEnemiesInLane ->
-        freezeEnemyNonActiveNimbleUnitsInLane playerID laneID cardsState
+        freezeEnemyNonActiveNimbleCardsInLane playerID laneID cardsState
         |> opRight (fun cs -> cs, turnState, None)
         |> streamEvents [LaneFrozen laneID]
     | HealAllAllies n ->
@@ -1278,6 +1303,11 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
         {CardsState = cardsState; TurnState = turnState; TurnStage = ActionChoice}
         |> triggerTargetInactiveDeathPowers
         |> moveDeadCardsToDiscard
+    | [AttackAbility (ExtraDamageAgainstExtraMaxHealth 1u)] ->
+        let newCardsState = damageCard (UnitID attackedCardID) 1u<health> laneID cardsState
+        {CardsState = newCardsState; TurnState = turnState; TurnStage = ActionChoice}
+        |> triggerTargetInactiveDeathPowers
+        |> moveDeadCardsToDiscard
     | [AttackAbility DamageExtraTarget] ->
         let activeLaneCards =
             (List.map Solo lane.ActiveUnits) @ List.collect (pairToFullPairedUnits >> pairToList >> List.map Paired) lane.Pairs
@@ -1319,7 +1349,6 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
         |> triggerTargetInactiveDeathPowers
         |> healAttackersIfDefenderDying attackerIDs (UnitID attackedCardID) laneID
         |> moveDeadCardsToDiscard
-    // Need an entry for Nimble cards
     | _ ->
         failwithf "Unrecognised OnAttack + OnKill contents: %A" attackingAbilities
 
@@ -1330,23 +1359,6 @@ let private executeActivateAction: ExecuteActivateAction = fun laneID (InactiveU
         events
         (resolveActivationPower laneID (ActiveUnitID cardID) (addCardToActiveUnits newCard laneID cs1) turnState None)
 
-let private getBonusDefenderDamage attackerAbilities targetAbilities =
-    let hasBonusHealth =
-        targetAbilities.WhileActive
-        |> List.exists (function
-            | MaxHealthIncrease _ -> true
-            | _ -> false
-        )
-    if hasBonusHealth then
-        attackerAbilities.OnAttack
-        |> List.fold (fun acc ability ->
-            match ability with
-            | ExtraDamageAgainstExtraMaxHealth n -> acc + n*1u<health>
-            | _ -> acc
-        ) 0u<health>
-    else
-        0u<health>
-
 let private getTargetIDFromTargetInfo targetInfo =
     match targetInfo with
     | InactiveTarget (_, id)
@@ -1354,8 +1366,11 @@ let private getTargetIDFromTargetInfo targetInfo =
     | ActivePairMemberTarget (_, id) ->
         UnitID id
 
-let private getAttackerSelfDamage attackerAbilities targetAbilities =
-    if not (List.contains (DefendAbility ReturnDamage) attackerAbilities.Ignores) && (List.contains ReturnDamage targetAbilities.OnDamaged) then
+let private getAttackerSelfDamage attackerAbilities targetActive targetAbilities =
+    if targetActive
+        && not (List.contains (DefendAbility ReturnDamage) attackerAbilities.Ignores)
+        && (List.contains ReturnDamage targetAbilities.OnDamaged)
+    then
         1u<health>
     else
         0u<health>
@@ -1369,26 +1384,35 @@ let private getAttackInfo findAttackerCards getAbilities baseDamage attackerIDs 
     let attacker = findAttackerCards attackerIDs lane
     let attackerAbilities = getAbilities attacker
     let targetID = getTargetIDFromTargetInfo targetInfo
-    let (targetCard, targetAbilities) =
+    let (targetCard, targetAbilities, targetActive) =
         laneCards lane
-        |> List.find (function
-            | InactiveUnit {InactiveUnitID = InactiveUnitID cid}
+        |> List.choose (fun card ->
+            match card with
+            | InactiveUnit {InactiveUnitID = InactiveUnitID cid} ->
+                if UnitID cid = targetID then
+                    Some (card, false)
+                else
+                    None
             | ActiveUnit {ActiveUnitID = ActiveUnitID cid}
             | PairedUnit {FullPairedUnitID = FullPairedUnitID cid} ->
-                UnitID cid = targetID
+                if UnitID cid = targetID then
+                    Some (card, true)
+                else
+                    None
             )
-        |> dup
-        |> opRight (function
-            | InactiveUnit {Abilities = a}
-            | ActiveUnit {Abilities = a}
-            | PairedUnit {Abilities = a} ->
-                a
+        |> List.exactlyOne
+        |> opLeft (
+            dup
+            >> opRight (function
+                | InactiveUnit {Abilities = a}
+                | ActiveUnit {Abilities = a}
+                | PairedUnit {Abilities = a} ->
+                    a
+                )
             )
-    let (attackDamage, selfDamage) =
-        (attackerAbilities, targetAbilities)
-        |> splitFun (uncurry getBonusDefenderDamage) (uncurry getAttackerSelfDamage)
-        |> opLeft ((+) baseDamage)
-    attacker, targetCard, targetID, attackDamage, selfDamage
+        |> flattenLeft
+    let selfDamage = getAttackerSelfDamage attackerAbilities targetActive targetAbilities
+    attacker, targetCard, targetID, baseDamage, selfDamage
 
 let private getSingleAttackInfo =
     let findAttackerCards (ActiveUnitID attackerIDs) lane =
@@ -1491,10 +1515,32 @@ let private timeoutOwnedFreezeStatesInLane playerID lane =
     }
 let private timeoutOwnedFreezeStates playerID cardsState =
     let board = cardsState.Board
+    let gameStage = cardsState.GameStage
+    let newGameStage =
+        match gameStage with
+        | Early gs ->
+            let newBases =
+                gs.Bases
+                |> Map.map (fun _ bases ->
+                    bases
+                    |> List.map (fun baseCard ->
+                        match baseCard.FreezeStatus with
+                        | FrozenBy freezer ->
+                            if freezer = playerID then
+                                {baseCard with FreezeStatus = NotFrozen}
+                            else
+                                baseCard
+                        | NotFrozen -> baseCard
+                        )
+                    )
+            Early {gs with Bases = newBases}
+        | DrawPileEmpty _
+        | HandsEmpty _ ->
+            gameStage
     let newLanes =
         board.Lanes
         |> Map.map (fun _ lane -> timeoutOwnedFreezeStatesInLane playerID lane)
-    {cardsState with Board = {board with Lanes = newLanes}}
+    {cardsState with Board = {board with Lanes = newLanes}; GameStage = newGameStage}
 
 let private resetAllCardActionsUsedInLane lane =
     {lane with
@@ -1786,7 +1832,12 @@ let private getPossibleActionPairs: GetPossibleActionPairs = function
                     |> List.filter (fun card -> card.Owner <> playerID && card.InactiveUnitID <> InactiveUnitID originalTargetCardID)
                 let activeTauntTargets, activeNonTauntTargets =
                     lane.ActiveUnits
-                    |> List.filter (fun card -> card.Owner <> playerID && card.ActiveUnitID <> ActiveUnitID originalTargetCardID && not (List.contains (AttackAbility DamageExtraTarget) card.Abilities.Ignores))
+                    @ (List.collect (pairToFullPairedUnits >> opBoth fullPairedToActiveUnit >> pairToList) lane.Pairs)
+                    |> List.filter (fun card ->
+                        card.Owner <> playerID
+                        && card.ActiveUnitID <> ActiveUnitID originalTargetCardID
+                        && not (List.contains (AttackAbility DamageExtraTarget) card.Abilities.Ignores)
+                        )
                     |> List.partition (fun card -> List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive)
                 List.map (fun {ActiveUnitID = id} -> id) activeTauntTargets,
                 ((List.map (fun {InactiveUnitID = InactiveUnitID id} -> UnitID id) inactiveTargets)
@@ -2073,6 +2124,7 @@ let private prepareBases getAbilities (NLanes nLanes) =
                 Abilities = getAbilities rank
                 Owner = ownerID
                 KnownBy = Set.empty
+                FreezeStatus = NotFrozen
             }
         )
     )

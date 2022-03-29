@@ -58,8 +58,8 @@ type ActiveStatus =
 | Active // face-up
 
 type BaseKnowledge =
-| UnknownBaseCard of CardID * PlayerID
-| KnownBaseCard of CardID * PlayerID * Rank * Suit * PowerName
+| UnknownBaseCard of CardID * PlayerID * Actionability
+| KnownBaseCard of CardID * PlayerID * Rank * Suit * PowerName * Actionability
 
 type DeadCardKnowledge =
 | UnknownDeadCard

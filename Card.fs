@@ -102,7 +102,7 @@ let baseToInactiveUnit card =
         Owner = card.Owner
         KnownBy = card.KnownBy
         Damage = 0u<health>
-        FreezeStatus = NotFrozen
+        FreezeStatus = card.FreezeStatus
     }
 let inactiveToActiveUnit: CardConverter<InactiveUnit, ActiveUnit> = fun inactiveUnit ->
     let {InactiveUnitID = InactiveUnitID id} = inactiveUnit
@@ -250,10 +250,14 @@ let getActionability = function
 
 let getBaseKnowledge playerID (baseCard: BaseCard) =
     let (BaseCardID cardID) = baseCard.BaseCardID
+    let actionability =
+        match baseCard.FreezeStatus with
+        | FrozenBy _ -> Frozen
+        | NotFrozen -> Normal
     if Set.contains playerID baseCard.KnownBy then
-        KnownBaseCard (cardID, baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name)
+        KnownBaseCard (cardID, baseCard.Owner, baseCard.Rank, baseCard.Suit, baseCard.Abilities.Name, actionability)
     else
-        UnknownBaseCard (cardID, baseCard.Owner)
+        UnknownBaseCard (cardID, baseCard.Owner, actionability)
 
 let getPairKnowledge pair : PairKnowledge =
     let (fullCard1, fullCard2) = pairToFullPairedUnits pair

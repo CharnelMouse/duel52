@@ -75,34 +75,39 @@ type CardColours = {
     Actions: Color
     FrozenBackground: Color
     Text: Color
+    FrozenText: Color
 }
 let baseCardColours = {
     Background = Color.Black
     Damage = Color.Red
     Actions = Color.Blue
-    FrozenBackground = Color.Aquamarine
+    FrozenBackground = Color.DarkBlue
     Text = Color.White
+    FrozenText = Color.White
 }
 let inactiveCardColours = {
     Background = Color.Gray
     Damage = Color.Red
     Actions = Color.Blue
-    FrozenBackground = Color.Aquamarine
+    FrozenBackground = Color.MediumBlue
     Text = Color.White
+    FrozenText = Color.White
 }
 let activeCardColours = {
     Background = Color.White
     Damage = Color.Red
     Actions = Color.Blue
-    FrozenBackground = Color.Aquamarine
+    FrozenBackground = Color.DeepSkyBlue
     Text = Color.Black
+    FrozenText = Color.Black
 }
 let pairedCardColours = {
     Background = Color.White
     Damage = Color.Red
     Actions = Color.Blue
-    FrozenBackground = Color.Aquamarine
+    FrozenBackground = Color.DeepSkyBlue
     Text = Color.Black
+    FrozenText = Color.Black
 }
 
 let typeRectangle (spriteBatch: SpriteBatch) (font: SpriteFont) (string: string) (rect: Rectangle) colour =
@@ -225,13 +230,15 @@ let drawBases spriteBatch pixel stateFont laneAreas lanes =
         |> List.iter (fun (n, baseCard) ->
             let player = (uint n + 1u)*1u<PID>
             let location = Map.find (laneID, player) laneAreas |> snd |> List.head
-            let cardText =
+            let cardText, actionability =
                 match baseCard with
-                | UnknownBaseCard _ -> "Base"
-                | KnownBaseCard (_, _, rank, suit, _) -> string (deparseRank rank) + string (deparseSuit suit)
+                | UnknownBaseCard (_, _, actionability) ->
+                    "Base", actionability
+                | KnownBaseCard (_, _, rank, suit, _, actionability) ->
+                    string (deparseRank rank) + string (deparseSuit suit), actionability
             drawCard
                 spriteBatch pixel stateFont cardSize
-                location cardText 0u<health> 0u<action> Normal // temporary until bases can be frozen
+                location cardText 0u<health> 0u<action> actionability
                 baseCardColours
             )
         )
@@ -319,8 +326,8 @@ let getBoardUnitAreas (laneAreas: LaneAreas) displayInfo =
                     bases
                     |> List.map (fun baseCard ->
                         match baseCard with
-                        | UnknownBaseCard (cardID, playerID)
-                        | KnownBaseCard (cardID, playerID, _, _, _) ->
+                        | UnknownBaseCard (cardID, playerID, _)
+                        | KnownBaseCard (cardID, playerID, _, _, _, _) ->
                             let areaPoint =
                                 Map.find (laneID, playerID) laneAreas
                                 |> snd

@@ -34,7 +34,7 @@ let private displayBaseKnowledge baseKnowledge =
     match baseKnowledge with
     | UnknownBaseCard _ ->
         printf "?"
-    | KnownBaseCard (_, _, rank, _, _) ->
+    | KnownBaseCard (_, _, rank, _, _, _) ->
         printf "%c" (deparseRank rank)
 
 let private displayInactiveUnitKnowledge (inactiveUnitKnowledge: InactiveUnitKnowledge) =
