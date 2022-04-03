@@ -749,7 +749,7 @@ type CardGame (api: API) as this =
             spriteBatch.Begin()
             match displayInfo with
             | AbilityChoiceDisplayInfo aci ->
-                let statusText = "Ability choice"
+                let statusText = "Choose power target"
                 drawNonInnerBoardBorders spriteBatch pixel statusBarArea boardArea handArea deckArea
                 drawBoardInnerBorders spriteBatch pixel boardArea laneStartsX laneStartsY laneWidths laneHeights
                 drawStatusBar spriteBatch pixel stateFont statusBarArea statusText
@@ -765,7 +765,7 @@ type CardGame (api: API) as this =
                     aci
                 filteredSelections |> List.iter (drawOutline spriteBatch pixel Color.Red)
             | StackChoiceDisplayInfo sci ->
-                let statusText = "Stack choice"
+                let statusText = "Choose card power to resolve next"
                 drawNonInnerBoardBorders spriteBatch pixel statusBarArea boardArea handArea deckArea
                 drawBoardInnerBorders spriteBatch pixel boardArea laneStartsX laneStartsY laneWidths laneHeights
                 drawStatusBar spriteBatch pixel stateFont statusBarArea statusText
