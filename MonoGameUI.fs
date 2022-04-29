@@ -780,7 +780,10 @@ type CardGame (api: API) as this =
                 drawNonInnerBoardBorders spriteBatch pixel statusBarArea boardArea handArea deckArea
                 drawBoardInnerBorders spriteBatch pixel boardArea laneStartsX laneStartsY laneWidths laneHeights
                 drawStatusBar spriteBatch pixel stateFont statusBarArea statusText
-                if tai.ActionsLeft = 0u<action> then
+                let actionsAvailable =
+                    capabilities
+                    |> List.map (fun capability -> capability.Action)
+                if List.contains (TurnActionInfo EndTurn) actionsAvailable then
                     drawEndTurnButton spriteBatch pixel stateFont endTurnButtonArea
                 drawTurnDisplayInfo
                     spriteBatch pixel stateFont
