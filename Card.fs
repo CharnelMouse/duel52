@@ -44,6 +44,10 @@ let isDead =
 let (|Dead|Alive|) =
     isDead
     >> (function | true -> Dead | false -> Alive)
+let ownedBy playerID = function
+    | InactiveUnit {Owner = owner} -> owner = playerID
+    | ActiveUnit {Owner = owner} -> owner = playerID
+    | PairedUnit {Owner = owner} -> owner = playerID
 
 let deckCard (cardID, rank, suit) = {
     DeckCardID = DeckCardID cardID
