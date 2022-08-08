@@ -4,6 +4,7 @@ Work in progress: primitive UI in place, basic play ruleset implemented.
 Fixes to do:
 - Death / inactive death power resolution is currently done in several different places. These should all be moved to a single step after resolving everything else in a turn action.
 - Retaliate as Twinstrike pair second target doesn't work properly (return damage wrong, original target doesn't die)
+- Nimble deals extra damage to everything
 - Something is wrong with stack resolution, e.g. 2 and 4 flipped by 5, pick 2, don't get 4 after. Seems to be happening after a power requires a choice. (Tidy up death resolution first.)
 
 Notes on ruleset
