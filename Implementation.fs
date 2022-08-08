@@ -1764,146 +1764,176 @@ let private getDisplayInfo: GameStateToDisplayInfo = function
         LaneWins = getPlayerLaneWins laneWins
     }
 
+let private getPossibleActionChoiceActionPairs cs ts =
+    let gs = {CardsState = cs; TurnState = ts; TurnStage = ActionChoice}
+    if ts.ActionsLeft = 0u<action> then
+        TurnActionChoicePair (gs, EndTurn)
+        |> List.singleton
+    else
+        let actions =
+            getPlayActionsInfo gs
+            @ getActivateActionsInfo gs
+            @ getAttackActionsInfo gs
+            @ getPairActionsInfo gs
+        if List.isEmpty actions then
+            TurnActionChoicePair (gs, EndTurn)
+            |> List.singleton
+        else
+            actions
+            |> List.map (fun action -> TurnActionChoicePair (gs, ActionChoiceInfo action))
+
+let private getPossibleStackChoiceActionPairs cs ts sc =
+    sc.EpochEvents
+    |> NonEmptyMap.toMap
+    |> Map.toList
+    |> List.map (fun (eventID, event) ->
+        StackChoicePair ((cs, ts, sc), (eventID, event))
+    )
+
+let private getDiscardChoiceActionPairs cs ts rs powerCardID =
+    let playerID = ts.CurrentPlayer
+    match cs.GameStage with
+    | Early {HandCards = hc}
+    | DrawPileEmpty {HandCards = hc} ->
+        hc
+        |> Map.find playerID
+        |> List.map (fun {HandCardID = HandCardID id} ->
+            AbilityChoicePair ((cs, ts, rs), DiscardChoice (powerCardID, id))
+            )
+    | HandsEmpty _ ->
+        failwithf "Can't discard from an empty hand"
+
+let private getViewInactiveChoiceActionPairs cs ts rs powerCardID =
+    let playerID = ts.CurrentPlayer
+    let unknownInactiveUnitIDs =
+        cs.Board.Lanes
+        |> Map.toList
+        |> List.collect (fun (_, lane) -> lane.InactiveUnits)
+        |> List.filter (fun card -> not (Set.contains playerID card.KnownBy))
+        |> List.map (fun {InactiveUnitID = InactiveUnitID id} -> ForesightTargetID id)
+    let unknownFaceDownCardIDs =
+        match cs.GameStage with
+        | Early {Bases = bases} ->
+            let unknownBaseIDs =
+                bases
+                |> Map.toList
+                |> List.collect (
+                    snd
+                    >> List.filter (fun card -> not (Set.contains playerID card.KnownBy))
+                    >> List.map (fun {BaseCardID = BaseCardID id} -> ForesightTargetID id)
+                    )
+            unknownBaseIDs @ unknownInactiveUnitIDs
+        | DrawPileEmpty _
+        | HandsEmpty _ ->
+            unknownInactiveUnitIDs
+    unknownFaceDownCardIDs
+    |> List.map (fun (ForesightTargetID id) ->
+        AbilityChoicePair ((cs, ts, rs), ViewInactiveChoice (powerCardID, id))
+        )
+
+let private getMayMoveAllyChoiceActionPairs cs ts rs laneID powerCardID =
+    let playerID = ts.CurrentPlayer
+    let pairs =
+        cs.Board.Lanes
+            |> Map.filter (fun targetLaneID _ -> targetLaneID <> laneID)
+        |> Map.toList
+        |> List.collect (fun (targetLaneID, lane) ->
+            (lane.InactiveUnits |> List.choose (fun {InactiveUnitID = InactiveUnitID id; Owner = ownerID}-> if ownerID = playerID then Some id else None))
+            @ (lane.ActiveUnits |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Owner = ownerID} -> if ownerID = playerID then Some id else None))
+            @ (lane.Pairs |> List.collect (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}; Owner = ownerID} -> if ownerID = playerID then [id1; id2] else []))
+            |> List.map (fun id -> targetLaneID, id)
+        )
+        |> List.map (fun (targetLaneID, targetCardID) ->
+            AbilityChoicePair ((cs, ts, rs), MayMoveAllyToOwnLaneChoice (Some (laneID, powerCardID, targetLaneID, targetCardID)))
+        )
+    if List.isEmpty pairs then
+        pairs
+    else
+        AbilityChoicePair ((cs, ts, rs), MayMoveAllyToOwnLaneChoice (None)) :: pairs
+
+let private getDamageExtraTargetChoiceActionPairs cs ts rs laneID powerCardID originalTargetCardID =
+    let playerID = ts.CurrentPlayer
+    let lane = Map.find laneID cs.Board.Lanes
+    let originalTargetCard =
+        match List.tryFind (fun (card: InactiveUnit) -> card.InactiveUnitID = InactiveUnitID originalTargetCardID) lane.InactiveUnits with
+        | Some card -> InactiveUnit card
+        | None ->
+            match List.tryFind (fun (card: ActiveUnit) -> card.ActiveUnitID = ActiveUnitID originalTargetCardID) lane.ActiveUnits with
+            | Some card -> ActiveUnit card
+            | None ->
+                lane.Pairs
+                |> List.collect (pairToFullPairedUnits >> pairToList)
+                |> List.find (fun card -> card.FullPairedUnitID = FullPairedUnitID originalTargetCardID)
+                |> PairedUnit
+    let activeTauntCheckTargets, nonActiveTauntCheckTargets =
+        let inactiveTargets =
+            lane.InactiveUnits
+            |> List.filter (fun card -> card.Owner <> playerID && card.InactiveUnitID <> InactiveUnitID originalTargetCardID)
+        let activeTauntTargets, activeNonTauntTargets =
+            lane.ActiveUnits
+            @ (List.collect (pairToFullPairedUnits >> opBoth fullPairedToActiveUnit >> pairToList) lane.Pairs)
+            |> List.filter (fun card ->
+                card.Owner <> playerID
+                && card.ActiveUnitID <> ActiveUnitID originalTargetCardID
+                && not (List.contains (AttackAbility DamageExtraTarget) card.Abilities.Ignores)
+                )
+            |> List.partition (fun card -> List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive)
+        List.map (fun {ActiveUnitID = id} -> id) activeTauntTargets,
+        ((List.map (fun {InactiveUnitID = InactiveUnitID id} -> UnitID id) inactiveTargets)
+        @ (List.map (fun {ActiveUnitID = ActiveUnitID id} -> UnitID id) activeNonTauntTargets))
+    let originalTargetIsActiveTaunt =
+        match originalTargetCard with
+        | InactiveUnit _ -> false
+        | ActiveUnit {Abilities = a}
+        | PairedUnit {Abilities = a} -> List.contains ProtectsNonTauntAlliesInLane a.WhileActive
+    let legalTargets =
+        if List.isEmpty activeTauntCheckTargets && not (originalTargetIsActiveTaunt)
+        then
+            nonActiveTauntCheckTargets
+        else
+            activeTauntCheckTargets |> List.map (fun (ActiveUnitID id) -> UnitID id)
+    legalTargets
+    |> List.map (fun (UnitID cardID) ->
+        AbilityChoicePair ((cs, ts, rs), DamageExtraTargetChoice (laneID, powerCardID, cardID))
+    )
+
+let private getReturnDamagePairChoiceActionPairs cs ts rs laneID powerCardIDs originalTargetCardID =
+    pairToList powerCardIDs
+    |> List.map (fun id ->
+        AbilityChoicePair (
+            (cs, ts, rs),
+            ReturnDamagePairChoice (laneID, PairIDs powerCardIDs, originalTargetCardID, id)
+        )
+    )
+
+let private getPossibleAbilityChoiceActionPairs cs ts ac =
+    match ac.ChoiceContext with
+    | DiscardChoiceContext powerCardID ->
+        getDiscardChoiceActionPairs cs ts ac.ResolutionStack powerCardID
+    | ViewInactiveChoiceContext powerCardID ->
+        getViewInactiveChoiceActionPairs cs ts ac.ResolutionStack powerCardID
+    | MayMoveAllyToOwnLaneChoiceContext (laneID, powerCardID) ->
+        getMayMoveAllyChoiceActionPairs cs ts ac.ResolutionStack laneID powerCardID
+    | DamageExtraTargetChoiceContext (laneID, powerCardID, originalTargetCardID) ->
+        getDamageExtraTargetChoiceActionPairs cs ts ac.ResolutionStack laneID powerCardID originalTargetCardID
+    | ReturnDamagePairChoiceContext (laneID, powerCardIDs, originalTargetCardID) ->
+        getReturnDamagePairChoiceActionPairs cs ts ac.ResolutionStack laneID powerCardIDs originalTargetCardID
+
+let private getPossibleTurnActionPairs gs =
+    match gs with
+    | {CardsState = cs; TurnState = ts; TurnStage = ActionChoice} ->
+        getPossibleActionChoiceActionPairs cs ts
+    | {CardsState = cs; TurnState = ts; TurnStage = StackChoice sc} ->
+        getPossibleStackChoiceActionPairs cs ts sc
+    | {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice ac} ->
+        getPossibleAbilityChoiceActionPairs cs ts ac
+
 let private getPossibleActionPairs: GetPossibleActionPairs = function
 | GameStateBetweenTurns gs ->
     StartTurnPair gs
     |> List.singleton
 | GameStateDuringTurn gs ->
-    match gs with
-    | {CardsState = cs; TurnState = ts; TurnStage = ActionChoice} ->
-        if ts.ActionsLeft = 0u<action> then
-            TurnActionChoicePair (gs, EndTurn)
-            |> List.singleton
-        else
-            let actions =
-                getPlayActionsInfo gs
-                @ getActivateActionsInfo gs
-                @ getAttackActionsInfo gs
-                @ getPairActionsInfo gs
-            if List.isEmpty actions then
-                TurnActionChoicePair (gs, EndTurn)
-                |> List.singleton
-            else
-               actions
-               |> List.map (fun action -> TurnActionChoicePair (gs, ActionChoiceInfo action))
-    | {CardsState = cs; TurnState = ts; TurnStage = StackChoice sc} ->
-        sc.EpochEvents
-        |> NonEmptyMap.toMap
-        |> Map.toList
-        |> List.map (fun (eventID, event) ->
-            StackChoicePair ((cs, ts, sc), (eventID, event))
-        )
-    | {CardsState = cs; TurnState = ts; TurnStage = AbilityChoice ac} ->
-        let playerID = ts.CurrentPlayer
-        match ac.ChoiceContext with
-        | DiscardChoiceContext powerCardID ->
-            match gs.CardsState.GameStage with
-            | Early {HandCards = hc}
-            | DrawPileEmpty {HandCards = hc} ->
-                hc
-                |> Map.find playerID
-                |> List.map (fun {HandCardID = HandCardID id} ->
-                    AbilityChoicePair ((cs, ts, ac.ResolutionStack), DiscardChoice (powerCardID, id))
-                    )
-            | HandsEmpty _ ->
-                failwithf "Can't discard from an empty hand"
-        | ViewInactiveChoiceContext powerCardID ->
-            let unknownInactiveUnitIDs =
-                gs.CardsState.Board.Lanes
-                |> Map.toList
-                |> List.collect (fun (_, lane) -> lane.InactiveUnits)
-                |> List.filter (fun card -> not (Set.contains playerID card.KnownBy))
-                |> List.map (fun {InactiveUnitID = InactiveUnitID id} -> ForesightTargetID id)
-            let unknownFaceDownCardIDs =
-                match gs.CardsState.GameStage with
-                | Early {Bases = bases} ->
-                    let unknownBaseIDs =
-                        bases
-                        |> Map.toList
-                        |> List.collect (
-                            snd
-                            >> List.filter (fun card -> not (Set.contains playerID card.KnownBy))
-                            >> List.map (fun {BaseCardID = BaseCardID id} -> ForesightTargetID id)
-                            )
-                    unknownBaseIDs @ unknownInactiveUnitIDs
-                | DrawPileEmpty _
-                | HandsEmpty _ ->
-                    unknownInactiveUnitIDs
-            unknownFaceDownCardIDs
-            |> List.map (fun (ForesightTargetID id) ->
-                AbilityChoicePair ((cs, ts, ac.ResolutionStack), ViewInactiveChoice (powerCardID, id))
-                )
-        | MayMoveAllyToOwnLaneChoiceContext (laneID, powerCardID) ->
-            let pairs =
-                gs.CardsState.Board.Lanes
-                    |> Map.filter (fun targetLaneID _ -> targetLaneID <> laneID)
-                |> Map.toList
-                |> List.collect (fun (targetLaneID, lane) ->
-                    (lane.InactiveUnits |> List.choose (fun {InactiveUnitID = InactiveUnitID id; Owner = ownerID}-> if ownerID = playerID then Some id else None))
-                    @ (lane.ActiveUnits |> List.choose (fun {ActiveUnitID = ActiveUnitID id; Owner = ownerID} -> if ownerID = playerID then Some id else None))
-                    @ (lane.Pairs |> List.collect (fun {Cards = {PairedUnitID = PairedUnitID id1}, {PairedUnitID = PairedUnitID id2}; Owner = ownerID} -> if ownerID = playerID then [id1; id2] else []))
-                    |> List.map (fun id -> targetLaneID, id)
-                )
-                |> List.map (fun (targetLaneID, targetCardID) ->
-                    AbilityChoicePair ((cs, ts, ac.ResolutionStack), MayMoveAllyToOwnLaneChoice (Some (laneID, powerCardID, targetLaneID, targetCardID)))
-                )
-            if List.isEmpty pairs then
-                pairs
-            else
-                AbilityChoicePair ((cs, ts, ac.ResolutionStack), MayMoveAllyToOwnLaneChoice (None)) :: pairs
-        | DamageExtraTargetChoiceContext (laneID, powerCardID, originalTargetCardID) ->
-            let lane = Map.find laneID gs.CardsState.Board.Lanes
-            let originalTargetCard =
-                match List.tryFind (fun (card: InactiveUnit) -> card.InactiveUnitID = InactiveUnitID originalTargetCardID) lane.InactiveUnits with
-                | Some card -> InactiveUnit card
-                | None ->
-                    match List.tryFind (fun (card: ActiveUnit) -> card.ActiveUnitID = ActiveUnitID originalTargetCardID) lane.ActiveUnits with
-                    | Some card -> ActiveUnit card
-                    | None ->
-                        lane.Pairs
-                        |> List.collect (pairToFullPairedUnits >> pairToList)
-                        |> List.find (fun card -> card.FullPairedUnitID = FullPairedUnitID originalTargetCardID)
-                        |> PairedUnit
-            let activeTauntCheckTargets, nonActiveTauntCheckTargets =
-                let inactiveTargets =
-                    lane.InactiveUnits
-                    |> List.filter (fun card -> card.Owner <> playerID && card.InactiveUnitID <> InactiveUnitID originalTargetCardID)
-                let activeTauntTargets, activeNonTauntTargets =
-                    lane.ActiveUnits
-                    @ (List.collect (pairToFullPairedUnits >> opBoth fullPairedToActiveUnit >> pairToList) lane.Pairs)
-                    |> List.filter (fun card ->
-                        card.Owner <> playerID
-                        && card.ActiveUnitID <> ActiveUnitID originalTargetCardID
-                        && not (List.contains (AttackAbility DamageExtraTarget) card.Abilities.Ignores)
-                        )
-                    |> List.partition (fun card -> List.contains ProtectsNonTauntAlliesInLane card.Abilities.WhileActive)
-                List.map (fun {ActiveUnitID = id} -> id) activeTauntTargets,
-                ((List.map (fun {InactiveUnitID = InactiveUnitID id} -> UnitID id) inactiveTargets)
-                @ (List.map (fun {ActiveUnitID = ActiveUnitID id} -> UnitID id) activeNonTauntTargets))
-            let originalTargetIsActiveTaunt =
-                match originalTargetCard with
-                | InactiveUnit _ -> false
-                | ActiveUnit {Abilities = a}
-                | PairedUnit {Abilities = a} -> List.contains ProtectsNonTauntAlliesInLane a.WhileActive
-            let legalTargets =
-                if List.isEmpty activeTauntCheckTargets && not (originalTargetIsActiveTaunt)
-                then
-                    nonActiveTauntCheckTargets
-                else
-                    activeTauntCheckTargets |> List.map (fun (ActiveUnitID id) -> UnitID id)
-            legalTargets
-            |> List.map (fun (UnitID cardID) ->
-                AbilityChoicePair ((cs, ts, ac.ResolutionStack), DamageExtraTargetChoice (laneID, powerCardID, cardID))
-            )
-        | ReturnDamagePairChoiceContext (laneID, powerCardIDs, originalTargetCardID) ->
-            let (id1, id2) = powerCardIDs
-            [id1; id2]
-            |> List.map (fun id ->
-                AbilityChoicePair (
-                    (cs, ts, ac.ResolutionStack),
-                    ReturnDamagePairChoice (laneID, PairIDs (id1, id2), originalTargetCardID, id)
-                )
-            )
+    getPossibleTurnActionPairs gs
 | GameStateWon _
 | GameStateTied _ ->
     List.empty
@@ -1924,6 +1954,71 @@ let private cancelPowerChoiceIfNoChoices state =
     | _ ->
         state
 
+let private executeDiscardChoice gameState playerID discardeeCardID  =
+    let (discardeeCard, cs) = removeCardFromHand (HandCardID discardeeCardID) playerID gameState.CardsState
+    let convertedCard = handToDiscardedCard discardeeCard
+    let newCardsState = {
+        cs with
+            Board = {cs.Board with Discard = cs.Board.Discard @ [convertedCard]}
+        }
+    changeCardsState gameState newCardsState
+
+let private executeViewInactiveChoice gameState playerID targetCardID =
+    gameState.CardsState
+    |> makeCardKnown targetCardID playerID
+    |> changeCardsState gameState
+
+let private executeMayMoveAllyChoice gameState maybeMove =
+    match maybeMove with
+    | Some (laneID, powerCardID, targetLaneID, targetCardID) ->
+        gameState.CardsState
+        |> changeCardLane (UnitID targetCardID) targetLaneID laneID
+        |> changeCardsState gameState
+    | None ->
+        gameState
+
+let private executeDamageExtraTargetChoice gameState resolutionStack laneID powerCardIDs targetCardID =
+    let lane = Map.find laneID gameState.CardsState.Board.Lanes
+    let activeTarget =
+        List.map Solo lane.ActiveUnits @ (List.collect (pairToFullPairedUnits >> pairToList >> List.map Paired) lane.Pairs)
+        |> List.tryFind (function
+            | Solo {ActiveUnitID = ActiveUnitID cardID}
+            | Paired {FullPairedUnitID = FullPairedUnitID cardID} -> cardID = targetCardID
+            )
+    match activeTarget with
+    | Some (Solo {Abilities = {OnDamaged = od}})
+    | Some (Paired {Abilities = {OnDamaged = od}}) ->
+        match od with
+        | [] ->
+            gameState.CardsState
+            |> damageCard (UnitID targetCardID) 1u<health> laneID
+            |> changeCardsState gameState
+            |> toActionChoice
+            |> triggerTargetInactiveDeathPowers
+            |> moveNonownedDeadCardsToDiscard
+            |> moveOwnedDeadCardsToDiscard
+        | [ReturnDamage] ->
+            resolveReturnDamage laneID powerCardIDs targetCardID gameState.CardsState gameState.TurnState resolutionStack
+        | _ ->
+            failwithf "Unrecognised OnDamaged contents: %A" od
+    | None ->
+        gameState.CardsState
+        |> damageCard (UnitID targetCardID) 1u<health> laneID
+        |> changeCardsState gameState
+        |> toActionChoice
+        |> triggerTargetInactiveDeathPowers
+        |> moveNonownedDeadCardsToDiscard
+        |> moveOwnedDeadCardsToDiscard
+
+let private executeReturnDamagePairChoice gameState laneID whichID =
+    gameState.CardsState
+    |> damageCard (UnitID whichID) 1u<health> laneID
+    |> changeCardsState gameState
+    |> toActionChoice
+    |> triggerTargetInactiveDeathPowers
+    |> moveNonownedDeadCardsToDiscard
+    |> moveOwnedDeadCardsToDiscard
+
 let private executeAbilityChoice: ExecuteAbilityChoice = fun abilityChoiceInfo (cardsState, turnState, resolutionStack) ->
     let gameState = {
         CardsState = cardsState
@@ -1934,65 +2029,15 @@ let private executeAbilityChoice: ExecuteAbilityChoice = fun abilityChoiceInfo (
     [AbilityChoiceMade (playerID, abilityChoiceInfo)],
     match abilityChoiceInfo with
     | DiscardChoice (_, discardeeCardID) ->
-        let (discardeeCard, cs) = removeCardFromHand (HandCardID discardeeCardID) playerID cardsState
-        let convertedCard = handToDiscardedCard discardeeCard
-        let newCardsState = {
-            cs with
-                Board = {cs.Board with Discard = cs.Board.Discard @ [convertedCard]}
-            }
-        changeCardsState gameState newCardsState
-    | ViewInactiveChoice (powerCardID, targetCardID) ->
-        gameState.CardsState
-        |> makeCardKnown targetCardID playerID
-        |> changeCardsState gameState
+        executeDiscardChoice gameState playerID discardeeCardID
+    | ViewInactiveChoice (_, targetCardID) ->
+        executeViewInactiveChoice gameState playerID targetCardID
     | MayMoveAllyToOwnLaneChoice maybeMove ->
-        match maybeMove with
-        | Some (laneID, powerCardID, targetLaneID, targetCardID) ->
-            gameState.CardsState
-            |> changeCardLane (UnitID targetCardID) targetLaneID laneID
-            |> changeCardsState gameState
-        | None ->
-            gameState
+        executeMayMoveAllyChoice gameState maybeMove
     | DamageExtraTargetChoice (laneID, powerCardIDs, targetCardID) ->
-        let lane = Map.find laneID gameState.CardsState.Board.Lanes
-        let activeTarget =
-            List.map Solo lane.ActiveUnits @ (List.collect (pairToFullPairedUnits >> pairToList >> List.map Paired) lane.Pairs)
-            |> List.tryFind (function
-                | Solo {ActiveUnitID = ActiveUnitID cardID}
-                | Paired {FullPairedUnitID = FullPairedUnitID cardID} -> cardID = targetCardID
-                )
-        match activeTarget with
-        | Some (Solo {Abilities = {OnDamaged = od}})
-        | Some (Paired {Abilities = {OnDamaged = od}}) ->
-            match od with
-            | [] ->
-                gameState.CardsState
-                |> damageCard (UnitID targetCardID) 1u<health> laneID
-                |> changeCardsState gameState
-                |> toActionChoice
-                |> triggerTargetInactiveDeathPowers
-                |> moveNonownedDeadCardsToDiscard
-                |> moveOwnedDeadCardsToDiscard
-            | [ReturnDamage] ->
-                resolveReturnDamage laneID powerCardIDs targetCardID cardsState turnState resolutionStack
-            | _ ->
-                failwithf "Unrecognised OnDamaged contents: %A" od
-        | None ->
-            gameState.CardsState
-            |> damageCard (UnitID targetCardID) 1u<health> laneID
-            |> changeCardsState gameState
-            |> toActionChoice
-            |> triggerTargetInactiveDeathPowers
-            |> moveNonownedDeadCardsToDiscard
-            |> moveOwnedDeadCardsToDiscard
+        executeDamageExtraTargetChoice gameState resolutionStack laneID powerCardIDs targetCardID
     | ReturnDamagePairChoice (laneID, powerCardID, targetCardID, whichID) ->
-        gameState.CardsState
-        |> damageCard (UnitID whichID) 1u<health> laneID
-        |> changeCardsState gameState
-        |> toActionChoice
-        |> triggerTargetInactiveDeathPowers
-        |> moveNonownedDeadCardsToDiscard
-        |> moveOwnedDeadCardsToDiscard
+        executeReturnDamagePairChoice gameState laneID whichID
     |> toActionChoice
 
 let private executeTurnAction: ExecuteTurnAction = fun action (cardsState, turnState) ->
