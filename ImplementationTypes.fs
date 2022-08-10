@@ -62,24 +62,19 @@ type ListRemover<'T, 'TID> = Remover<'T list, 'TID list>
 type Adder<'T> = 'T -> LaneID -> CardsState -> CardsState
 type ListAdder<'Card> = Adder<'Card list>
 
+type ChoiceMap = NonEmptyMap<EventID, PowerContext>
+
 type AbilityEvent = InstantNonTargetAbility * LaneID * CardID
 type ResolutionEpoch =
 | OrderChoiceEpoch of PowerContext epoch
 | OrderedAbilityEpoch of AbilityEvent epoch
 | AbilityChoiceEpoch of AbilityChoiceContext
-type ResolutionStack = ResolutionEpoch nonEmptyList
-type AbilityChoice = {
-    ChoiceContext: AbilityChoiceContext
-    ResolutionStack: ResolutionStack option
-}
-type StackChoice = {
-    EpochEvents: NonEmptyMap<EventID, PowerContext>
-    ResolutionStack: ResolutionStack option
-}
+type StackHeadDecision =
+| AbilityChoice of AbilityChoiceContext
+| OrderChoice of ChoiceMap
 type TurnStage =
 | ActionChoice
-| AbilityChoice of AbilityChoice
-| StackChoice of StackChoice
+| ResolvingStack of StackHeadDecision * ResolutionEpoch list
 
 type PlayerReady = {
     Player: PlayerID
@@ -119,8 +114,8 @@ type GameState =
 | GameStateTied of GameStateTied
 
 type ActionPair =
-| AbilityChoicePair of (CardsState * TurnInProgress * ResolutionStack option) * AbilityChoiceInfo
-| StackChoicePair of (CardsState * TurnInProgress * StackChoice) * StackChoiceInfo
+| AbilityChoicePair of (CardsState * TurnInProgress * ResolutionEpoch list) * AbilityChoiceInfo
+| StackChoicePair of (CardsState * TurnInProgress * ChoiceMap * ResolutionEpoch list) * StackChoiceInfo
 | TurnActionChoicePair of GameStateDuringTurn * TurnActionInfo
 | StartTurnPair of GameStateBetweenTurns
 
@@ -153,8 +148,8 @@ type EventStreamer<'From, 'To> = ('From -> GameEvent list * 'To) -> GameEvent li
 type WithAdded<'From, 'Mid, 'To, 'Added> = ('From -> 'Mid) -> 'From -> 'Added * 'To
 
 type ResolveInstantNonTargetAbility = (InstantNonTargetAbility * LaneID * CardID) -> CardsState -> TurnInProgress -> GameEvent list * (CardsState * TurnInProgress * ResolutionEpoch option)
-type ProcessResolutionStack = CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
-type ResolveActivationPower = LaneID -> ActiveUnitID -> CardsState -> TurnInProgress -> ResolutionStack option -> GameEvent list * GameStateDuringTurn
+type ProcessResolutionEpochs = CardsState -> TurnInProgress -> ResolutionEpoch list -> GameEvent list * GameStateDuringTurn
+type ResolveActivationPower = LaneID -> ActiveUnitID -> CardsState -> TurnInProgress -> ResolutionEpoch list -> GameEvent list * GameStateDuringTurn
 
 type ExecuteTurnActionType<'CardsInfo> = LaneID -> 'CardsInfo -> CardsState -> TurnInProgress -> GameEvent list * GameStateDuringTurn
 type ExecutePlayAction = ExecuteTurnActionType<HandCardID>
@@ -171,8 +166,8 @@ type ExecuteEndTurn = WithAdded<TurnActionInput, GameStateBetweenTurns, GameStat
 
 type ExecuteTurnChoice<'Choice, 'FromState, 'ToState> = 'Choice -> 'FromState -> GameEvent list * 'ToState
 type ExecuteTurnAction = ExecuteTurnChoice<ActionChoiceInfo, TurnActionInput, GameStateDuringTurn>
-type ExecuteAbilityChoice = ExecuteTurnChoice<AbilityChoiceInfo, CardsState * TurnInProgress * ResolutionStack option, GameStateDuringTurn>
-type ExecuteStackChoice = ExecuteTurnChoice<EventID, CardsState * TurnInProgress * StackChoice, GameStateDuringTurn>
+type ExecuteAbilityChoice = ExecuteTurnChoice<AbilityChoiceInfo, CardsState * TurnInProgress * ResolutionEpoch list, GameStateDuringTurn>
+type ExecuteOrderChoice = ExecuteTurnChoice<EventID, CardsState * TurnInProgress * ChoiceMap * ResolutionEpoch list, GameStateDuringTurn>
 
 // Game state and ActionInfo go into action pair, just for ActionInfo to come out again at execution, seems silly
 type CreateGame = NPlayers -> NLanes -> ActionResult
