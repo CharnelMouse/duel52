@@ -116,8 +116,8 @@ type GameState =
 type ActionPair =
 | AbilityChoicePair of (CardsState * TurnInProgress * ResolutionEpoch list) * AbilityChoiceInfo
 | StackChoicePair of (CardsState * TurnInProgress * ChoiceMap * ResolutionEpoch list) * StackChoiceInfo
-| TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
-| StartTurnPair of CardsState * PlayerReady
+| TurnActionChoicePair of (CardsState * TurnInProgress) * TurnActionInfo
+| StartTurnPair of (CardsState * PlayerReady)
 
 type GameEvent =
 | GameStarted

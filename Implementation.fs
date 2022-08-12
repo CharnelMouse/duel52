@@ -746,22 +746,19 @@ let private getHandInfos viewerID gameStage =
     |> opLeft (Map.toList >> List.collect (fun (_, cards) -> cards |> List.map getHandCardInfo))
     |> opRight (Map.map (fun _ cards -> List.length cards) >> Map.toList)
 
-let private getPlayActionsInfo gameState =
-    let playerID = gameState.TurnState.CurrentPlayer
-    match gameState.CardsState.GameStage with
+let private getPlayActionsInfo lanes gameStage playerID =
+    match gameStage with
     | Early {HandCards = hc}
     | DrawPileEmpty {HandCards = hc} ->
         Map.find playerID hc
     | HandsEmpty _ ->
         List.empty
-    |> List.allPairs (createIDsToLength 1u<LID> (gameState.CardsState.Board.Lanes |> Map.count |> uint))
+    |> List.allPairs (createIDsToLength 1u<LID> (lanes |> Map.count |> uint))
     |> List.map (fun (laneID, {HandCardID = HandCardID cardID}) ->
         Play (laneID, cardID)
         )
 
-let private getActivateActionsInfo gameState =
-    let playerID = gameState.TurnState.CurrentPlayer
-    let lanes = gameState.CardsState.Board.Lanes
+let private getActivateActionsInfo lanes playerID =
     lanes
     |> Map.toList
     |> List.collect (fun (laneID, lane) ->
@@ -887,16 +884,12 @@ let private getAttackActionsInfoInLane playerID (laneID, lane) =
         )
     singleAttacks @ pairAttacks
 
-let private getAttackActionsInfo gameState =
-    let playerID = gameState.TurnState.CurrentPlayer
-    let lanes = gameState.CardsState.Board.Lanes
+let private getAttackActionsInfo lanes playerID =
     lanes
     |> Map.toList
     |> List.collect (getAttackActionsInfoInLane playerID)
 
-let private getPairActionsInfo gameState =
-    let playerID = gameState.TurnState.CurrentPlayer
-    let lanes = gameState.CardsState.Board.Lanes
+let private getPairActionsInfo lanes playerID =
     lanes
     |> Map.toList
     |> List.collect (fun (laneID, {ActiveUnits = activeUnits}) ->
@@ -1760,22 +1753,21 @@ let private getDisplayInfo: GameStateToDisplayInfo = function
     }
 
 let private getPossibleActionChoiceActionPairs cs ts =
-    let gs = {CardsState = cs; TurnState = ts; TurnStage = ActionChoice}
     if ts.ActionsLeft = 0u<action> then
-        TurnActionChoicePair (cs, ts, EndTurn)
-        |> List.singleton
+        [TurnActionChoicePair ((cs, ts), EndTurn)]
     else
+        let lanes = cs.Board.Lanes
+        let playerID = ts.CurrentPlayer
         let actions =
-            getPlayActionsInfo gs
-            @ getActivateActionsInfo gs
-            @ getAttackActionsInfo gs
-            @ getPairActionsInfo gs
+            getPlayActionsInfo lanes cs.GameStage playerID
+            @ getActivateActionsInfo lanes playerID
+            @ getAttackActionsInfo lanes playerID
+            @ getPairActionsInfo lanes playerID
         if List.isEmpty actions then
-            TurnActionChoicePair (cs, ts, EndTurn)
-            |> List.singleton
+            [TurnActionChoicePair ((cs, ts), EndTurn)]
         else
             actions
-            |> List.map (fun action -> TurnActionChoicePair (cs, ts, ActionChoiceInfo action))
+            |> List.map (fun action -> TurnActionChoicePair ((cs, ts), ActionChoiceInfo action))
 
 let private getPossibleStackChoiceActionPairs cs ts oc rs =
     oc
@@ -2127,24 +2119,24 @@ let private addWithChoice executeChoice stateFn fromState =
     >> (uncurry executeChoice >> opRight stateFn)
 let private executeAction: ExecuteAction = function
 // Want to do some checking that we have the right player
-| AbilityChoicePair (state, choiceInfo) ->
-    addWithChoice executeAbilityChoice checkForGameEnd state choiceInfo
-| StackChoicePair (state, choice) ->
+| AbilityChoicePair (stateWithStack, choiceInfo) ->
+    addWithChoice executeAbilityChoice checkForGameEnd stateWithStack choiceInfo
+| StackChoicePair (stateWithStack, choice) ->
     let executeChoice = fst >> executeOrderChoice
-    addWithChoice executeChoice GameStateDuringTurn state choice
-| TurnActionChoicePair (cs, ts, ActionChoiceInfo choiceInfo) ->
-    addWithChoice executeTurnAction checkForGameEnd (cs, ts) choiceInfo
-| TurnActionChoicePair (cs, ts, EndTurn) ->
-    executeEndTurn executeEndingTurnAction (cs, ts)
-| StartTurnPair (cs, ts) ->
-    executeStartTurn startPlayerTurn (cs, ts)
+    addWithChoice executeChoice GameStateDuringTurn stateWithStack choice
+| TurnActionChoicePair (state, ActionChoiceInfo choiceInfo) ->
+    addWithChoice executeTurnAction checkForGameEnd state choiceInfo
+| TurnActionChoicePair (state, EndTurn) ->
+    executeEndTurn executeEndingTurnAction state
+| StartTurnPair state ->
+    executeStartTurn startPlayerTurn state
 
 let rec private makeNextActionInfo: CreateUIOutput = fun inProgress actionPair ->
     let thisAction =
         match actionPair with
         | AbilityChoicePair (_, abilityChoiceInfo) -> AbilityChoiceInfo abilityChoiceInfo
         | StackChoicePair (_, stackChoiceInfo) -> StackChoiceInfo stackChoiceInfo
-        | TurnActionChoicePair (_, _, turnActionInfo) -> TurnActionInfo turnActionInfo
+        | TurnActionChoicePair (_, turnActionInfo) -> TurnActionInfo turnActionInfo
         | StartTurnPair _ -> StartTurn
     let gameEvents, newState = executeAction actionPair
     let checkedGameState = cancelPowerChoiceIfNoChoices newState
