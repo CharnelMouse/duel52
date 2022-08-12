@@ -116,8 +116,8 @@ type GameState =
 type ActionPair =
 | AbilityChoicePair of (CardsState * TurnInProgress * ResolutionEpoch list) * AbilityChoiceInfo
 | StackChoicePair of (CardsState * TurnInProgress * ChoiceMap * ResolutionEpoch list) * StackChoiceInfo
-| TurnActionChoicePair of GameStateDuringTurn * TurnActionInfo
-| StartTurnPair of GameStateBetweenTurns
+| TurnActionChoicePair of CardsState * TurnInProgress * TurnActionInfo
+| StartTurnPair of CardsState * PlayerReady
 
 type GameEvent =
 | GameStarted
@@ -172,7 +172,7 @@ type ExecuteOrderChoice = ExecuteTurnChoice<EventID, CardsState * TurnInProgress
 // Game state and ActionInfo go into action pair, just for ActionInfo to come out again at execution, seems silly
 type CreateGame = NPlayers -> NLanes -> ActionResult
 type GetPossibleActionPairs = GameState -> ActionPair list
-type ExecuteAction = ActionPair -> GameEvent list * GameState * ActionInfo
+type ExecuteAction = ActionPair -> GameEvent list * GameState
 type GetInProgress = GameEvent list -> GameState -> ActionResult
 type GameEventToDisplayGameEvent = GameEvent -> DisplayGameEvent
 type GameStateToDisplayInfo = GameState -> DisplayInfo

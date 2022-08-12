@@ -1762,7 +1762,7 @@ let private getDisplayInfo: GameStateToDisplayInfo = function
 let private getPossibleActionChoiceActionPairs cs ts =
     let gs = {CardsState = cs; TurnState = ts; TurnStage = ActionChoice}
     if ts.ActionsLeft = 0u<action> then
-        TurnActionChoicePair (gs, EndTurn)
+        TurnActionChoicePair (cs, ts, EndTurn)
         |> List.singleton
     else
         let actions =
@@ -1771,11 +1771,11 @@ let private getPossibleActionChoiceActionPairs cs ts =
             @ getAttackActionsInfo gs
             @ getPairActionsInfo gs
         if List.isEmpty actions then
-            TurnActionChoicePair (gs, EndTurn)
+            TurnActionChoicePair (cs, ts, EndTurn)
             |> List.singleton
         else
             actions
-            |> List.map (fun action -> TurnActionChoicePair (gs, ActionChoiceInfo action))
+            |> List.map (fun action -> TurnActionChoicePair (cs, ts, ActionChoiceInfo action))
 
 let private getPossibleStackChoiceActionPairs cs ts oc rs =
     oc
@@ -1922,14 +1922,13 @@ let private getPossibleTurnActionPairs = function
     getPossibleAbilityChoiceActionPairs cs ts rs ac
 
 let private getPossibleActionPairs: GetPossibleActionPairs = function
-| GameStateBetweenTurns gs ->
-    StartTurnPair gs
-    |> List.singleton
+| GameStateBetweenTurns {CardsState = cs; TurnState = ts} ->
+    [StartTurnPair (cs, ts)]
 | GameStateDuringTurn gs ->
     getPossibleTurnActionPairs gs
 | GameStateWon _
 | GameStateTied _ ->
-    List.empty
+    []
 
 let private cancelPowerChoiceIfNoChoices state =
     let actionPairs = getPossibleActionPairs state
@@ -2123,42 +2122,38 @@ let private executeEndTurn: ExecuteEndTurn = fun endPlayerTurn ->
     let getCurrentPlayer ts = ts.CurrentPlayer
     executeTurnChange (getCurrentPlayer >> TurnEnded) (endPlayerTurn >> GameStateBetweenTurns)
 
-let private addWithChoice executeChoice stateFn choiceFn fromState =
+let private addWithChoice executeChoice stateFn fromState =
     pairRev fromState
-    >> splitFun (uncurry executeChoice >> opRight stateFn) (fst >> choiceFn)
-    >> flattenLeft
+    >> (uncurry executeChoice >> opRight stateFn)
 let private executeAction: ExecuteAction = function
 // Want to do some checking that we have the right player
 | AbilityChoicePair (state, choiceInfo) ->
-    addWithChoice executeAbilityChoice checkForGameEnd AbilityChoiceInfo state choiceInfo
+    addWithChoice executeAbilityChoice checkForGameEnd state choiceInfo
 | StackChoicePair (state, choice) ->
-    let executeChoice = fun choice -> executeOrderChoice (fst choice)
-    addWithChoice executeChoice GameStateDuringTurn StackChoiceInfo state choice
-| TurnActionChoicePair (gameState, ActionChoiceInfo choiceInfo) ->
-    addWithChoice executeTurnAction checkForGameEnd (ActionChoiceInfo >> TurnActionInfo) (gameState.CardsState, gameState.TurnState) choiceInfo
-| TurnActionChoicePair (gameState, EndTurn) ->
-    let parts (gs: GameStateDuringTurn) = gs.CardsState, gs.TurnState
-    gameState
-    |> pairRev EndTurn
-    |> opPair (parts >> executeEndTurn executeEndingTurnAction) TurnActionInfo
-    |> flattenLeft
-| StartTurnPair gameState ->
-    let parts (gs: GameStateBetweenTurns) = gs.CardsState, gs.TurnState
-    gameState
-    |> parts
-    |> executeStartTurn startPlayerTurn
-    |> pairRev StartTurn
-    |> flattenLeft
+    let executeChoice = fst >> executeOrderChoice
+    addWithChoice executeChoice GameStateDuringTurn state choice
+| TurnActionChoicePair (cs, ts, ActionChoiceInfo choiceInfo) ->
+    addWithChoice executeTurnAction checkForGameEnd (cs, ts) choiceInfo
+| TurnActionChoicePair (cs, ts, EndTurn) ->
+    executeEndTurn executeEndingTurnAction (cs, ts)
+| StartTurnPair (cs, ts) ->
+    executeStartTurn startPlayerTurn (cs, ts)
 
 let rec private makeNextActionInfo: CreateUIOutput = fun inProgress actionPair ->
-    let gameEvents, newState, action = executeAction actionPair
+    let thisAction =
+        match actionPair with
+        | AbilityChoicePair (_, abilityChoiceInfo) -> AbilityChoiceInfo abilityChoiceInfo
+        | StackChoicePair (_, stackChoiceInfo) -> StackChoiceInfo stackChoiceInfo
+        | TurnActionChoicePair (_, _, turnActionInfo) -> TurnActionInfo turnActionInfo
+        | StartTurnPair _ -> StartTurn
+    let gameEvents, newState = executeAction actionPair
     let checkedGameState = cancelPowerChoiceIfNoChoices newState
     // Generation of next action's resulting capabilities is part of the
     // generated capability's body, since assigning them here requires
     // generating the entire game space, blowing the stack
     let capability() = inProgress gameEvents checkedGameState
     {
-        Action = action
+        Action = thisAction
         Capability = capability
         }
 let rec private inProgress: GetInProgress = fun gameEvents gameState ->
