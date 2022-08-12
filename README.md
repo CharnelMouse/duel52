@@ -2,6 +2,7 @@ A program for playing Duel 52, to practise domain modelling for card games.
 
 Work in progress: primitive UI in place, basic play ruleset implemented.
 Fixes to do:
+- resolveReturnDamage also applies the original damage
 - Death / inactive death power resolution is currently done in several different places. These should all be moved to a single step after resolving everything else in a turn action.
 - Retaliate as Twinstrike pair second target doesn't work properly (return damage wrong, original target doesn't die)
 - Nimble deals extra damage to everything
