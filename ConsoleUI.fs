@@ -446,9 +446,9 @@ let private actionString actionInfo =
         "Create pair"
         + " in lane " + string laneID
         + " from cards " + string cardID1 + " and " + string cardID2
-    | TurnActionInfo (EndTurn _) ->
+    | TurnActionInfo EndTurn ->
         "End turn"
-    | StartTurn _ ->
+    | StartTurn ->
         "Start turn"
 
 let private displayNextActionsInfo nextActions =
