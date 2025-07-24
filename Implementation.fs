@@ -42,6 +42,18 @@ let private laneSolePresence (lane: Lane) =
     | [controller] -> Won controller
     | _ -> Contested
 
+let private uncontested (laneID, lane) =
+    match laneSolePresence lane with
+    | Contested
+    | Empty -> None
+    | Won controller -> Some (laneID, controller)
+
+let private getCurrentLaneWins gameState =
+    gameState.CardsState.Board.Lanes
+    |> Map.toList
+    |> List.choose uncontested
+    |> Map.ofList
+
 let private filterLane predicate lane =
     (lane.InactiveUnits |> List.map InactiveUnit |> List.filter predicate)
     @ (lane.ActiveUnits |> List.map ActiveUnit |> List.filter predicate)
@@ -516,32 +528,12 @@ let private updateLaneWins gameState =
     | Early _ ->
         gameState
     | DrawPileEmpty gs ->
-        let lanes = gameState.CardsState.Board.Lanes
-        let currentLaneWins =
-            lanes
-            |> Map.toList
-            |> List.choose (fun (laneID, lane) ->
-                match laneSolePresence lane with
-                | Contested
-                | Empty -> None
-                | Won controller -> Some (laneID, controller)
-                )
-            |> Map.ofList
+        let currentLaneWins = getCurrentLaneWins gameState
         let newGameStage = DrawPileEmpty {gs with LaneWins = currentLaneWins}
         {gameState.CardsState with GameStage = newGameStage}
         |> changeCardsState gameState
     | HandsEmpty gs ->
-        let lanes = gameState.CardsState.Board.Lanes
-        let currentLaneWins =
-            lanes
-            |> Map.toList
-            |> List.choose (fun (laneID, lane) ->
-                match laneSolePresence lane with
-                | Contested
-                | Empty -> None
-                | Won controller -> Some (laneID, controller)
-                )
-            |> Map.ofList
+        let currentLaneWins = getCurrentLaneWins gameState
         let newGameStage = HandsEmpty {gs with LaneWins = currentLaneWins}
         {gameState.CardsState with GameStage = newGameStage}
         |> changeCardsState gameState
