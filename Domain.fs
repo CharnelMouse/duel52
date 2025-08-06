@@ -225,11 +225,13 @@ type CapabilityInfo<'Action, 'T> = {
     Capability: Capability<'T>
 }
 
+// CapabilityInfo<ActionInfo, ActionResult> in the below represents information about a next action
+// The child ActionResults being contained within capabilities, i.e. niladic functions,
+// prevents us from having to recursively generate the next ActionResults, which would result in
+// generating the game's entire action decision tree at the beginning.
 type ActionResult =
 | InProgress of DisplayGameEvent list * DisplayInfo * CapabilityInfo<ActionInfo, ActionResult> list
 | Exit
-type NextActionInfo = CapabilityInfo<ActionInfo, ActionResult>
-type ActionCapability = Capability<ActionResult>
 
 type API = {
     NewGame: unit -> ActionResult

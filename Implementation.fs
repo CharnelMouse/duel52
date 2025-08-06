@@ -1326,7 +1326,24 @@ let private resolveAttackerPassivePower laneID attackerIDs (UnitID attackedCardI
         |> moveNonownedDeadCardsToDiscard
         |> moveOwnedDeadCardsToDiscard
     | [AttackAbility (ExtraDamageAgainstExtraMaxHealth 1u)] ->
-        let newCardsState = damageCard (UnitID attackedCardID) 1u<health> laneID cardsState
+        let activeLaneCards =
+            (List.map Solo lane.ActiveUnits) @ List.collect (pairToFullPairedUnits >> pairToList >> List.map Paired) lane.Pairs
+        let activeTargetCard =
+            activeLaneCards
+            |> List.tryFind (function
+                | Solo {ActiveUnitID = (ActiveUnitID id)} -> id = attackedCardID
+                | Paired {FullPairedUnitID = FullPairedUnitID id} -> id = attackedCardID
+                )
+        let newCardsState =
+            match activeTargetCard with
+            | Some (Solo {Abilities = abilities})
+            | Some (Paired {Abilities = abilities}) ->
+                if List.contains (MaxHealthIncrease 1u) abilities.WhileActive then
+                    damageCard (UnitID attackedCardID) 1u<health> laneID cardsState
+                else
+                    cardsState
+            | None ->
+                    cardsState
         {CardsState = newCardsState; TurnState = turnState; TurnStage = ActionChoice}
         |> triggerTargetInactiveDeathPowers
         |> moveNonownedDeadCardsToDiscard

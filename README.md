@@ -5,7 +5,6 @@ Fixes to do:
 - resolveReturnDamage also applies the original damage
 - Death / inactive death power resolution is currently done in several different places. These should all be moved to a single step after resolving everything else in a turn action.
 - Retaliate as Twinstrike pair second target doesn't work properly (return damage wrong, original target doesn't die)
-- Nimble deals extra damage to everything
 - Something is wrong with stack resolution, e.g. 2 and 4 flipped by 5, pick 2, don't get 4 after. Seems to be happening after a power requires a choice. (Tidy up death resolution first.)
 
 Notes on ruleset
@@ -40,7 +39,8 @@ Notes on ruleset
     - Immune to Retaliate [implemented]
     - Can't be secondary target for Twinstrike [implemented]
     - Blocks Twinstrike ability if primary target [implemented]
-    - Extra damage to Taunt (can't attack past it) [implemented]
+    - Can't attack past Taunt [implemented]
+    - Deals extra damage only to Taunt [implemented]
   - TwinStrike [implemented]
     - Trap cards killed by Twinstrike damage correctly flip and heal
     - Twinstrike damage gets correctly blocked after killing a Taunt card
